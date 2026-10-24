@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Local machine configuration
+local.properties
+
+# Staged mod jars
+mod/Contents/mods/pz-replay/42/media/java/*.jar
+
+# Logs and test artifacts
+*.log
+*.tmp
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+.factorypath
+.apt_generated/
+
+# OS
+.DS_Store
