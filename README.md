@@ -1,3 +1,3 @@
-# bvc
+# pz-replay
 
-Better version control
+Replay mod for Project Zomboid.
