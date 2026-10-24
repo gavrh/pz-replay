@@ -1,0 +1,4 @@
+# Copy this file to local.properties and set the paths for your machine.
+# local.properties is gitignored.
+gameDir=/path/to/ProjectZomboid
+zomboidDir=/path/to/Zomboid
