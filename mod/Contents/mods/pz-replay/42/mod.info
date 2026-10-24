@@ -1,0 +1,6 @@
+name=PZ Replay
+id=pz-replay
+description=Replay mod for Project Zomboid
+require=\ZombieBuddy
+javaJarFile=media/java/PZReplay.jar
+javaPkgName=com.gavrh.pzreplay
