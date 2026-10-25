@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.gavrh'
-version = '0.0.0-bootstrap'
+version = '0.0.0-dev'
 def generatedBuildInfoDir = layout.buildDirectory.dir('generated/buildInfo')
 def buildVersion = version.toString()
 
