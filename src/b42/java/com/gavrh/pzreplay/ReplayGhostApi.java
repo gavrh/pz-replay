@@ -40,27 +40,31 @@ public final class ReplayGhostApi {
             System.out.println("[pz-replay] replay ghost spawned");
             return true;
         } catch (Throwable t) {
-            if (ghost != null) {
-                ghost.setSceneCulled(true);
-                ghost.removeFromWorld();
-                ghost = null;
+            ReplayGhost failed = ghost;
+            ghost = null;
+            if (failed != null) {
+                try {
+                    failed.setSceneCulled(true);
+                    failed.removeFromWorld();
+                } catch (Throwable ignored) {
+                }
             }
             return false;
         }
     }
 
     public static boolean despawn() {
-        if (ghost == null) {
+        ReplayGhost current = ghost;
+        if (current == null) {
             return false;
         }
-        ReplayGhost current = ghost;
+        ghost = null;
         try {
             current.setSceneCulled(true);
             current.removeFromWorld();
             if (current.getDescriptor() != null) {
                 current.getDescriptor().setInstance(null);
             }
-            ghost = null;
             System.out.println("[pz-replay] replay ghost despawned");
             return true;
         } catch (Throwable t) {
