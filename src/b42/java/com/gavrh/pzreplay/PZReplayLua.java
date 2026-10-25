@@ -16,4 +16,24 @@ public final class PZReplayLua {
     public static String version() {
         return BuildInfo.VERSION;
     }
+
+    public static boolean startRecording(String name) {
+        return ReplayRecorder.INSTANCE.start(name);
+    }
+
+    public static boolean stopRecording() {
+        return ReplayRecorder.INSTANCE.stop();
+    }
+
+    public static void recordTick(double numberTicks) {
+        ReplayRecorder.INSTANCE.tick((long) numberTicks);
+    }
+
+    public static String getStatus() {
+        return ReplayRecorder.INSTANCE.getStatus();
+    }
+
+    public static String getLastReplayPath() {
+        return ReplayRecorder.INSTANCE.getLastReplayPath();
+    }
 }
