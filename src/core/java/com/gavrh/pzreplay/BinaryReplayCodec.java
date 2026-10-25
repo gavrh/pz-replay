@@ -25,6 +25,9 @@ public final class BinaryReplayCodec {
     public static final int RECORD_BYTES = 40;
     private static final int MAX_METADATA_BYTES = 1 << 20;
     static final int MAX_FRAMES = 54_000;
+    static final long MAX_UNCOMPRESSED_BYTES =
+        (long) MAX_METADATA_BYTES + (long) MAX_FRAMES * RECORD_BYTES + 28;
+    private static final long MAX_COMPRESSED_BYTES = MAX_UNCOMPRESSED_BYTES + 64 * 1024;
 
     private BinaryReplayCodec() {
     }
@@ -86,13 +89,21 @@ public final class BinaryReplayCodec {
     }
 
     public static ReplayData read(Path source) throws IOException, ReplayFormatException {
+        if (Files.size(source) > MAX_COMPRESSED_BYTES) {
+            throw new ReplayFormatException("replay is too large");
+        }
         byte[] bytes = Files.readAllBytes(source);
         if (bytes.length == 0) {
             throw new ReplayFormatException("replay is empty");
         }
         if (isGzip(bytes)) {
             try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
-                bytes = gzip.readAllBytes();
+                byte[] decoded = gzip.readNBytes((int) (MAX_UNCOMPRESSED_BYTES + 1));
+                if (decoded.length > MAX_UNCOMPRESSED_BYTES) {
+                    throw new ReplayFormatException(
+                        "replay is corrupt (decompressed data too large)");
+                }
+                bytes = decoded;
             } catch (EOFException exception) {
                 throw new ReplayFormatException("replay is truncated (incomplete gzip stream)",
                     exception);

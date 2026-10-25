@@ -1,6 +1,7 @@
 package com.gavrh.pzreplay;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -94,6 +96,25 @@ class ReplayFormatTest {
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
             () -> BinaryReplayCodec.read(file));
         assertTrue(exception.getMessage().contains("unsupported replay format version 99"));
+    }
+
+    @Test
+    void binaryRejectsDecompressedBomb() throws Exception {
+        Path file = tempDir.resolve("bomb.pzrp.gz");
+        try (OutputStream out = Files.newOutputStream(file);
+            GZIPOutputStream gzip = new GZIPOutputStream(out)) {
+            byte[] buffer = new byte[8192];
+            long remaining = BinaryReplayCodec.MAX_UNCOMPRESSED_BYTES + 1;
+            while (remaining > 0) {
+                int count = (int) Math.min(buffer.length, remaining);
+                gzip.write(buffer, 0, count);
+                remaining -= count;
+            }
+        }
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("decompressed data too large"));
     }
 
     @Test
