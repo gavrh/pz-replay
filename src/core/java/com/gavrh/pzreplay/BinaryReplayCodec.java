@@ -160,7 +160,7 @@ public final class BinaryReplayCodec {
                     buffer.getFloat(),
                     buffer.getFloat(),
                     buffer.getFloat(),
-                    ReplaySample.Locomotion.fromId(buffer.get() & 0xFF),
+                    locomotion(buffer.get() & 0xFF, frame),
                     ReplaySample.Stance.fromId(buffer.get() & 0xFF),
                     buffer.getShort() & 0xFFFF
                 ));
@@ -180,6 +180,16 @@ public final class BinaryReplayCodec {
             return new ReplayData(metadata, frames);
         } catch (EOFException exception) {
             throw new ReplayFormatException("replay is truncated", exception);
+        }
+    }
+
+    private static ReplaySample.Locomotion locomotion(int id, int frame)
+        throws ReplayFormatException {
+        try {
+            return ReplaySample.Locomotion.fromId(id);
+        } catch (IllegalArgumentException exception) {
+            throw new ReplayFormatException("corrupt frame " + frame
+                + ": invalid locomotion id " + id, exception);
         }
     }
 

@@ -99,6 +99,17 @@ class ReplayFormatTest {
     }
 
     @Test
+    void binaryRejectsUnknownLocomotionId() throws Exception {
+        Path file = tempDir.resolve("unknown-locomotion.pzrp");
+        BinaryReplayCodec.write(file, metadata(), frames(), false);
+        patchFirstFrameByte(file, 36, 99);
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("locomotion"));
+    }
+
+    @Test
     void binaryRejectsDecompressedBomb() throws Exception {
         Path file = tempDir.resolve("bomb.pzrp.gz");
         try (OutputStream out = Files.newOutputStream(file);
@@ -175,6 +186,14 @@ class ReplayFormatTest {
             ));
         }
         return frames;
+    }
+
+    private static void patchFirstFrameByte(Path file, int offset, int value) throws IOException {
+        byte[] bytes = Files.readAllBytes(file);
+        int metadataLength = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt(8);
+        int frameStart = 16 + metadataLength;
+        bytes[frameStart + offset] = (byte) value;
+        Files.write(file, bytes);
     }
 
     private void assertBinaryRoundTrip(Path file) throws IOException, ReplayFormatException {

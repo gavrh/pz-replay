@@ -36,7 +36,7 @@ public record ReplaySample(
                     return value;
                 }
             }
-            return IDLE;
+            throw new IllegalArgumentException("unknown locomotion id " + id);
         }
     }
 
