@@ -16,8 +16,15 @@ final class ReplayFiles {
             Files.createDirectories(parent);
         }
         Path temporary = target.resolveSibling(target.getFileName() + ".part");
-        Files.write(temporary, content);
-        moveIntoPlace(temporary, target);
+        try {
+            Files.write(temporary, content);
+            moveIntoPlace(temporary, target);
+        } finally {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException ignored) {
+            }
+        }
     }
 
     static void moveIntoPlace(Path temporary, Path target) throws IOException {
