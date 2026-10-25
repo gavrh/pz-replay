@@ -110,6 +110,17 @@ class ReplayFormatTest {
     }
 
     @Test
+    void binaryRejectsUnknownStanceId() throws Exception {
+        Path file = tempDir.resolve("unknown-stance.pzrp");
+        BinaryReplayCodec.write(file, metadata(), frames(), false);
+        patchFirstFrameByte(file, 37, 99);
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("stance"));
+    }
+
+    @Test
     void binaryRejectsDecompressedBomb() throws Exception {
         Path file = tempDir.resolve("bomb.pzrp.gz");
         try (OutputStream out = Files.newOutputStream(file);

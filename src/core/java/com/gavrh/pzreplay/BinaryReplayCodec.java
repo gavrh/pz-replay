@@ -161,7 +161,7 @@ public final class BinaryReplayCodec {
                     buffer.getFloat(),
                     buffer.getFloat(),
                     locomotion(buffer.get() & 0xFF, frame),
-                    ReplaySample.Stance.fromId(buffer.get() & 0xFF),
+                    stance(buffer.get() & 0xFF, frame),
                     buffer.getShort() & 0xFFFF
                 ));
             }
@@ -190,6 +190,16 @@ public final class BinaryReplayCodec {
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException("corrupt frame " + frame
                 + ": invalid locomotion id " + id, exception);
+        }
+    }
+
+    private static ReplaySample.Stance stance(int id, int frame)
+        throws ReplayFormatException {
+        try {
+            return ReplaySample.Stance.fromId(id);
+        } catch (IllegalArgumentException exception) {
+            throw new ReplayFormatException("corrupt frame " + frame
+                + ": invalid stance id " + id, exception);
         }
     }
 

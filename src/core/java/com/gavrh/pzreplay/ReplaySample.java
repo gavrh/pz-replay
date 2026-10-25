@@ -61,7 +61,7 @@ public record ReplaySample(
                     return value;
                 }
             }
-            return STAND;
+            throw new IllegalArgumentException("unknown stance id " + id);
         }
     }
 
