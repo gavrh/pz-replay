@@ -12,7 +12,6 @@ import zombie.characters.IsoPlayer;
 final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
     private static final double SAMPLE_RATE_HZ = 30.0;
-    private static final int MAX_FRAMES = 30 * 60 * 30;
 
     private final List<ReplaySample> frames = new ArrayList<>();
     private ReplayMetadata metadata;
@@ -111,7 +110,7 @@ final class ReplayRecorder {
         hasLastPosition = true;
         nextSampleMillis = nowMillis + Math.round(1000.0 / SAMPLE_RATE_HZ);
 
-        if (frames.size() >= MAX_FRAMES) {
+        if (frames.size() >= BinaryReplayCodec.MAX_FRAMES) {
             stop();
         }
     }

@@ -24,7 +24,7 @@ public final class BinaryReplayCodec {
     public static final long FOOTER = 0x505A5250454E4421L;
     public static final int RECORD_BYTES = 40;
     private static final int MAX_METADATA_BYTES = 1 << 20;
-    private static final int MAX_FRAMES = 10_000_000;
+    static final int MAX_FRAMES = 54_000;
 
     private BinaryReplayCodec() {
     }
@@ -34,6 +34,9 @@ public final class BinaryReplayCodec {
         if (metadata.formatVersion() != ReplayMetadata.CURRENT_FORMAT_VERSION) {
             throw new ReplayFormatException("cannot write format version "
                 + metadata.formatVersion());
+        }
+        if (frames.size() > MAX_FRAMES) {
+            throw new ReplayFormatException("too many frames: " + frames.size());
         }
 
         byte[] metadataBytes = metadata.toText().getBytes(StandardCharsets.UTF_8);

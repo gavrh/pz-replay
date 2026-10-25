@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -93,6 +94,24 @@ class ReplayFormatTest {
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
             () -> BinaryReplayCodec.read(file));
         assertTrue(exception.getMessage().contains("unsupported replay format version 99"));
+    }
+
+    @Test
+    void binaryRejectsFrameCountAboveLimit() throws Exception {
+        byte[] metadataBytes = "format=1\n".getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(16 + metadataBytes.length + 4)
+            .order(ByteOrder.BIG_ENDIAN);
+        buffer.putInt(BinaryReplayCodec.MAGIC);
+        buffer.putInt(ReplayMetadata.CURRENT_FORMAT_VERSION);
+        buffer.putInt(metadataBytes.length);
+        buffer.put(metadataBytes);
+        buffer.putInt(BinaryReplayCodec.MAX_FRAMES + 1);
+        Path file = tempDir.resolve("too-many-frames.pzrp");
+        Files.write(file, buffer.array());
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("invalid frame count"));
     }
 
     @Test
