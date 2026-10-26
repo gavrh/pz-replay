@@ -157,7 +157,7 @@ public final class GhostMotionController {
         if (!enabled) {
             cameraFollow = false;
             restoreCamera();
-            return false;
+            return true;
         }
         if (!isActive() || ghost == null) {
             return false;
