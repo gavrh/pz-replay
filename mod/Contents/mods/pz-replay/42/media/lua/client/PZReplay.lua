@@ -36,3 +36,11 @@ Events.OnTick.Add(function()
         PZReplay.recordTick()
     end
 end)
+
+local function stopCapture()
+    if PZReplay and PZReplay.isRecording and PZReplay.isRecording() then
+        PZReplay.stopRecording()
+    end
+end
+
+Events.OnMainMenuEnter.Add(stopCapture)

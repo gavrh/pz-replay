@@ -16,6 +16,8 @@ final class ReplayRecorder {
     private long captureCostMaxNanos;
     private long captureCostTicks;
     private boolean stopReported;
+    private boolean capturePaused;
+    private boolean captureInVehicle;
     private String lastError;
 
     private ReplayRecorder() {
@@ -39,6 +41,8 @@ final class ReplayRecorder {
         captureCostMaxNanos = 0;
         captureCostTicks = 0;
         stopReported = false;
+        capturePaused = false;
+        captureInVehicle = false;
         lastError = null;
 
         long nowMillis = System.currentTimeMillis();
@@ -64,12 +68,30 @@ final class ReplayRecorder {
         tickCounter++;
 
         IsoPlayer player = IsoPlayer.getInstance();
-        if (player == null || !player.isLocalPlayer()) {
+        if (player instanceof ReplayGhost) {
+            lastError = "ghost is the global player";
             recordCost(tickStartNanos);
+            stopWithReason(CaptureSession.StopReason.PLAYER_UNAVAILABLE);
+            return;
+        }
+        if (player == null || !player.isLocalPlayer()) {
+            session.tick(tickCounter, nowMillis, null, false);
+            recordCost(tickStartNanos);
+            afterTick(nowMillis);
             return;
         }
 
         boolean paused = GameTime.isGamePaused();
+        if (paused != capturePaused) {
+            capturePaused = paused;
+            System.out.println("[pz-replay] capture " + (paused ? "paused" : "resumed"));
+        }
+        boolean inVehicle = player.getVehicle() != null;
+        if (inVehicle != captureInVehicle) {
+            captureInVehicle = inVehicle;
+            System.out.println("[pz-replay] capture vehicle "
+                + (inVehicle ? "entered" : "exited"));
+        }
         CaptureSession.PlayerSnapshot snapshot = paused ? null : snapshot(player);
         session.tick(tickCounter, nowMillis, snapshot, paused);
         recordCost(tickStartNanos);
@@ -100,6 +122,11 @@ final class ReplayRecorder {
         return builder.toString();
     }
 
+    private void stopWithReason(CaptureSession.StopReason reason) {
+        session.stop(reason);
+        logStopped();
+    }
+
     private void afterTick(long nowMillis) {
         if (!session.isRecording()) {
             logStopped();
@@ -120,6 +147,9 @@ final class ReplayRecorder {
         CaptureSession.Summary summary = session.getLastSummary();
         if (summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
             lastError = "no frames";
+        } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_UNAVAILABLE
+            && lastError == null) {
+            lastError = "player unavailable";
         }
         System.out.println("[pz-replay] capture stopped name=" + captureName
             + " " + summary.format() + overhead());
@@ -149,6 +179,7 @@ final class ReplayRecorder {
         boolean running = player.isRunning();
         boolean aiming = player.isAiming();
         boolean moving = player.isPlayerMoving();
+        boolean inVehicle = player.getVehicle() != null;
 
         return new CaptureSession.PlayerSnapshot(
             player.getX(),
@@ -158,7 +189,8 @@ final class ReplayRecorder {
             gameSeconds(),
             locomotion(sprinting, running, sneaking, moving),
             stance(prone, sneaking),
-            ReplaySample.flags(aiming, sneaking, sprinting, running, prone, moving)
+            ReplaySample.flags(aiming, sneaking, sprinting, running, prone, moving,
+                inVehicle)
         );
     }
 
