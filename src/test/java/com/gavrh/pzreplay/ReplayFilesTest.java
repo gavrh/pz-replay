@@ -6,12 +6,24 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ReplayFilesTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void writeAtomicallyFinalizesWithoutPartFile() throws IOException {
+        Path target = tempDir.resolve("replay.pzrp.gz");
+        byte[] content = {1, 2, 3, 4};
+
+        ReplayFiles.writeAtomically(target, content);
+
+        assertArrayEquals(content, Files.readAllBytes(target));
+        assertFalse(Files.exists(tempDir.resolve("replay.pzrp.gz.part")));
+    }
 
     @Test
     void writeAtomicallyRemovesPartFileWhenMoveFails() throws IOException {
