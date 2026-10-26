@@ -71,9 +71,23 @@ public record ReplaySample(
     public static final int FLAG_RUNNING = 1 << 3;
     public static final int FLAG_PRONE = 1 << 4;
     public static final int FLAG_MOVING = 1 << 5;
+    public static final int FLAG_IN_VEHICLE = 1 << 6;
+
+    public boolean aiming() {
+        return (flags & FLAG_AIMING) != 0;
+    }
+
+    public boolean inVehicle() {
+        return (flags & FLAG_IN_VEHICLE) != 0;
+    }
 
     public static int flags(boolean aiming, boolean sneaking, boolean sprinting,
         boolean running, boolean prone, boolean moving) {
+        return flags(aiming, sneaking, sprinting, running, prone, moving, false);
+    }
+
+    public static int flags(boolean aiming, boolean sneaking, boolean sprinting,
+        boolean running, boolean prone, boolean moving, boolean inVehicle) {
         int flags = 0;
         if (aiming) {
             flags |= FLAG_AIMING;
@@ -92,6 +106,9 @@ public record ReplaySample(
         }
         if (moving) {
             flags |= FLAG_MOVING;
+        }
+        if (inVehicle) {
+            flags |= FLAG_IN_VEHICLE;
         }
         return flags;
     }

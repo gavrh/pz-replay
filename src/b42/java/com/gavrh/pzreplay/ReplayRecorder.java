@@ -1,169 +1,207 @@
 package com.gavrh.pzreplay;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
 import zombie.GameTime;
-import zombie.ZomboidFileSystem;
 import zombie.characters.IsoPlayer;
 
 final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
-    private static final double SAMPLE_RATE_HZ = 30.0;
+    private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
 
-    private final List<ReplaySample> frames = new ArrayList<>();
+    private final CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
     private String captureName;
-    private boolean recording;
-    private long startWallMillis;
-    private long nextSampleMillis;
-    private long lastSampleMillis;
-    private float lastX;
-    private float lastY;
-    private float lastZ;
-    private boolean hasLastPosition;
-    private String lastPath;
-    private int lastFrameCount;
+    private long tickCounter;
+    private long nextStatusLogMillis;
+    private long captureCostNanos;
+    private long captureCostMaxNanos;
+    private long captureCostTicks;
+    private boolean stopReported;
+    private boolean capturePaused;
+    private boolean captureInVehicle;
     private String lastError;
 
     private ReplayRecorder() {
     }
 
     boolean start(String name) {
-        if (recording) {
+        if (session.isRecording()) {
             return false;
         }
         try {
-            metadata = CaptureMetadataFactory.build(SAMPLE_RATE_HZ);
+            metadata = CaptureMetadataFactory.build(CaptureSession.DEFAULT_SAMPLE_RATE_HZ);
         } catch (RuntimeException exception) {
             lastError = exception.getMessage();
-            System.out.println("[pz-replay] recording start failed: " + lastError);
+            System.out.println("[pz-replay] capture start failed: " + lastError);
             return false;
         }
 
         captureName = normalizeName(name);
-        frames.clear();
-        hasLastPosition = false;
-        lastPath = null;
-        lastFrameCount = 0;
+        tickCounter = 0;
+        captureCostNanos = 0;
+        captureCostMaxNanos = 0;
+        captureCostTicks = 0;
+        stopReported = false;
+        capturePaused = false;
+        captureInVehicle = false;
         lastError = null;
-        startWallMillis = System.currentTimeMillis();
-        nextSampleMillis = startWallMillis;
-        lastSampleMillis = startWallMillis;
-        recording = true;
-        System.out.println("[pz-replay] recording started name=" + captureName);
+
+        long nowMillis = System.currentTimeMillis();
+        session.start(nowMillis);
+        nextStatusLogMillis = nowMillis + STATUS_LOG_INTERVAL_MILLIS;
+        System.out.println("[pz-replay] capture started name=" + captureName
+            + " rate=" + CaptureSession.DEFAULT_SAMPLE_RATE_HZ + "Hz"
+            + " max_frames=" + CaptureSession.MAX_FRAMES
+            + " max_duration=" + (long) CaptureSession.MAX_DURATION_SECONDS + "s"
+            + " x=" + metadata.startX()
+            + " y=" + metadata.startY()
+            + " z=" + metadata.startZ());
         return true;
     }
 
-    void tick(long tick) {
-        long nowMillis = System.currentTimeMillis();
-        if (!recording || nowMillis < nextSampleMillis) {
+    void tick() {
+        if (!session.isRecording()) {
             return;
         }
+
+        long tickStartNanos = System.nanoTime();
+        long nowMillis = System.currentTimeMillis();
+        tickCounter++;
 
         IsoPlayer player = IsoPlayer.getInstance();
+        if (player instanceof ReplayGhost) {
+            lastError = "ghost is the global player";
+            recordCost(tickStartNanos);
+            stopWithReason(CaptureSession.StopReason.PLAYER_UNAVAILABLE);
+            return;
+        }
         if (player == null || !player.isLocalPlayer()) {
+            session.tick(tickCounter, nowMillis, null, false);
+            recordCost(tickStartNanos);
+            afterTick(nowMillis);
+            return;
+        }
+        if (player.isDead()) {
+            recordCost(tickStartNanos);
+            stopWithReason(CaptureSession.StopReason.PLAYER_DEAD);
             return;
         }
 
-        float x = player.getX();
-        float y = player.getY();
-        float z = player.getZ();
-        float speed = 0f;
-        if (hasLastPosition) {
-            float deltaSeconds = (nowMillis - lastSampleMillis) / 1000f;
-            if (deltaSeconds > 0f) {
-                float dx = x - lastX;
-                float dy = y - lastY;
-                float dz = z - lastZ;
-                speed = (float) (Math.sqrt(dx * dx + dy * dy + dz * dz) / deltaSeconds);
-            }
+        boolean paused = GameTime.isGamePaused();
+        if (paused != capturePaused) {
+            capturePaused = paused;
+            System.out.println("[pz-replay] capture " + (paused ? "paused" : "resumed"));
         }
+        boolean inVehicle = player.getVehicle() != null;
+        if (inVehicle != captureInVehicle) {
+            captureInVehicle = inVehicle;
+            System.out.println("[pz-replay] capture vehicle "
+                + (inVehicle ? "entered" : "exited"));
+        }
+        CaptureSession.PlayerSnapshot snapshot = paused ? null : snapshot(player);
+        session.tick(tickCounter, nowMillis, snapshot, paused);
+        recordCost(tickStartNanos);
+        afterTick(nowMillis);
+    }
 
+    boolean stop() {
+        return stop(CaptureSession.StopReason.REQUESTED);
+    }
+
+    boolean stop(CaptureSession.StopReason reason) {
+        if (!session.isRecording()) {
+            return false;
+        }
+        session.stop(reason);
+        logStopped();
+        return true;
+    }
+
+    boolean isRecording() {
+        return session.isRecording();
+    }
+
+    String getStatus() {
+        CaptureSession.Summary summary = session.status();
+        StringBuilder builder = new StringBuilder(session.isRecording() ? "recording" : "idle")
+            .append(" name=").append(captureName == null ? "" : captureName)
+            .append(' ').append(summary.format());
+        if (!session.isRecording() && lastError != null) {
+            builder.append(" error=").append(lastError);
+        }
+        return builder.toString();
+    }
+
+    private void stopWithReason(CaptureSession.StopReason reason) {
+        session.stop(reason);
+        logStopped();
+    }
+
+    private void afterTick(long nowMillis) {
+        if (!session.isRecording()) {
+            logStopped();
+            return;
+        }
+        if (nowMillis >= nextStatusLogMillis) {
+            System.out.println("[pz-replay] capture status name=" + captureName
+                + " " + session.status().format() + overhead());
+            nextStatusLogMillis = nowMillis + STATUS_LOG_INTERVAL_MILLIS;
+        }
+    }
+
+    private void logStopped() {
+        if (stopReported) {
+            return;
+        }
+        stopReported = true;
+        CaptureSession.Summary summary = session.getLastSummary();
+        if (summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
+            lastError = "no frames";
+        } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_UNAVAILABLE
+            && lastError == null) {
+            lastError = "player unavailable";
+        }
+        System.out.println("[pz-replay] capture stopped name=" + captureName
+            + " " + summary.format() + overhead());
+    }
+
+    private void recordCost(long tickStartNanos) {
+        long costNanos = System.nanoTime() - tickStartNanos;
+        captureCostNanos += costNanos;
+        captureCostMaxNanos = Math.max(captureCostMaxNanos, costNanos);
+        captureCostTicks++;
+    }
+
+    private String overhead() {
+        if (captureCostTicks == 0) {
+            return " overhead_avg_ms=0.0000 overhead_max_ms=0.0000";
+        }
+        double averageMillis = captureCostNanos / (double) captureCostTicks / 1_000_000.0;
+        double maxMillis = captureCostMaxNanos / 1_000_000.0;
+        return String.format(Locale.ROOT, " overhead_avg_ms=%.4f overhead_max_ms=%.4f",
+            averageMillis, maxMillis);
+    }
+
+    private static CaptureSession.PlayerSnapshot snapshot(IsoPlayer player) {
         boolean prone = player.isProne();
         boolean sneaking = player.isSneaking();
         boolean sprinting = player.isSprinting();
         boolean running = player.isRunning();
         boolean aiming = player.isAiming();
-        boolean moving = player.isPlayerMoving() || speed > 0.05f;
+        boolean moving = player.isPlayerMoving();
+        boolean inVehicle = player.getVehicle() != null;
 
-        frames.add(new ReplaySample(
-            tick,
-            (nowMillis - startWallMillis) / 1000f,
-            gameSeconds(),
-            x,
-            y,
-            z,
+        return new CaptureSession.PlayerSnapshot(
+            player.getX(),
+            player.getY(),
+            player.getZ(),
             player.getDirectionAngle(),
-            speed,
+            gameSeconds(),
             locomotion(sprinting, running, sneaking, moving),
             stance(prone, sneaking),
-            ReplaySample.flags(aiming, sneaking, sprinting, running, prone, moving)
-        ));
-
-        lastSampleMillis = nowMillis;
-        lastX = x;
-        lastY = y;
-        lastZ = z;
-        hasLastPosition = true;
-        nextSampleMillis = nowMillis + Math.round(1000.0 / SAMPLE_RATE_HZ);
-
-        if (frames.size() >= BinaryReplayCodec.MAX_FRAMES) {
-            stop();
-        }
-    }
-
-    boolean stop() {
-        if (!recording) {
-            return false;
-        }
-        recording = false;
-        long endMillis = System.currentTimeMillis();
-        ReplayMetadata finalMetadata = metadata.withEnd(endMillis);
-        if (frames.isEmpty()) {
-            lastError = "no frames";
-            System.out.println("[pz-replay] recording stopped with no frames");
-            frames.clear();
-            return false;
-        }
-
-        Path path = Path.of(ZomboidFileSystem.instance.getCacheDir(), "pz-replay",
-            captureName + ".pzrp.gz");
-        try {
-            BinaryReplayCodec.write(path, finalMetadata, frames, true);
-            ReplayData readBack = ReplayReader.read(path);
-            lastPath = path.toAbsolutePath().toString();
-            lastFrameCount = readBack.frames().size();
-            System.out.println("[pz-replay] recording finalized path=" + lastPath
-                + " frames=" + lastFrameCount
-                + " bytes=" + Files.size(path));
-            return true;
-        } catch (IOException | ReplayFormatException exception) {
-            lastError = exception.getMessage();
-            System.out.println("[pz-replay] recording write failed: " + lastError);
-            return false;
-        } finally {
-            frames.clear();
-        }
-    }
-
-    String getStatus() {
-        if (recording) {
-            return "recording name=" + captureName + " frames=" + frames.size();
-        }
-        if (lastError != null) {
-            return "idle error=" + lastError;
-        }
-        if (lastPath != null) {
-            return "idle path=" + lastPath + " frames=" + lastFrameCount;
-        }
-        return "idle";
-    }
-
-    String getLastReplayPath() {
-        return lastPath == null ? "" : lastPath;
+            ReplaySample.flags(aiming, sneaking, sprinting, running, prone, moving,
+                inVehicle)
+        );
     }
 
     private static float gameSeconds() {
