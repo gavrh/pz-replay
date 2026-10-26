@@ -94,14 +94,16 @@ public final class CaptureSession {
     }
 
     CaptureSession(double sampleRateHz, int maxFrames, double maxDurationSeconds) {
-        if (sampleRateHz < MIN_SAMPLE_RATE_HZ || sampleRateHz > MAX_SAMPLE_RATE_HZ) {
+        if (!Double.isFinite(sampleRateHz)
+            || sampleRateHz < MIN_SAMPLE_RATE_HZ
+            || sampleRateHz > MAX_SAMPLE_RATE_HZ) {
             throw new IllegalArgumentException("sample rate must be between "
                 + MIN_SAMPLE_RATE_HZ + " and " + MAX_SAMPLE_RATE_HZ + " Hz");
         }
         if (maxFrames < 1) {
             throw new IllegalArgumentException("max frames must be positive");
         }
-        if (maxDurationSeconds <= 0.0) {
+        if (!Double.isFinite(maxDurationSeconds) || maxDurationSeconds <= 0.0) {
             throw new IllegalArgumentException("max duration must be positive");
         }
         this.sampleRateHz = sampleRateHz;

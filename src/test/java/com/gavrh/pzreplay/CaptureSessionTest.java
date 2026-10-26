@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CaptureSessionTest {
@@ -22,6 +23,21 @@ class CaptureSessionTest {
             ReplaySample.Stance.STAND,
             ReplaySample.FLAG_MOVING
         );
+    }
+
+    @Test
+    void rejectsNonFiniteSampleRate() {
+        assertThrows(IllegalArgumentException.class, () -> new CaptureSession(Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+            () -> new CaptureSession(Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    void rejectsNonFiniteMaxDuration() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new CaptureSession(30.0, 10, Double.NaN));
+        assertThrows(IllegalArgumentException.class,
+            () -> new CaptureSession(30.0, 10, Double.POSITIVE_INFINITY));
     }
 
     @Test
