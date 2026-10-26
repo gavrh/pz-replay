@@ -63,6 +63,7 @@ public final class ReplayGhostApi {
         try {
             current.setSceneCulled(true);
             current.removeFromWorld();
+            current.removeFromSquare();
             if (current.getDescriptor() != null) {
                 current.getDescriptor().setInstance(null);
             }
