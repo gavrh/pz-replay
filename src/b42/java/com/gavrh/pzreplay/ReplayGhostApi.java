@@ -8,6 +8,7 @@ import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayGhost")
 public final class ReplayGhostApi {
+    private static final boolean DEBUG_ENABLED = Boolean.getBoolean("pzreplay.debug");
     private static ReplayGhost ghost;
 
     private ReplayGhostApi() {
@@ -37,7 +38,7 @@ public final class ReplayGhostApi {
             ghost.setY(player.getY() + 1.0f);
             ghost.setCurrentSquareFromPosition();
             ghost.setDirectionAngle(player.getDirectionAngle());
-            System.out.println("[pz-replay] replay ghost spawned");
+            System.out.println("[pz-replay] replay ghost spawned identity=" + ghost.getIdentity());
             return true;
         } catch (Throwable t) {
             ReplayGhost failed = ghost;
@@ -65,7 +66,8 @@ public final class ReplayGhostApi {
             if (current.getDescriptor() != null) {
                 current.getDescriptor().setInstance(null);
             }
-            System.out.println("[pz-replay] replay ghost despawned");
+            System.out.println("[pz-replay] replay ghost despawned identity="
+                + current.getIdentity());
             return true;
         } catch (Throwable t) {
             return false;
@@ -74,5 +76,13 @@ public final class ReplayGhostApi {
 
     public static boolean isSpawned() {
         return ghost != null;
+    }
+
+    public static String getIdentity() {
+        return ghost == null ? "" : ghost.getIdentity();
+    }
+
+    public static boolean isDebugEnabled() {
+        return DEBUG_ENABLED;
     }
 }
