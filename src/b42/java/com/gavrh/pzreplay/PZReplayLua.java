@@ -46,4 +46,12 @@ public final class PZReplayLua {
     public static String getStatus() {
         return ReplayRecorder.INSTANCE.getStatus();
     }
+
+    public static String getLastReplayPath() {
+        return ReplayRecorder.INSTANCE.getLastReplayPath();
+    }
+
+    public static String getLastReplaySummary() {
+        return ReplayRecorder.INSTANCE.getLastReplaySummary();
+    }
 }
