@@ -8,6 +8,7 @@ public record ReplayMetadata(
     String modVersion,
     String gameVersion,
     String saveName,
+    String gameMode,
     String mapName,
     String playerName,
     float startX,
@@ -23,13 +24,14 @@ public record ReplayMetadata(
         modVersion = safe(modVersion);
         gameVersion = safe(gameVersion);
         saveName = safe(saveName);
+        gameMode = safe(gameMode);
         mapName = safe(mapName);
         playerName = safe(playerName);
     }
 
     public ReplayMetadata withEnd(long endTimeMillis) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
-            mapName, playerName, startX, startY, startZ, sampleRateHz,
+            gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
             startTimeMillis, endTimeMillis);
     }
 
@@ -39,6 +41,7 @@ public record ReplayMetadata(
         values.put("mod_version", modVersion);
         values.put("game_version", gameVersion);
         values.put("save_name", saveName);
+        values.put("game_mode", gameMode);
         values.put("map", mapName);
         values.put("player_name", playerName);
         values.put("start_x", Float.toString(startX));
@@ -70,6 +73,7 @@ public record ReplayMetadata(
             required(values, "mod_version"),
             required(values, "game_version"),
             required(values, "save_name"),
+            values.getOrDefault("game_mode", ""),
             required(values, "map"),
             required(values, "player_name"),
             parseFloat(values, "start_x"),

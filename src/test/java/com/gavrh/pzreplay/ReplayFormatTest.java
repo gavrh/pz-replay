@@ -1,5 +1,7 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -9,6 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.CRC32;
 import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,6 +31,7 @@ class ReplayFormatTest {
             "0.0.0-dev",
             "42.21.0",
             "pz-replay-test",
+            "Sandbox",
             "Muldraugh, KY",
             "Replay Tester",
             1000.5f,
@@ -96,6 +101,59 @@ class ReplayFormatTest {
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
             () -> BinaryReplayCodec.read(file));
         assertTrue(exception.getMessage().contains("unsupported replay format version 99"));
+    }
+
+    @Test
+    void binaryRejectsBadCrc() throws Exception {
+        Path file = tempDir.resolve("crc.pzrp");
+        BinaryReplayCodec.write(file, metadata(), frames(), false);
+        byte[] bytes = Files.readAllBytes(file);
+        bytes[bytes.length - 12] ^= 0x01;
+        Files.write(file, bytes);
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("checksum"));
+    }
+
+    @Test
+    void binaryRejectsBadFooter() throws Exception {
+        Path file = tempDir.resolve("footer.pzrp");
+        BinaryReplayCodec.write(file, metadata(), frames(), false);
+        byte[] bytes = Files.readAllBytes(file);
+        bytes[bytes.length - 1] ^= 0x01;
+        Files.write(file, bytes);
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("missing footer"));
+    }
+
+    @Test
+    void binaryReadsVersionOneMetadataWithoutGameMode() throws Exception {
+        Map<String, String> values = metadata().toValues();
+        values.remove("game_mode");
+        Path file = tempDir.resolve("legacy.pzrp");
+        Files.write(file, rawPayload(values));
+
+        ReplayData data = BinaryReplayCodec.read(file);
+
+        assertEquals("", data.metadata().gameMode());
+        assertEquals(metadata().saveName(), data.metadata().saveName());
+        assertEquals(metadata().mapName(), data.metadata().mapName());
+        assertEquals(metadata().playerName(), data.metadata().playerName());
+    }
+
+    @Test
+    void binaryRejectsMissingMetadataField() throws Exception {
+        Map<String, String> values = metadata().toValues();
+        values.remove("save_name");
+        Path file = tempDir.resolve("missing-field.pzrp");
+        Files.write(file, rawPayload(values));
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        assertTrue(exception.getMessage().contains("missing 'save_name'"));
     }
 
     @Test
@@ -176,6 +234,28 @@ class ReplayFormatTest {
 
         assertEquals(3, data.frames().size());
         assertTrue(ReplayReader.summary(data).contains("frames=3"));
+    }
+
+    private static byte[] rawPayload(Map<String, String> values) throws IOException {
+        StringBuilder text = new StringBuilder();
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            text.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+        }
+        byte[] metadataBytes = text.toString().getBytes(StandardCharsets.UTF_8);
+        CRC32 crc = new CRC32();
+        crc.update(metadataBytes);
+
+        ByteArrayOutputStream payload = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(payload);
+        out.writeInt(BinaryReplayCodec.MAGIC);
+        out.writeInt(ReplayMetadata.CURRENT_FORMAT_VERSION);
+        out.writeInt(metadataBytes.length);
+        out.write(metadataBytes);
+        out.writeInt(0);
+        out.writeInt((int) crc.getValue());
+        out.writeLong(BinaryReplayCodec.FOOTER);
+        out.flush();
+        return payload.toByteArray();
     }
 
     private static List<ReplaySample> realisticFrames() {

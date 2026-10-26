@@ -20,6 +20,7 @@ public final class ReplayReader {
             + " rate_hz=" + metadata.sampleRateHz()
             + " map=" + metadata.mapName()
             + " save=" + metadata.saveName()
+            + " mode=" + metadata.gameMode()
             + " player=" + metadata.playerName();
     }
 }

@@ -26,6 +26,7 @@ final class CaptureMetadataFactory {
             BuildInfo.VERSION,
             gameVersion(),
             world == null ? "" : world.getWorld(),
+            gameMode(),
             world == null ? "" : world.getMap(),
             player.getFullName(),
             player.getX(),
@@ -47,6 +48,14 @@ final class CaptureMetadataFactory {
             return Core.getInstance().getGameAndBuildVersion();
         } catch (RuntimeException exception) {
             return "unknown";
+        }
+    }
+
+    private static String gameMode() {
+        try {
+            return Core.getInstance().getGameMode();
+        } catch (RuntimeException exception) {
+            return "";
         }
     }
 }
