@@ -93,32 +93,16 @@ public final class ScriptedGhostPath {
     private static Sample interpolate(Point start, Point end, double time) {
         double span = end.time() - start.time();
         double alpha = (time - start.time()) / span;
-        float x = lerp(start.x(), end.x(), alpha);
-        float y = lerp(start.y(), end.y(), alpha);
-        float z = lerp(start.z(), end.z(), alpha);
-        float facing = interpolateFacing(start.facing(), end.facing(), alpha);
+        float x = MotionMath.lerp(start.x(), end.x(), alpha);
+        float y = MotionMath.lerp(start.y(), end.y(), alpha);
+        float z = MotionMath.lerp(start.z(), end.z(), alpha);
+        float facing = MotionMath.interpolateFacing(start.facing(), end.facing(), alpha);
         return new Sample(time, x, y, z, facing, start.locomotion());
     }
 
     private static Sample sampleOf(Point point) {
         return new Sample(point.time(), point.x(), point.y(), point.z(), point.facing(),
             point.locomotion());
-    }
-
-    private static float lerp(float start, float end, double alpha) {
-        return (float) (start + (end - start) * alpha);
-    }
-
-    private static float interpolateFacing(float start, float end, double alpha) {
-        double delta = (end - start + 540.0) % 360.0 - 180.0;
-        double facing = start + delta * alpha;
-        facing %= 360.0;
-        if (facing <= -180.0) {
-            facing += 360.0;
-        } else if (facing > 180.0) {
-            facing -= 360.0;
-        }
-        return (float) facing;
     }
 
     public record Point(
