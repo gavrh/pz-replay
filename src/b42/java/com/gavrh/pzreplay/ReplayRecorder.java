@@ -1,5 +1,8 @@
 package com.gavrh.pzreplay;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
@@ -20,6 +23,8 @@ final class ReplayRecorder {
     private boolean capturePaused;
     private boolean captureInVehicle;
     private String lastError;
+    private String lastReplayPath;
+    private String lastReplaySummary;
 
     private ReplayRecorder() {
     }
@@ -132,6 +137,14 @@ final class ReplayRecorder {
         return builder.toString();
     }
 
+    String getLastReplayPath() {
+        return lastReplayPath == null ? "" : lastReplayPath;
+    }
+
+    String getLastReplaySummary() {
+        return lastReplaySummary == null ? "" : lastReplaySummary;
+    }
+
     private void stopWithReason(CaptureSession.StopReason reason) {
         session.stop(reason);
         logStopped();
@@ -163,6 +176,37 @@ final class ReplayRecorder {
         }
         System.out.println("[pz-replay] capture stopped name=" + captureName
             + " " + summary.format() + overhead());
+        persist(summary);
+    }
+
+    private void persist(CaptureSession.Summary summary) {
+        if (summary.frameCount() == 0 || metadata == null) {
+            return;
+        }
+        long durationMillis = Math.round(summary.durationSeconds() * 1000.0);
+        ReplayMetadata finalMetadata = metadata.withEnd(
+            metadata.startTimeMillis() + durationMillis);
+        Path path = ReplayStorage.pathFor(captureName);
+        boolean written = false;
+        try {
+            BinaryReplayCodec.write(path, finalMetadata, session.frames(), true);
+            written = true;
+            ReplayData data = ReplayReader.read(path);
+            lastReplayPath = path.toString();
+            lastReplaySummary = ReplayReader.summary(data);
+            System.out.println("[pz-replay] replay written path=" + lastReplayPath
+                + " bytes=" + Files.size(path) + " " + lastReplaySummary);
+        } catch (IOException | ReplayFormatException exception) {
+            lastError = "replay write failed: " + exception.getMessage();
+            System.out.println("[pz-replay] replay write failed path=" + path
+                + " error=" + lastError);
+            if (written) {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     private void recordCost(long tickStartNanos) {
