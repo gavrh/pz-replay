@@ -25,15 +25,15 @@ public final class PZReplayLua {
         return ReplayRecorder.INSTANCE.stop();
     }
 
-    public static void recordTick(double numberTicks) {
-        ReplayRecorder.INSTANCE.tick((long) numberTicks);
+    public static void recordTick() {
+        ReplayRecorder.INSTANCE.tick();
+    }
+
+    public static boolean isRecording() {
+        return ReplayRecorder.INSTANCE.isRecording();
     }
 
     public static String getStatus() {
         return ReplayRecorder.INSTANCE.getStatus();
-    }
-
-    public static String getLastReplayPath() {
-        return ReplayRecorder.INSTANCE.getLastReplayPath();
     }
 }

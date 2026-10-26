@@ -30,3 +30,9 @@ end
 
 Events.OnGameBoot.Add(reportWhenReady)
 Events.OnMainMenuEnter.Add(reportWhenReady)
+
+Events.OnTick.Add(function()
+    if PZReplay and PZReplay.recordTick then
+        PZReplay.recordTick()
+    end
+end)
