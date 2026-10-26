@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class ReplayTimeline {
@@ -35,28 +36,36 @@ public final class ReplayTimeline {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
-        this.frames = List.copyOf(frames);
-        this.relativeTimes = new double[this.frames.size()];
-        if (this.frames.isEmpty()) {
+        List<ReplaySample> validated = new ArrayList<>(frames);
+        if (validated.isEmpty()) {
+            this.frames = List.of();
+            this.relativeTimes = new double[0];
             duration = 0.0;
             return;
         }
 
-        double firstSeconds = this.frames.get(0).timeSeconds();
-        for (int index = 0; index < this.frames.size(); index++) {
-            ReplaySample frame = this.frames.get(index);
+        for (int index = 0; index < validated.size(); index++) {
+            ReplaySample frame = validated.get(index);
             if (frame == null) {
                 throw new ReplayFormatException("replay frame " + index + " is missing");
             }
             validateFrame(frame, index);
+        }
+
+        double firstSeconds = validated.get(0).timeSeconds();
+        double[] times = new double[validated.size()];
+        for (int index = 0; index < validated.size(); index++) {
+            ReplaySample frame = validated.get(index);
             double relative = (double) frame.timeSeconds() - firstSeconds;
-            if (relative < 0.0 || (index > 0 && relative <= relativeTimes[index - 1])) {
+            if (relative < 0.0 || (index > 0 && relative <= times[index - 1])) {
                 throw new ReplayFormatException("replay frame times are not increasing at frame "
                     + index);
             }
-            relativeTimes[index] = relative;
+            times[index] = relative;
         }
-        duration = relativeTimes[relativeTimes.length - 1];
+        this.frames = List.copyOf(validated);
+        this.relativeTimes = times;
+        duration = times[times.length - 1];
     }
 
     public boolean start() {

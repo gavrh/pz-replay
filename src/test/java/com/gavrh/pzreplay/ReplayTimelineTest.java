@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -138,6 +139,13 @@ class ReplayTimelineTest {
     void rejectsInvalidFrames() {
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
             (List<ReplaySample>) null));
+        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
+            Arrays.asList((ReplaySample) null)));
+        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(Arrays.asList(
+            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
+                ReplaySample.Stance.STAND),
+            null
+        )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
             frame(1f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
                 ReplaySample.Stance.STAND),
