@@ -2,6 +2,7 @@ package com.gavrh.pzreplay;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class CaptureSession {
     public static final double DEFAULT_SAMPLE_RATE_HZ = 30.0;
@@ -51,12 +52,12 @@ public final class CaptureSession {
     ) {
         public String format() {
             String text = "frames=" + frameCount
-                + " duration=" + String.format("%.2f", durationSeconds) + "s"
-                + " rate=" + String.format("%.1f", configuredRateHz) + "Hz"
-                + " actual=" + String.format("%.2f", actualRateHz) + "Hz"
+                + " duration=" + String.format(Locale.ROOT, "%.2f", durationSeconds) + "s"
+                + " rate=" + String.format(Locale.ROOT, "%.1f", configuredRateHz) + "Hz"
+                + " actual=" + String.format(Locale.ROOT, "%.2f", actualRateHz) + "Hz"
                 + " estimated_bytes=" + estimatedBytes
-                + " paused=" + String.format("%.2f", pausedSeconds) + "s"
-                + " gaps=" + String.format("%.2f", gapSeconds) + "s";
+                + " paused=" + String.format(Locale.ROOT, "%.2f", pausedSeconds) + "s"
+                + " gaps=" + String.format(Locale.ROOT, "%.2f", gapSeconds) + "s";
             if (stopReason == StopReason.NONE) {
                 return text;
             }

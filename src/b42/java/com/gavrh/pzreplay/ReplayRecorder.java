@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.Locale;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
 
@@ -177,7 +178,7 @@ final class ReplayRecorder {
         }
         double averageMillis = captureCostNanos / (double) captureCostTicks / 1_000_000.0;
         double maxMillis = captureCostMaxNanos / 1_000_000.0;
-        return String.format(" overhead_avg_ms=%.4f overhead_max_ms=%.4f",
+        return String.format(Locale.ROOT, " overhead_avg_ms=%.4f overhead_max_ms=%.4f",
             averageMillis, maxMillis);
     }
 

@@ -2,6 +2,7 @@ package com.gavrh.pzreplay;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -246,6 +247,33 @@ class CaptureSessionTest {
         assertTrue(text.contains("actual="));
         assertTrue(text.contains("estimated_bytes="));
         assertTrue(text.contains("stop=requested"));
+    }
+
+    @Test
+    void summaryFormattingIsLocaleIndependent() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.GERMANY);
+            CaptureSession.Summary summary = new CaptureSession.Summary(
+                false,
+                1,
+                1.5f,
+                30.0,
+                30.0,
+                40L,
+                0f,
+                0f,
+                CaptureSession.StopReason.REQUESTED
+            );
+
+            String text = summary.format();
+
+            assertTrue(text.contains("duration=1.50s"));
+            assertTrue(text.contains("rate=30.0Hz"));
+            assertTrue(text.contains("actual=30.00Hz"));
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 
     @Test
