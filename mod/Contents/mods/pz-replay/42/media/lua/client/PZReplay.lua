@@ -43,4 +43,11 @@ local function stopCapture()
     end
 end
 
+local function stopCaptureOnDeath()
+    if PZReplay and PZReplay.isRecording and PZReplay.isRecording() then
+        PZReplay.stopRecordingOnDeath()
+    end
+end
+
+Events.OnPlayerDeath.Add(stopCaptureOnDeath)
 Events.OnMainMenuEnter.Add(stopCapture)

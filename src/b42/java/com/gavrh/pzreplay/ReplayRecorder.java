@@ -80,6 +80,11 @@ final class ReplayRecorder {
             afterTick(nowMillis);
             return;
         }
+        if (player.isDead()) {
+            recordCost(tickStartNanos);
+            stopWithReason(CaptureSession.StopReason.PLAYER_DEAD);
+            return;
+        }
 
         boolean paused = GameTime.isGamePaused();
         if (paused != capturePaused) {
@@ -99,10 +104,14 @@ final class ReplayRecorder {
     }
 
     boolean stop() {
+        return stop(CaptureSession.StopReason.REQUESTED);
+    }
+
+    boolean stop(CaptureSession.StopReason reason) {
         if (!session.isRecording()) {
             return false;
         }
-        session.stop(CaptureSession.StopReason.REQUESTED);
+        session.stop(reason);
         logStopped();
         return true;
     }

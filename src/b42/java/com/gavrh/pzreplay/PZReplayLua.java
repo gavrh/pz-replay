@@ -25,6 +25,10 @@ public final class PZReplayLua {
         return ReplayRecorder.INSTANCE.stop();
     }
 
+    public static boolean stopRecordingOnDeath() {
+        return ReplayRecorder.INSTANCE.stop(CaptureSession.StopReason.PLAYER_DEAD);
+    }
+
     public static void recordTick() {
         ReplayRecorder.INSTANCE.tick();
     }
