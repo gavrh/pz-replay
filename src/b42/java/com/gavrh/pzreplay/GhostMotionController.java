@@ -56,6 +56,7 @@ public final class GhostMotionController {
         state = State.STOPPED;
         elapsed = 0.0;
         restoreCamera();
+        applyLocomotion(ghost, ReplaySample.Locomotion.IDLE);
         if (wasActive) {
             System.out.println("[pz-replay] replay ghost motion stopped");
         }
