@@ -7,6 +7,7 @@ import zombie.iso.IsoCell;
 
 public final class ReplayGhost extends IsoPlayer {
     private final String identity;
+    private GhostMotionController motion;
 
     public ReplayGhost(IsoCell cell, SurvivorDesc desc, int x, int y, int z) {
         super(cell, desc, x, y, z);
@@ -22,8 +23,68 @@ public final class ReplayGhost extends IsoPlayer {
         return identity;
     }
 
+    void installMotion(GhostMotionController motion) {
+        this.motion = motion;
+    }
+
+    boolean startMotion() {
+        if (motion == null) {
+            return false;
+        }
+        try {
+            motion.start(this);
+            return true;
+        } catch (Throwable t) {
+            failMotion(t);
+            return false;
+        }
+    }
+
+    boolean pauseMotion() {
+        if (motion == null) {
+            return false;
+        }
+        try {
+            return motion.pause();
+        } catch (Throwable t) {
+            failMotion(t);
+            return false;
+        }
+    }
+
+    boolean resetMotion() {
+        if (motion == null) {
+            return false;
+        }
+        try {
+            motion.reset(this);
+            return true;
+        } catch (Throwable t) {
+            failMotion(t);
+            return false;
+        }
+    }
+
+    void stopMotion() {
+        if (motion != null) {
+            try {
+                motion.stop(this);
+            } catch (Throwable t) {
+                System.out.println("[pz-replay] replay ghost motion stop failed: " + t);
+            }
+        }
+    }
+
     @Override
     public void update() {
+        if (motion == null) {
+            return;
+        }
+        try {
+            motion.update(this);
+        } catch (Throwable t) {
+            failMotion(t);
+        }
     }
 
     @Override
@@ -36,5 +97,10 @@ public final class ReplayGhost extends IsoPlayer {
     public void postupdate() {
         super.postupdate();
         setCollidable(false);
+    }
+
+    private void failMotion(Throwable t) {
+        System.out.println("[pz-replay] replay ghost motion failed: " + t);
+        stopMotion();
     }
 }

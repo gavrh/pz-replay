@@ -38,6 +38,8 @@ public final class ReplayGhostApi {
             ghost.setY(player.getY() + 1.0f);
             ghost.setCurrentSquareFromPosition();
             ghost.setDirectionAngle(player.getDirectionAngle());
+            ghost.installMotion(new GhostMotionController(ScriptedGhostPath.defaultRoute(
+                ghost.getX(), ghost.getY(), ghost.getZ())));
             System.out.println("[pz-replay] replay ghost spawned identity=" + ghost.getIdentity());
             return true;
         } catch (Throwable t) {
@@ -61,6 +63,7 @@ public final class ReplayGhostApi {
         }
         ghost = null;
         try {
+            current.stopMotion();
             current.setSceneCulled(true);
             current.removeFromWorld();
             current.removeFromSquare();
@@ -73,6 +76,34 @@ public final class ReplayGhostApi {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    public static boolean startMotion() {
+        if (!DEBUG_ENABLED || ghost == null) {
+            return false;
+        }
+        return ghost.startMotion();
+    }
+
+    public static boolean pauseMotion() {
+        if (!DEBUG_ENABLED || ghost == null) {
+            return false;
+        }
+        return ghost.pauseMotion();
+    }
+
+    public static boolean stopMotion() {
+        if (!DEBUG_ENABLED || ghost == null) {
+            return false;
+        }
+        return despawn();
+    }
+
+    public static boolean resetMotion() {
+        if (!DEBUG_ENABLED || ghost == null) {
+            return false;
+        }
+        return ghost.resetMotion();
     }
 
     public static boolean isSpawned() {
