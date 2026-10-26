@@ -31,11 +31,11 @@ end
 Events.OnGameBoot.Add(reportWhenReady)
 Events.OnMainMenuEnter.Add(reportWhenReady)
 
-Events.OnTick.Add(function()
-    if PZReplay and PZReplay.recordTick then
-        PZReplay.recordTick()
-    end
-end)
+local function isDebugEnabled()
+    return PZReplay
+        and PZReplay.isDebugEnabled
+        and PZReplay.isDebugEnabled()
+end
 
 local function stopCapture()
     if PZReplay and PZReplay.isRecording and PZReplay.isRecording() then
@@ -48,6 +48,29 @@ local function stopCaptureOnDeath()
         PZReplay.stopRecordingOnDeath()
     end
 end
+
+local function toggleCapture()
+    if not isDebugEnabled() then
+        return
+    end
+    if PZReplay.isRecording() then
+        PZReplay.stopRecording()
+    else
+        PZReplay.startRecording("capture")
+    end
+end
+
+Events.OnTick.Add(function()
+    if PZReplay and PZReplay.recordTick then
+        PZReplay.recordTick()
+    end
+end)
+
+Events.OnKeyPressed.Add(function(key)
+    if key == Keyboard.KEY_F8 then
+        toggleCapture()
+    end
+end)
 
 Events.OnPlayerDeath.Add(stopCaptureOnDeath)
 Events.OnMainMenuEnter.Add(stopCapture)

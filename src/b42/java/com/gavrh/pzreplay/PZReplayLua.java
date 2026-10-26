@@ -5,6 +5,8 @@ import se.krka.kahlua.integration.annotations.LuaMethod;
 
 @Exposer.LuaClass(name = "PZReplay")
 public final class PZReplayLua {
+    private static final boolean DEBUG_ENABLED = Boolean.getBoolean("pzreplay.debug");
+
     public PZReplayLua() {
     }
 
@@ -18,7 +20,7 @@ public final class PZReplayLua {
     }
 
     public static boolean startRecording(String name) {
-        return ReplayRecorder.INSTANCE.start(name);
+        return DEBUG_ENABLED && ReplayRecorder.INSTANCE.start(name);
     }
 
     public static boolean stopRecording() {
@@ -35,6 +37,10 @@ public final class PZReplayLua {
 
     public static boolean isRecording() {
         return ReplayRecorder.INSTANCE.isRecording();
+    }
+
+    public static boolean isDebugEnabled() {
+        return DEBUG_ENABLED;
     }
 
     public static String getStatus() {
