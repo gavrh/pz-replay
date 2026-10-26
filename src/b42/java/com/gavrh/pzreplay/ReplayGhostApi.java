@@ -15,44 +15,65 @@ public final class ReplayGhostApi {
     }
 
     public static boolean spawn() {
-        if (ghost != null) {
+        IsoPlayer player = IsoPlayer.getInstance();
+        if (player == null) {
             return false;
+        }
+        float x = player.getX() + 1.0f;
+        float y = player.getY() + 1.0f;
+        float z = player.getZ();
+        GhostMotionController motion = new GhostMotionController(
+            ScriptedGhostPath.defaultRoute(x, y, z));
+        return spawnWithMotion(motion, x, y, z, player.getDirectionAngle()) != null;
+    }
+
+    static ReplayGhost spawnWithMotion(GhostMotionController motion, float x, float y, float z,
+        float facing) {
+        if (ghost != null || motion == null) {
+            return null;
         }
         IsoPlayer player = IsoPlayer.getInstance();
         IsoCell cell = IsoWorld.instance != null ? IsoWorld.instance.currentCell : null;
         if (player == null || cell == null) {
-            return false;
+            return null;
         }
 
-        int x = (int) Math.floor(player.getX());
-        int y = (int) Math.floor(player.getY());
-        int z = (int) Math.floor(player.getZ());
-
-        SurvivorDesc desc = new SurvivorDesc(player.getDescriptor());
-        desc.getHumanVisual().copyFrom(player.getHumanVisual());
-        desc.getWornItems().copyFrom(player.getWornItems());
-
         try {
-            ghost = new ReplayGhost(cell, desc, x, y, z);
-            ghost.setX(player.getX() + 1.0f);
-            ghost.setY(player.getY() + 1.0f);
-            ghost.setCurrentSquareFromPosition();
-            ghost.setDirectionAngle(player.getDirectionAngle());
-            ghost.installMotion(new GhostMotionController(ScriptedGhostPath.defaultRoute(
-                ghost.getX(), ghost.getY(), ghost.getZ())));
-            System.out.println("[pz-replay] replay ghost spawned identity=" + ghost.getIdentity());
-            return true;
+            SurvivorDesc desc = new SurvivorDesc(player.getDescriptor());
+            desc.getHumanVisual().copyFrom(player.getHumanVisual());
+            desc.getWornItems().copyFrom(player.getWornItems());
+            ReplayGhost created = new ReplayGhost(cell, desc, (int) Math.floor(x),
+                (int) Math.floor(y), (int) Math.floor(z));
+            ghost = created;
+            created.setX(x);
+            created.setY(y);
+            created.setZ(z);
+            created.setCurrentSquareFromPosition();
+            created.setMovingSquare(created.getCurrentSquare());
+            created.setDirectionAngle(facing);
+            created.installMotion(motion);
+            System.out.println("[pz-replay] replay ghost spawned identity=" + created.getIdentity());
+            return created;
         } catch (Throwable t) {
             ReplayGhost failed = ghost;
             ghost = null;
-            if (failed != null) {
-                try {
-                    failed.setSceneCulled(true);
-                    failed.removeFromWorld();
-                } catch (Throwable ignored) {
-                }
+            removeGhost(failed);
+            return null;
+        }
+    }
+
+    private static void removeGhost(ReplayGhost current) {
+        if (current == null) {
+            return;
+        }
+        try {
+            current.setSceneCulled(true);
+            current.removeFromWorld();
+            current.removeFromSquare();
+            if (current.getDescriptor() != null) {
+                current.getDescriptor().setInstance(null);
             }
-            return false;
+        } catch (Throwable ignored) {
         }
     }
 
@@ -64,16 +85,13 @@ public final class ReplayGhostApi {
         ghost = null;
         try {
             current.stopMotion();
-            current.setSceneCulled(true);
-            current.removeFromWorld();
-            current.removeFromSquare();
-            if (current.getDescriptor() != null) {
-                current.getDescriptor().setInstance(null);
-            }
+            removeGhost(current);
             System.out.println("[pz-replay] replay ghost despawned identity="
                 + current.getIdentity());
+            ReplayPlaybackApi.onGhostDespawned();
             return true;
         } catch (Throwable t) {
+            ReplayPlaybackApi.onGhostDespawned();
             return false;
         }
     }
@@ -116,5 +134,9 @@ public final class ReplayGhostApi {
 
     public static boolean isDebugEnabled() {
         return DEBUG_ENABLED;
+    }
+
+    static ReplayGhost getGhost() {
+        return ghost;
     }
 }

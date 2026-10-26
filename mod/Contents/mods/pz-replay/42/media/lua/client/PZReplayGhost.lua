@@ -10,6 +10,17 @@ local function despawn()
     end
 end
 
+local function stopPlayback()
+    if PZReplayPlayback and PZReplayPlayback.stop then
+        PZReplayPlayback.stop()
+    end
+end
+
+local function cleanup()
+    stopPlayback()
+    despawn()
+end
+
 local function toggleDebugGhost()
     if not isDebugEnabled() then
         return
@@ -51,6 +62,12 @@ Events.OnKeyPressed.Add(function(key)
     end
 end)
 
-Events.OnSave.Add(despawn)
-Events.OnPlayerDeath.Add(despawn)
-Events.OnMainMenuEnter.Add(despawn)
+Events.OnTick.Add(function()
+    if PZReplayPlayback and PZReplayPlayback.tick then
+        PZReplayPlayback.tick()
+    end
+end)
+
+Events.OnSave.Add(cleanup)
+Events.OnPlayerDeath.Add(cleanup)
+Events.OnMainMenuEnter.Add(cleanup)
