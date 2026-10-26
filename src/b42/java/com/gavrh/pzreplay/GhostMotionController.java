@@ -7,6 +7,9 @@ import zombie.iso.PlayerCamera;
 
 public final class GhostMotionController {
     private static final float MAX_STEP_SECONDS = 0.1f;
+    private static final float WALK_SPEED = 0.8f;
+    private static final float RUN_SPEED = 0.65f;
+    private static final float SNEAK_SPEED = 0.8f;
 
     public enum State {
         STOPPED,
@@ -93,6 +96,46 @@ public final class GhostMotionController {
         ghost.setCurrentSquareFromPosition();
         ghost.setMovingSquare(ghost.getCurrentSquare());
         ghost.setDirectionAngle(sample.facing());
+        applyLocomotion(ghost, sample.locomotion());
+    }
+
+    private static void applyLocomotion(ReplayGhost ghost, ReplaySample.Locomotion locomotion) {
+        switch (locomotion) {
+            case WALK -> {
+                ghost.setScriptedMovement(true);
+                ghost.setRunning(false);
+                ghost.setSprinting(false);
+                ghost.setSneaking(false);
+                ghost.setVariable("WalkSpeed", WALK_SPEED);
+            }
+            case RUN -> {
+                ghost.setScriptedMovement(true);
+                ghost.setRunning(true);
+                ghost.setSprinting(false);
+                ghost.setSneaking(false);
+                ghost.setVariable("WalkSpeed", RUN_SPEED);
+            }
+            case SPRINT -> {
+                ghost.setScriptedMovement(true);
+                ghost.setRunning(true);
+                ghost.setSprinting(true);
+                ghost.setSneaking(false);
+                ghost.setVariable("WalkSpeed", 1.0f);
+            }
+            case SNEAK -> {
+                ghost.setScriptedMovement(true);
+                ghost.setRunning(false);
+                ghost.setSprinting(false);
+                ghost.setSneaking(true);
+                ghost.setVariable("WalkSpeed", SNEAK_SPEED);
+            }
+            case IDLE -> {
+                ghost.setScriptedMovement(false);
+                ghost.setRunning(false);
+                ghost.setSprinting(false);
+                ghost.setSneaking(false);
+            }
+        }
     }
 
     private void restoreCamera() {

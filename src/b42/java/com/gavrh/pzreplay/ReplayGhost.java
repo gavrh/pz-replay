@@ -75,6 +75,11 @@ public final class ReplayGhost extends IsoPlayer {
         }
     }
 
+    void setScriptedMovement(boolean moving) {
+        isPlayerMoving = moving;
+        setJustMoved(moving);
+    }
+
     @Override
     public void update() {
         if (motion == null) {
