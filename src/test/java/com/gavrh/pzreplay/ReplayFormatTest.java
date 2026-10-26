@@ -66,6 +66,13 @@ class ReplayFormatTest {
     }
 
     @Test
+    void binaryRejectsMissingFile() {
+        Path missing = tempDir.resolve("missing.pzrp.gz");
+
+        assertThrows(IOException.class, () -> ReplayReader.read(missing));
+    }
+
+    @Test
     void binaryRejectsTruncatedFile() throws Exception {
         Path file = tempDir.resolve("truncated.pzrp");
         BinaryReplayCodec.write(file, metadata(), frames(), false);
