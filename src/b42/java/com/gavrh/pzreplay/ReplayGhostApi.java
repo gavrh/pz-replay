@@ -44,6 +44,7 @@ public final class ReplayGhostApi {
             desc.getWornItems().copyFrom(player.getWornItems());
             ReplayGhost created = new ReplayGhost(cell, desc, (int) Math.floor(x),
                 (int) Math.floor(y), (int) Math.floor(z));
+            ghost = created;
             created.setX(x);
             created.setY(y);
             created.setZ(z);
@@ -51,19 +52,28 @@ public final class ReplayGhostApi {
             created.setMovingSquare(created.getCurrentSquare());
             created.setDirectionAngle(facing);
             created.installMotion(motion);
-            ghost = created;
             System.out.println("[pz-replay] replay ghost spawned identity=" + created.getIdentity());
             return created;
         } catch (Throwable t) {
-            if (ghost != null) {
-                try {
-                    ghost.setSceneCulled(true);
-                    ghost.removeFromWorld();
-                } catch (Throwable ignored) {
-                }
-                ghost = null;
-            }
+            ReplayGhost failed = ghost;
+            ghost = null;
+            removeGhost(failed);
             return null;
+        }
+    }
+
+    private static void removeGhost(ReplayGhost current) {
+        if (current == null) {
+            return;
+        }
+        try {
+            current.setSceneCulled(true);
+            current.removeFromWorld();
+            current.removeFromSquare();
+            if (current.getDescriptor() != null) {
+                current.getDescriptor().setInstance(null);
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -75,12 +85,7 @@ public final class ReplayGhostApi {
         ghost = null;
         try {
             current.stopMotion();
-            current.setSceneCulled(true);
-            current.removeFromWorld();
-            current.removeFromSquare();
-            if (current.getDescriptor() != null) {
-                current.getDescriptor().setInstance(null);
-            }
+            removeGhost(current);
             System.out.println("[pz-replay] replay ghost despawned identity="
                 + current.getIdentity());
             ReplayPlaybackApi.onGhostDespawned();
