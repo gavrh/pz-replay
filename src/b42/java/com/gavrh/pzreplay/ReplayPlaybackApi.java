@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Locale;
 import me.zed_0xff.zombie_buddy.Exposer;
 import zombie.core.Core;
@@ -10,7 +11,6 @@ import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayPlayback")
 public final class ReplayPlaybackApi {
-    private static final boolean DEBUG_ENABLED = Boolean.getBoolean("pzreplay.debug");
     private static ReplayTimeline timeline;
     private static GhostMotionController controller;
     private static String lastPath = "";
@@ -19,21 +19,27 @@ public final class ReplayPlaybackApi {
     }
 
     public static boolean play(String path) {
-        if (!DEBUG_ENABLED) {
+        ReplaySettings settings = ReplaySettingsStore.get();
+        if (settings.isKillSwitch()) {
+            fail(path, "kill switch is enabled");
+            return false;
+        }
+        if (ReplayRecorder.INSTANCE.isRecording()) {
+            fail(path, "recording is active");
             return false;
         }
         if (controller != null) {
-            logFailure(path, "playback already active");
+            fail(path, "playback already active");
             return false;
         }
         if (ReplayGhostApi.isSpawned()) {
-            logFailure(path, "a ghost is already spawned");
+            fail(path, "a ghost is already spawned");
             return false;
         }
 
         String requested = path == null ? "" : path.trim();
         if (requested.isEmpty()) {
-            logFailure(requested, "replay path is empty");
+            fail(requested, "replay path is empty");
             return false;
         }
 
@@ -41,13 +47,13 @@ public final class ReplayPlaybackApi {
         try {
             data = ReplayReader.read(Paths.get(requested));
         } catch (InvalidPathException exception) {
-            logFailure(requested, "invalid replay path");
+            fail(requested, "invalid replay path");
             return false;
         } catch (IOException exception) {
-            logFailure(requested, "cannot read replay: " + exception.getMessage());
+            fail(requested, "cannot read replay: " + exception.getMessage());
             return false;
         } catch (ReplayFormatException exception) {
-            logFailure(requested, "invalid replay: " + exception.getMessage());
+            fail(requested, "invalid replay: " + exception.getMessage());
             return false;
         }
 
@@ -55,15 +61,17 @@ public final class ReplayPlaybackApi {
         try {
             loaded = new ReplayTimeline(data);
         } catch (ReplayFormatException exception) {
-            logFailure(requested, "invalid replay timeline: " + exception.getMessage());
+            fail(requested, "invalid replay timeline: " + exception.getMessage());
             return false;
         }
         if (loaded.isEmpty()) {
-            logFailure(requested, "replay has no frames");
+            fail(requested, "replay has no frames");
             return false;
         }
 
-        logCompatibility(requested, data.metadata());
+        ReplayCompatibility.Result compatibility =
+            ReplayCompatibility.check(data.metadata(), context());
+        logCompatibility(requested, compatibility);
         System.out.println("[pz-replay] replay loaded path=" + requested + " "
             + ReplayReader.summary(data));
 
@@ -72,27 +80,41 @@ public final class ReplayPlaybackApi {
         ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
             first.z(), first.facing());
         if (ghost == null) {
-            logFailure(requested, "ghost spawn failed");
+            fail(requested, "ghost spawn failed");
             return false;
         }
         if (!ghost.startMotion()) {
             ReplayGhostApi.despawn();
-            logFailure(requested, "ghost motion start failed");
+            fail(requested, "ghost motion start failed");
             return false;
         }
+
+        ReplayControlState state = PZReplayLua.state();
+        if (!state.playbackStarted(loaded.getDuration())) {
+            ReplayGhostApi.despawn();
+            fail(requested, "playback already active");
+            return false;
+        }
+        state.setCompatibilityWarnings(compatibility.warnings());
+        boolean following = settings.isCameraFollowDefault()
+            && loadedController.setCameraFollow(true, ghost);
+        state.setCameraFollow(following);
 
         timeline = loaded;
         controller = loadedController;
         lastPath = requested;
         System.out.println("[pz-replay] replay playback started path=" + requested
             + " duration=" + format(loaded.getDuration()) + "s"
-            + " frames=" + loaded.getFrameCount());
+            + " frames=" + loaded.getFrameCount()
+            + " camera_follow=" + following);
         return true;
     }
 
     public static boolean stop() {
         GhostMotionController active = controller;
+        ReplayControlState state = PZReplayLua.state();
         if (active == null) {
+            state.playbackStopped();
             return false;
         }
         double currentTime = active.getCurrentTime();
@@ -100,6 +122,7 @@ public final class ReplayPlaybackApi {
         controller = null;
         timeline = null;
         lastPath = "";
+        state.playbackStopped();
         ReplayGhostApi.despawn();
         System.out.println("[pz-replay] replay playback stopped path=" + path
             + " time=" + format(currentTime) + "s");
@@ -118,6 +141,10 @@ public final class ReplayPlaybackApi {
         return timeline == null ? 0.0 : timeline.getDuration();
     }
 
+    public static String getCurrentPath() {
+        return lastPath;
+    }
+
     public static boolean setCameraFollow(boolean enabled) {
         if (controller == null || !controller.isActive()) {
             return false;
@@ -126,21 +153,43 @@ public final class ReplayPlaybackApi {
         if (ghost == null) {
             return false;
         }
-        return controller.setCameraFollow(enabled, ghost);
+        boolean changed = controller.setCameraFollow(enabled, ghost);
+        if (changed) {
+            PZReplayLua.state().setCameraFollow(enabled);
+        }
+        return changed;
     }
 
     public static boolean isCameraFollow() {
         return controller != null && controller.isCameraFollow();
     }
 
+    public static String getLastPlaybackError() {
+        return PZReplayLua.state().getPlaybackError();
+    }
+
+    public static int getCompatibilityWarningCount() {
+        return PZReplayLua.state().getCompatibilityWarnings().size();
+    }
+
+    public static String getCompatibilityWarning(int index) {
+        List<String> warnings = PZReplayLua.state().getCompatibilityWarnings();
+        if (index < 0 || index >= warnings.size()) {
+            return "";
+        }
+        return warnings.get(index);
+    }
+
     public static void tick() {
-        if (!DEBUG_ENABLED || controller == null) {
+        ReplayControlState state = PZReplayLua.state();
+        if (controller == null) {
             return;
         }
         if (!ReplayGhostApi.isSpawned()) {
             controller = null;
             timeline = null;
             lastPath = "";
+            state.playbackFailed("ghost was removed");
             return;
         }
         if (controller.isActive()) {
@@ -150,6 +199,8 @@ public final class ReplayPlaybackApi {
                     controller.refreshCamera(ghost);
                 }
             }
+            state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
+                controller.isCameraFollow());
             return;
         }
 
@@ -158,6 +209,7 @@ public final class ReplayPlaybackApi {
         controller = null;
         timeline = null;
         lastPath = "";
+        state.playbackStopped();
         boolean removed = ReplayGhostApi.despawn();
         System.out.println("[pz-replay] replay playback finished path=" + path
             + " duration=" + format(duration) + "s"
@@ -165,13 +217,15 @@ public final class ReplayPlaybackApi {
     }
 
     static void onGhostDespawned() {
+        if (controller != null) {
+            PZReplayLua.state().playbackStopped();
+        }
         controller = null;
         timeline = null;
         lastPath = "";
     }
 
-    private static void logCompatibility(String path, ReplayMetadata metadata) {
-        ReplayCompatibility.Result result = ReplayCompatibility.check(metadata, context());
+    private static void logCompatibility(String path, ReplayCompatibility.Result result) {
         if (result.isCompatible()) {
             System.out.println("[pz-replay] replay compatible path=" + path);
             return;
@@ -208,7 +262,8 @@ public final class ReplayPlaybackApi {
         }
     }
 
-    private static void logFailure(String path, String message) {
+    private static void fail(String path, String message) {
+        PZReplayLua.state().playbackFailed(message);
         System.out.println("[pz-replay] replay playback failed path="
             + (path == null ? "" : path) + " error=" + message);
     }

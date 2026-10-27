@@ -23,6 +23,9 @@ public final class BinaryReplayCodec {
     public static final int MAGIC = 0x505A5250;
     public static final long FOOTER = 0x505A5250454E4421L;
     public static final int RECORD_BYTES = 40;
+    private static final int LOCOMOTION_OFFSET = 36;
+    private static final int STANCE_OFFSET = 37;
+    private static final int FLAGS_OFFSET = 38;
     private static final int MAX_METADATA_BYTES = 1 << 20;
     static final int MAX_FRAMES = 54_000;
     static final long MAX_UNCOMPRESSED_BYTES =
@@ -89,33 +92,17 @@ public final class BinaryReplayCodec {
     }
 
     public static ReplayData read(Path source) throws IOException, ReplayFormatException {
-        if (Files.size(source) > MAX_COMPRESSED_BYTES) {
-            throw new ReplayFormatException("replay is too large");
-        }
-        byte[] bytes = Files.readAllBytes(source);
-        if (bytes.length == 0) {
-            throw new ReplayFormatException("replay is empty");
-        }
-        if (isGzip(bytes)) {
-            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
-                byte[] decoded = gzip.readNBytes((int) (MAX_UNCOMPRESSED_BYTES + 1));
-                if (decoded.length > MAX_UNCOMPRESSED_BYTES) {
-                    throw new ReplayFormatException(
-                        "replay is corrupt (decompressed data too large)");
-                }
-                bytes = decoded;
-            } catch (EOFException exception) {
-                throw new ReplayFormatException("replay is truncated (incomplete gzip stream)",
-                    exception);
-            } catch (IOException exception) {
-                throw new ReplayFormatException("replay is corrupt (invalid gzip stream)",
-                    exception);
-            }
-        }
-        if (bytes.length < 20) {
-            throw new ReplayFormatException("replay is truncated");
-        }
+        return decode(source, true);
+    }
 
+    public static ReplayMetadata readMetadata(Path source)
+        throws IOException, ReplayFormatException {
+        return decode(source, false).metadata();
+    }
+
+    private static ReplayData decode(Path source, boolean keepFrames)
+        throws IOException, ReplayFormatException {
+        byte[] bytes = readPayload(source);
         try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(bytes))) {
             int magic = in.readInt();
             if (magic != MAGIC) {
@@ -145,25 +132,30 @@ public final class BinaryReplayCodec {
 
             CRC32 crc = new CRC32();
             crc.update(metadataBytes);
-            List<ReplaySample> frames = new ArrayList<>(frameCount);
+            List<ReplaySample> frames = keepFrames ? new ArrayList<>(frameCount) : List.of();
             byte[] record = new byte[RECORD_BYTES];
             for (int frame = 0; frame < frameCount; frame++) {
                 in.readFully(record);
                 crc.update(record);
-                ByteBuffer buffer = ByteBuffer.wrap(record).order(ByteOrder.BIG_ENDIAN);
-                frames.add(new ReplaySample(
-                    buffer.getLong(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    buffer.getFloat(),
-                    locomotion(buffer.get() & 0xFF, frame),
-                    stance(buffer.get() & 0xFF, frame),
-                    buffer.getShort() & 0xFFFF
-                ));
+                ReplaySample.Locomotion locomotion =
+                    locomotion(record[LOCOMOTION_OFFSET] & 0xFF, frame);
+                ReplaySample.Stance stance = stance(record[STANCE_OFFSET] & 0xFF, frame);
+                if (keepFrames) {
+                    ByteBuffer buffer = ByteBuffer.wrap(record).order(ByteOrder.BIG_ENDIAN);
+                    frames.add(new ReplaySample(
+                        buffer.getLong(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        buffer.getFloat(),
+                        locomotion,
+                        stance,
+                        buffer.getShort(FLAGS_OFFSET) & 0xFFFF
+                    ));
+                }
             }
 
             int storedCrc = in.readInt();
@@ -181,6 +173,36 @@ public final class BinaryReplayCodec {
         } catch (EOFException exception) {
             throw new ReplayFormatException("replay is truncated", exception);
         }
+    }
+
+    private static byte[] readPayload(Path source) throws IOException, ReplayFormatException {
+        if (Files.size(source) > MAX_COMPRESSED_BYTES) {
+            throw new ReplayFormatException("replay is too large");
+        }
+        byte[] bytes = Files.readAllBytes(source);
+        if (bytes.length == 0) {
+            throw new ReplayFormatException("replay is empty");
+        }
+        if (isGzip(bytes)) {
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
+                byte[] decoded = gzip.readNBytes((int) (MAX_UNCOMPRESSED_BYTES + 1));
+                if (decoded.length > MAX_UNCOMPRESSED_BYTES) {
+                    throw new ReplayFormatException(
+                        "replay is corrupt (decompressed data too large)");
+                }
+                bytes = decoded;
+            } catch (EOFException exception) {
+                throw new ReplayFormatException("replay is truncated (incomplete gzip stream)",
+                    exception);
+            } catch (IOException exception) {
+                throw new ReplayFormatException("replay is corrupt (invalid gzip stream)",
+                    exception);
+            }
+        }
+        if (bytes.length < 20) {
+            throw new ReplayFormatException("replay is truncated");
+        }
+        return bytes;
     }
 
     private static ReplaySample.Locomotion locomotion(int id, int frame)

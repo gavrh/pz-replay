@@ -243,6 +243,32 @@ class ReplayFormatTest {
         assertTrue(ReplayReader.summary(data).contains("frames=3"));
     }
 
+    @Test
+    void metadataOnlyReadAgreesWithFullRead() throws Exception {
+        Path file = tempDir.resolve("metadata.pzrp.gz");
+        BinaryReplayCodec.write(file, metadata(), frames(), true);
+
+        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
+        ReplayData full = BinaryReplayCodec.read(file);
+
+        assertEquals(full.metadata(), metadataOnly);
+    }
+
+    @Test
+    void metadataOnlyReadRejectsCorruptFrameLikeFullRead() throws Exception {
+        Path file = tempDir.resolve("metadata-corrupt.pzrp");
+        BinaryReplayCodec.write(file, metadata(), frames(), false);
+        byte[] bytes = Files.readAllBytes(file);
+        bytes[bytes.length - 20] ^= 0x01;
+        Files.write(file, bytes);
+
+        ReplayFormatException fullError = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.read(file));
+        ReplayFormatException metadataError = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.readMetadata(file));
+        assertEquals(fullError.getMessage(), metadataError.getMessage());
+    }
+
     private static byte[] rawPayload(Map<String, String> values) throws IOException {
         StringBuilder text = new StringBuilder();
         for (Map.Entry<String, String> entry : values.entrySet()) {

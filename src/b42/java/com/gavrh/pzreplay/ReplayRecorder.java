@@ -11,7 +11,7 @@ final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
     private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
 
-    private final CaptureSession session = new CaptureSession();
+    private CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
     private String captureName;
     private long tickCounter;
@@ -29,17 +29,26 @@ final class ReplayRecorder {
     private ReplayRecorder() {
     }
 
-    boolean start(String name) {
+    boolean start(String name, double sampleRateHz) {
         if (session.isRecording()) {
             return false;
         }
+        CaptureSession startedSession;
         try {
-            metadata = CaptureMetadataFactory.build(CaptureSession.DEFAULT_SAMPLE_RATE_HZ);
+            startedSession = new CaptureSession(sampleRateHz);
+        } catch (IllegalArgumentException exception) {
+            lastError = exception.getMessage();
+            System.out.println("[pz-replay] capture start failed: " + lastError);
+            return false;
+        }
+        try {
+            metadata = CaptureMetadataFactory.build(sampleRateHz);
         } catch (RuntimeException exception) {
             lastError = exception.getMessage();
             System.out.println("[pz-replay] capture start failed: " + lastError);
             return false;
         }
+        session = startedSession;
 
         captureName = normalizeName(name);
         tickCounter = 0;
@@ -55,7 +64,7 @@ final class ReplayRecorder {
         session.start(nowMillis);
         nextStatusLogMillis = nowMillis + STATUS_LOG_INTERVAL_MILLIS;
         System.out.println("[pz-replay] capture started name=" + captureName
-            + " rate=" + CaptureSession.DEFAULT_SAMPLE_RATE_HZ + "Hz"
+            + " rate=" + sampleRateHz + "Hz"
             + " max_frames=" + CaptureSession.MAX_FRAMES
             + " max_duration=" + (long) CaptureSession.MAX_DURATION_SECONDS + "s"
             + " x=" + metadata.startX()
@@ -145,6 +154,14 @@ final class ReplayRecorder {
         return lastReplaySummary == null ? "" : lastReplaySummary;
     }
 
+    CaptureSession.Summary getSummary() {
+        return session.status();
+    }
+
+    String getLastError() {
+        return lastError == null ? "" : lastError;
+    }
+
     private void stopWithReason(CaptureSession.StopReason reason) {
         session.stop(reason);
         logStopped();
@@ -170,6 +187,12 @@ final class ReplayRecorder {
         CaptureSession.Summary summary = session.getLastSummary();
         if (summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
             lastError = "no frames";
+        } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_DEAD) {
+            lastError = "player died";
+        } else if (summary.stopReason() == CaptureSession.StopReason.MAX_FRAMES) {
+            lastError = "frame limit reached";
+        } else if (summary.stopReason() == CaptureSession.StopReason.MAX_DURATION) {
+            lastError = "duration limit reached";
         } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_UNAVAILABLE
             && lastError == null) {
             lastError = "player unavailable";

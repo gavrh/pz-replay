@@ -8,13 +8,15 @@ import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayGhost")
 public final class ReplayGhostApi {
-    private static final boolean DEBUG_ENABLED = Boolean.getBoolean("pzreplay.debug");
     private static ReplayGhost ghost;
 
     private ReplayGhostApi() {
     }
 
     public static boolean spawn() {
+        if (killSwitchEnabled()) {
+            return false;
+        }
         IsoPlayer player = IsoPlayer.getInstance();
         if (player == null) {
             return false;
@@ -29,7 +31,7 @@ public final class ReplayGhostApi {
 
     static ReplayGhost spawnWithMotion(GhostMotionController motion, float x, float y, float z,
         float facing) {
-        if (ghost != null || motion == null) {
+        if (ghost != null || motion == null || killSwitchEnabled()) {
             return null;
         }
         IsoPlayer player = IsoPlayer.getInstance();
@@ -97,28 +99,28 @@ public final class ReplayGhostApi {
     }
 
     public static boolean startMotion() {
-        if (!DEBUG_ENABLED || ghost == null) {
+        if (!PZReplayLua.isDebugEnabled() || ghost == null) {
             return false;
         }
         return ghost.startMotion();
     }
 
     public static boolean pauseMotion() {
-        if (!DEBUG_ENABLED || ghost == null) {
+        if (!PZReplayLua.isDebugEnabled() || ghost == null) {
             return false;
         }
         return ghost.pauseMotion();
     }
 
     public static boolean stopMotion() {
-        if (!DEBUG_ENABLED || ghost == null) {
+        if (!PZReplayLua.isDebugEnabled() || ghost == null) {
             return false;
         }
         return despawn();
     }
 
     public static boolean resetMotion() {
-        if (!DEBUG_ENABLED || ghost == null) {
+        if (!PZReplayLua.isDebugEnabled() || ghost == null) {
             return false;
         }
         return ghost.resetMotion();
@@ -133,10 +135,14 @@ public final class ReplayGhostApi {
     }
 
     public static boolean isDebugEnabled() {
-        return DEBUG_ENABLED;
+        return PZReplayLua.isDebugEnabled();
     }
 
     static ReplayGhost getGhost() {
         return ghost;
+    }
+
+    private static boolean killSwitchEnabled() {
+        return ReplaySettingsStore.get().isKillSwitch();
     }
 }

@@ -4,23 +4,6 @@ local function isDebugEnabled()
         and PZReplayGhost.isDebugEnabled()
 end
 
-local function despawn()
-    if PZReplayGhost and PZReplayGhost.isSpawned and PZReplayGhost.isSpawned() then
-        PZReplayGhost.despawn()
-    end
-end
-
-local function stopPlayback()
-    if PZReplayPlayback and PZReplayPlayback.stop then
-        PZReplayPlayback.stop()
-    end
-end
-
-local function cleanup()
-    stopPlayback()
-    despawn()
-end
-
 local function toggleDebugGhost()
     if not isDebugEnabled() then
         return
@@ -61,13 +44,3 @@ Events.OnKeyPressed.Add(function(key)
         stopMotion()
     end
 end)
-
-Events.OnTick.Add(function()
-    if PZReplayPlayback and PZReplayPlayback.tick then
-        PZReplayPlayback.tick()
-    end
-end)
-
-Events.OnSave.Add(cleanup)
-Events.OnPlayerDeath.Add(cleanup)
-Events.OnMainMenuEnter.Add(cleanup)
