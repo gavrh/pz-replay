@@ -32,6 +32,10 @@ public final class ReplayCatalogueApi {
         return result.error();
     }
 
+    public static void clearError() {
+        result = new ReplayCatalogue.Result(result.entries(), "");
+    }
+
     public static String getLastReplayPath() {
         return lastReplayPath == null ? "" : lastReplayPath;
     }
