@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.function.Consumer;
 import me.zed_0xff.zombie_buddy.Exposer;
 import zombie.characters.IsoPlayer;
 import zombie.characters.SurvivorDesc;
@@ -26,11 +27,11 @@ public final class ReplayGhostApi {
         float z = player.getZ();
         GhostMotionController motion = new GhostMotionController(
             ScriptedGhostPath.defaultRoute(x, y, z));
-        return spawnWithMotion(motion, x, y, z, player.getDirectionAngle()) != null;
+        return spawnWithMotion(motion, x, y, z, player.getDirectionAngle(), null, null) != null;
     }
 
     static ReplayGhost spawnWithMotion(GhostMotionController motion, float x, float y, float z,
-        float facing) {
+        float facing, AppearanceSnapshot appearance, Consumer<String> warning) {
         if (ghost != null || motion == null || killSwitchEnabled()) {
             return null;
         }
@@ -42,8 +43,22 @@ public final class ReplayGhostApi {
 
         try {
             SurvivorDesc desc = new SurvivorDesc(player.getDescriptor());
-            desc.getHumanVisual().copyFrom(player.getHumanVisual());
-            desc.getWornItems().copyFrom(player.getWornItems());
+            boolean appearanceApplied = false;
+            if (appearance != null) {
+                try {
+                    appearance.applyTo(desc);
+                    appearanceApplied = true;
+                } catch (Exception exception) {
+                    warn(warning, "recorded appearance could not be applied");
+                    System.out.println("[pz-replay] recorded appearance could not be applied: "
+                        + exception);
+                    desc = new SurvivorDesc(player.getDescriptor());
+                }
+            }
+            if (!appearanceApplied) {
+                desc.getHumanVisual().copyFrom(player.getHumanVisual());
+                desc.getWornItems().copyFrom(player.getWornItems());
+            }
             ReplayGhost created = new ReplayGhost(cell, desc, (int) Math.floor(x),
                 (int) Math.floor(y), (int) Math.floor(z));
             ghost = created;
@@ -54,13 +69,20 @@ public final class ReplayGhostApi {
             created.setMovingSquare(created.getCurrentSquare());
             created.setDirectionAngle(facing);
             created.installMotion(motion);
-            System.out.println("[pz-replay] replay ghost spawned identity=" + created.getIdentity());
+            System.out.println("[pz-replay] replay ghost spawned identity=" + created.getIdentity()
+                + " appearance=" + (appearanceApplied ? "recorded" : "current"));
             return created;
         } catch (Throwable t) {
             ReplayGhost failed = ghost;
             ghost = null;
             removeGhost(failed);
             return null;
+        }
+    }
+
+    private static void warn(Consumer<String> warning, String message) {
+        if (warning != null) {
+            warning.accept(message);
         }
     }
 

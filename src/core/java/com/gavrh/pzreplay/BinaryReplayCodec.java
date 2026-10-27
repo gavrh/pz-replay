@@ -46,6 +46,9 @@ public final class BinaryReplayCodec {
         }
 
         byte[] metadataBytes = metadata.toText().getBytes(StandardCharsets.UTF_8);
+        if (metadataBytes.length > MAX_METADATA_BYTES) {
+            throw new ReplayFormatException("replay metadata is too large");
+        }
         ByteArrayOutputStream payload = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(payload);
 

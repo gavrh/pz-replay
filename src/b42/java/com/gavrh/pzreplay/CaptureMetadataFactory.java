@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,8 +35,21 @@ final class CaptureMetadataFactory {
             player.getZ(),
             sampleRateHz,
             System.currentTimeMillis(),
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            captureAppearance(player)
         );
+    }
+
+    private static ReplayAppearance captureAppearance(IsoPlayer player) {
+        try {
+            ReplayAppearance appearance = AppearanceSnapshot.capture(player);
+            System.out.println("[pz-replay] appearance captured bytes="
+                + appearance.data().length());
+            return appearance;
+        } catch (IOException | RuntimeException exception) {
+            System.out.println("[pz-replay] appearance capture failed: " + exception);
+            return ReplayAppearance.none();
+        }
     }
 
     static String newCaptureId() {
