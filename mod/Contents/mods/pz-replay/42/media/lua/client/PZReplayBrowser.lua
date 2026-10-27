@@ -214,7 +214,7 @@ function PZReplayBrowser:refresh()
         self:setStatus(string.format("%d replay%s", count, count == 1 and "" or "s"))
     end
     if previousPath ~= "" then
-        if self:selectPath(previousPath) == nil then
+        if self:selectPath(previousPath) == nil and catalogueError == "" then
             self:setStatus("Replay is no longer available: " .. fileName(previousPath), true)
         end
     elseif count > 0 and self.list.selected < 1 then
