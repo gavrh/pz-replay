@@ -213,11 +213,16 @@ function PZReplayPanel:open()
 end
 
 function PZReplayPanel:close()
+    local callback = self.onPanelClosed
+    self.onPanelClosed = nil
     self.rebindingAction = nil
     self:setCapture(false)
     self:setWantKeyEvents(false)
     self:setWantMouseEvents(false)
     self:setVisible(false)
+    if callback then
+        callback()
+    end
 end
 
 function PZReplayPanel:toggle()
@@ -392,7 +397,27 @@ function PZReplayPanel:onKeyRelease(key)
 end
 
 function PZReplayPanel:onKeyPress(key)
-    return self:getIsVisible()
+    if not self:getIsVisible() then
+        return false
+    end
+    if not self.rebindingAction and self.view == "replays" and self.browser then
+        if key == Keyboard.KEY_UP then
+            self.browser:moveSelection(-1)
+        elseif key == Keyboard.KEY_DOWN then
+            self.browser:moveSelection(1)
+        elseif key == Keyboard.KEY_PAGEUP then
+            self.browser:moveSelection(-5)
+        elseif key == Keyboard.KEY_PAGEDOWN then
+            self.browser:moveSelection(5)
+        elseif key == Keyboard.KEY_HOME then
+            self.browser:selectIndex(1)
+        elseif key == Keyboard.KEY_END then
+            self.browser:selectIndex(self.browser.list.count)
+        elseif key == Keyboard.KEY_RETURN then
+            self.browser:playSelected()
+        end
+    end
+    return true
 end
 
 function PZReplayPanel:isKeyConsumed(key)
