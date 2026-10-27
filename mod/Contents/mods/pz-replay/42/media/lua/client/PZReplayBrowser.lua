@@ -261,6 +261,8 @@ function PZReplayBrowser:reload(preferredPath, fallbackIndex)
         return
     end
     self:closeDialog()
+    PZReplayCatalogue.applyQuery(self.searchText or "", self.sortField,
+        self.sortAscending)
     PZReplayCatalogue.refresh()
     self:rebuildList(preferredPath or "", fallbackIndex or -1)
 end

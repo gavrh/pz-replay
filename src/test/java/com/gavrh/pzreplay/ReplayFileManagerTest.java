@@ -160,7 +160,7 @@ class ReplayFileManagerTest {
         Path link = tempDir.resolve("link.pzrp.gz");
         try {
             Files.createSymbolicLink(link, target.getFileName());
-        } catch (UnsupportedOperationException exception) {
+        } catch (UnsupportedOperationException | java.io.IOException exception) {
             assumeTrue(false, "symbolic links are unavailable");
             return;
         }
@@ -231,7 +231,7 @@ class ReplayFileManagerTest {
         Path link = tempDir.resolve("link.pzrp.gz");
         try {
             Files.createSymbolicLink(link, target.getFileName());
-        } catch (UnsupportedOperationException exception) {
+        } catch (UnsupportedOperationException | java.io.IOException exception) {
             assumeTrue(false, "symbolic links are unavailable");
             return;
         }
