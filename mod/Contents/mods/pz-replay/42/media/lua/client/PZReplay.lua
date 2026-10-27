@@ -1,5 +1,6 @@
 require "PZReplayHud"
 require "PZReplayPanel"
+require "PZReplayLibrary"
 
 local function bridgeVersion()
     if getPZReplayVersion then
@@ -77,11 +78,12 @@ function ui.isPanelOpen()
     return ui.panel ~= nil and ui.panel:getIsVisible()
 end
 
-function ui.openPanel()
+function ui.openPanel(onClosed)
     ui.ensure()
     if not ui.panel then
         return
     end
+    ui.panel.onPanelClosed = onClosed
     ui.panel:open()
 end
 
@@ -159,6 +161,9 @@ local function cleanupAll()
     if ui.panel then
         ui.closePanel()
     end
+    if PZReplayLibrary and PZReplayLibrary.isOpen() then
+        PZReplayLibrary.instance:close()
+    end
     if ui.hud then
         ui.hud:setVisible(false)
     end
@@ -212,6 +217,9 @@ local function toggleCameraFollow()
 end
 
 function ui.handleKey(key)
+    if PZReplayLibrary and PZReplayLibrary.isOpen() then
+        return false
+    end
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if ui.panel and ui.panel:getIsVisible() then
         if ui.panel.rebindingAction then

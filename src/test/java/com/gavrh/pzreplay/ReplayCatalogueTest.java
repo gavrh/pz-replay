@@ -63,15 +63,29 @@ class ReplayCatalogueTest {
     }
 
     @Test
-    void emptyAndMissingDirectoriesAreEmptyResults() {
+    void emptyDirectoryIsAnEmptyResult() {
         ReplayCatalogue.Result empty = ReplayCatalogue.list(tempDir, "");
         assertTrue(empty.entries().isEmpty());
         assertEquals("", empty.error());
+    }
 
+    @Test
+    void missingDirectoryReportsAnError() {
         ReplayCatalogue.Result missing =
             ReplayCatalogue.list(tempDir.resolve("missing"), "");
         assertTrue(missing.entries().isEmpty());
-        assertEquals("", missing.error());
+        assertTrue(missing.error().contains("not found"), missing.error());
+    }
+
+    @Test
+    void filePathInsteadOfDirectoryReportsAnError() throws Exception {
+        Path file = tempDir.resolve("not-a-directory");
+        Files.writeString(file, "x");
+
+        ReplayCatalogue.Result result = ReplayCatalogue.list(file, "");
+
+        assertTrue(result.entries().isEmpty());
+        assertTrue(result.error().contains("not a directory"), result.error());
     }
 
     @Test

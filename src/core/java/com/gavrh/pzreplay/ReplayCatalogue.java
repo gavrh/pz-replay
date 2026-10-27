@@ -42,8 +42,14 @@ public final class ReplayCatalogue {
         if (directory == null) {
             return new Result(List.of(), "replay directory is unavailable");
         }
+        if (!Files.exists(directory)) {
+            return new Result(List.of(), "replay directory not found: " + directory);
+        }
         if (!Files.isDirectory(directory)) {
-            return new Result(List.of(), "");
+            return new Result(List.of(), "replay path is not a directory: " + directory);
+        }
+        if (!Files.isReadable(directory)) {
+            return new Result(List.of(), "replay directory is not readable: " + directory);
         }
 
         List<Path> files = new ArrayList<>();
