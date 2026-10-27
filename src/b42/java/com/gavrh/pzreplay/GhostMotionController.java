@@ -193,8 +193,11 @@ public final class GhostMotionController {
             if (GameTime.isGamePaused() || !Double.isFinite(delta) || delta <= 0.0) {
                 return;
             }
-            replay.advance(Math.min(delta, MAX_STEP_SECONDS));
+            boolean advancing = replay.advance(Math.min(delta, MAX_STEP_SECONDS));
             apply(ghost, replay.sample());
+            if (!advancing) {
+                applyPausedPose(ghost);
+            }
             applyCamera(ghost);
             return;
         }
