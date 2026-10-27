@@ -115,7 +115,7 @@ public final class GhostMotionController {
         }
         lastReplayUpdateNanos = System.nanoTime();
         apply(ghost, replay.sample());
-        if (replay.isPaused()) {
+        if (!replay.isPlaying()) {
             applyPausedPose(ghost);
         }
         applyCamera(ghost);
