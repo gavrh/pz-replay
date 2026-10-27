@@ -237,7 +237,7 @@ function PZReplayLibrary:prerender()
 end
 
 function PZReplayLibrary:render()
-    local text = "Browse only. Playback requires a loaded save; open Replays from the in-game pause menu."
+    local text = "Browse and manage replays. Playback requires a loaded save; open Replays from the in-game pause menu."
     self:drawText(fitText(text, self.width - PAD * 2, FONT), PAD,
         self.height - PAD - fontHeight(FONT), 0.82, 0.82, 0.82, 1.0, FONT)
 end
