@@ -1,5 +1,6 @@
 require "ISUI/ISPanel"
 require "ISUI/ISButton"
+require "RadioCom/ISUIRadio/ISSliderPanel"
 require "PZReplayBrowser"
 
 if PZReplayPanel then return end
@@ -11,6 +12,8 @@ local PAD = 10
 local TITLE_HEIGHT = 28
 local STATUS_LINES = 5
 local TAB_HEIGHT = 26
+local TRANSPORT_SLIDER_HEIGHT = 18
+local SPEEDS = { 0.25, 0.5, 1, 2, 4 }
 
 local function fontHeight(font)
     return getTextManager():getFontHeight(font)
@@ -32,6 +35,20 @@ local function formatTime(seconds)
     if not seconds or seconds < 0 then seconds = 0 end
     local total = math.floor(seconds)
     return string.format("%d:%02d", math.floor(total / 60), total % 60)
+end
+
+local function formatClock(seconds)
+    if not seconds or seconds < 0 then seconds = 0 end
+    local tenths = math.floor(seconds * 10 + 0.5)
+    return string.format("%d:%04.1f", math.floor(tenths / 600), (tenths % 600) / 10)
+end
+
+local function formatSpeed(speed)
+    if not speed or speed <= 0 then return "1x" end
+    if math.abs(speed - math.floor(speed)) < 0.001 then
+        return string.format("%dx", math.floor(speed))
+    end
+    return string.format("%gx", speed)
 end
 
 local function fileName(path)
@@ -100,11 +117,15 @@ function PZReplayPanel:createChildren()
     self.cameraButton:instantiate()
     self:addChild(self.cameraButton)
 
-    self.browser = PZReplayBrowser:new(self.contentX, self.contentY,
-        self.contentWidth, self.contentHeight, {
+    self:createTransport(buttonHeight)
+    local browserY = self.contentY + self.transportHeight + 4
+    local browserHeight = self.height - browserY - PAD
+
+    self.browser = PZReplayBrowser:new(self.contentX, browserY,
+        self.contentWidth, browserHeight, {
             allowPlayback = true,
             isPlaying = function()
-                return PZReplayPlayback and PZReplayPlayback.isPlaying()
+                return PZReplayPlayback and PZReplayPlayback.isActive()
             end,
             canPlay = function()
                 return not PZReplay.isKillSwitchEnabled() and not PZReplay.isRecording()
@@ -128,6 +149,39 @@ function PZReplayPanel:createChildren()
 
     self:createSettings(buttonHeight)
     self:setView("replays")
+end
+
+function PZReplayPanel:createTransport(buttonHeight)
+    self.transportY = self.contentY
+    self.transportHeight = buttonHeight + 4 + TRANSPORT_SLIDER_HEIGHT
+
+    self.playPauseButton = ISButton:new(PAD, self.transportY, 90, buttonHeight,
+        "Play", self, PZReplayPanel.onTransportPlayPause)
+    self.playPauseButton:initialise()
+    self.playPauseButton:instantiate()
+    self:addChild(self.playPauseButton)
+
+    self.restartButton = ISButton:new(PAD + 96, self.transportY, 84, buttonHeight,
+        "Restart", self, PZReplayPanel.onTransportRestart)
+    self.restartButton:initialise()
+    self.restartButton:instantiate()
+    self:addChild(self.restartButton)
+
+    self.speedButton = ISButton:new(PAD + 186, self.transportY, 90, buttonHeight,
+        "Speed: 1x", self, PZReplayPanel.onTransportSpeed)
+    self.speedButton:initialise()
+    self.speedButton:instantiate()
+    self:addChild(self.speedButton)
+
+    self.transportSlider = ISSliderPanel:new(PAD,
+        self.transportY + buttonHeight + 4, self.contentWidth, TRANSPORT_SLIDER_HEIGHT,
+        self, PZReplayPanel.onTransportSeek)
+    self.transportSlider.doButtons = false
+    self.transportSlider:initialise()
+    self.transportSlider:instantiate()
+    self.transportSlider:setValues(0, 1, 0.1, 1, true)
+    self.transportSlider:setCurrentValue(0, true)
+    self:addChild(self.transportSlider)
 end
 
 function PZReplayPanel:createSettings(buttonHeight)
@@ -186,6 +240,10 @@ function PZReplayPanel:setView(view)
     self.view = view
     local replayView = view == "replays"
     self.browser:setVisible(replayView)
+    self.playPauseButton:setVisible(replayView)
+    self.restartButton:setVisible(replayView)
+    self.speedButton:setVisible(replayView)
+    self.transportSlider:setVisible(replayView)
     self.replayTab:setEnable(not replayView)
     self.settingsTab:setEnable(replayView)
     self.rateMinus:setVisible(not replayView)
@@ -237,7 +295,7 @@ function PZReplayPanel:refreshControls()
     if not PZReplay then return end
     local killSwitch = PZReplay.isKillSwitchEnabled()
     local recording = PZReplay.isRecording()
-    local playing = PZReplayPlayback and PZReplayPlayback.isPlaying()
+    local playing = PZReplayPlayback and PZReplayPlayback.isActive()
     local samples = string.format("%.0f Hz", PZReplay.getSampleRate())
 
     self.rateValue = samples
@@ -264,6 +322,37 @@ function PZReplayPanel:refreshControls()
         button:setEnable(self.rebindingAction == nil)
     end
     self.resetKeysButton:setEnable(self.rebindingAction == nil)
+
+    local paused = playing and PZReplayPlayback.isPaused()
+    local finished = playing and PZReplayPlayback.isFinished()
+    local advancing = playing and PZReplayPlayback.isPlaying()
+    local transportLabel = "Play"
+    if finished then
+        transportLabel = "Restart"
+    elseif paused then
+        transportLabel = "Resume"
+    elseif advancing then
+        transportLabel = "Pause"
+    end
+    self.playPauseButton:setTitle(transportLabel)
+    self.playPauseButton:setEnable(not killSwitch and not recording
+        and (playing or PZReplay.getLastReplayPath() ~= ""))
+    self.restartButton:setEnable(playing)
+    local speed = PZReplayPlayback and PZReplayPlayback.getSpeed() or 1
+    self.speedButton:setTitle("Speed: " .. formatSpeed(speed))
+    self.speedButton:setEnable(playing)
+    self.transportSlider.disabled = not playing
+    if not playing then
+        self.transportSlider:setValues(0, 1, 0.1, 1, true)
+        self.transportSlider:setCurrentValue(0, true)
+    else
+        local duration = PZReplayPlayback.getDuration()
+        self.transportSlider:setValues(0, math.max(duration, 0.1), 0.1, 1, true)
+        if not self.transportSlider.dragInside then
+            self.transportSlider:setCurrentValue(
+                math.min(PZReplayPlayback.getCurrentTime(), duration), true)
+        end
+    end
 end
 
 function PZReplayPanel:onClose()
@@ -279,12 +368,72 @@ function PZReplayPanel:onSettingsTab()
 end
 
 function PZReplayPanel:onCamera()
-    if PZReplayPlayback.isPlaying() then
+    if PZReplayPlayback.isActive() then
         PZReplayPlayback.setCameraFollow(not PZReplayPlayback.isCameraFollow())
     else
         PZReplay.setCameraFollowDefault(not PZReplay.isCameraFollowDefault())
     end
     self:refreshControls()
+end
+
+function PZReplayPanel:onTransportPlayPause()
+    if not PZReplayPlayback then return end
+    if PZReplayPlayback.isActive() then
+        if PZReplayPlayback.isFinished() then
+            PZReplayPlayback.restart()
+        elseif PZReplayPlayback.isPaused() then
+            PZReplayPlayback.resume()
+        elseif PZReplayPlayback.isPlaying() then
+            PZReplayPlayback.pause()
+        else
+            PZReplayPlayback.resume()
+        end
+    else
+        local path = PZReplay.getLastReplayPath()
+        if path ~= "" then
+            local started = PZReplayPlayback.play(path)
+            self.browser:setStatus(started and "Playback started."
+                or PZReplayPlayback.getLastPlaybackError())
+        end
+    end
+    self:refreshControls()
+end
+
+function PZReplayPanel:onTransportRestart()
+    if not PZReplayPlayback then return end
+    local restarted
+    if PZReplayPlayback.isActive() then
+        restarted = PZReplayPlayback.restart()
+    else
+        local path = PZReplay.getLastReplayPath()
+        if path ~= "" then
+            restarted = PZReplayPlayback.play(path)
+        end
+    end
+    if not restarted then
+        self.browser:setStatus(PZReplayPlayback.getLastPlaybackError())
+    end
+    self:refreshControls()
+end
+
+function PZReplayPanel:onTransportSpeed()
+    if not PZReplayPlayback or not PZReplayPlayback.isActive() then return end
+    local current = PZReplayPlayback.getSpeed()
+    local nextSpeed = SPEEDS[1]
+    for index, value in ipairs(SPEEDS) do
+        if math.abs(value - current) < 0.001 then
+            nextSpeed = SPEEDS[(index % #SPEEDS) + 1]
+            break
+        end
+    end
+    PZReplayPlayback.setSpeed(nextSpeed)
+    self:refreshControls()
+end
+
+function PZReplayPanel:onTransportSeek(value)
+    if PZReplayPlayback and PZReplayPlayback.isActive() then
+        PZReplayPlayback.seek(value)
+    end
 end
 
 function PZReplayPanel:onCapture()
@@ -441,7 +590,21 @@ function PZReplayPanel:render()
     self:renderStatus()
     if self.view == "settings" then
         self:renderSettings()
+    elseif self.view == "replays" then
+        self:renderTransport()
     end
+end
+
+function PZReplayPanel:renderTransport()
+    if not PZReplayPlayback or not PZReplayPlayback.isActive() then
+        return
+    end
+    local text = string.format("%s / %s",
+        formatClock(PZReplayPlayback.getCurrentTime()),
+        formatClock(PZReplayPlayback.getDuration()))
+    local x = PAD + 286
+    self:drawText(fitText(text, self.width - PAD - x, FONT), x, self.transportY + 5,
+        0.9, 0.9, 0.9, 1.0, FONT)
 end
 
 function PZReplayPanel:renderStatus()
@@ -449,7 +612,7 @@ function PZReplayPanel:renderStatus()
     local y = self.titleHeight + 4
     local killSwitch = PZReplay.isKillSwitchEnabled()
     local recording = PZReplay.isRecording()
-    local playing = PZReplayPlayback and PZReplayPlayback.isPlaying()
+    local playing = PZReplayPlayback and PZReplayPlayback.isActive()
 
     local captureText
     if killSwitch then
@@ -469,10 +632,19 @@ function PZReplayPanel:renderStatus()
 
     local playbackText
     if playing then
+        local state = "Ready"
+        if PZReplayPlayback.isFinished() then
+            state = "Finished"
+        elseif PZReplayPlayback.isPaused() then
+            state = "Paused"
+        elseif PZReplayPlayback.isPlaying() then
+            state = "Playing"
+        end
         local camera = PZReplayPlayback.isCameraFollow() and "  camera follow on" or ""
-        playbackText = string.format("Playing  %s / %s%s",
-            formatTime(PZReplayPlayback.getCurrentTime()),
-            formatTime(PZReplayPlayback.getDuration()), camera)
+        playbackText = string.format("%s  %s / %s  %s%s", state,
+            formatClock(PZReplayPlayback.getCurrentTime()),
+            formatClock(PZReplayPlayback.getDuration()),
+            formatSpeed(PZReplayPlayback.getSpeed()), camera)
     else
         playbackText = "Playback idle"
     end

@@ -21,12 +21,16 @@ public final class ReplayTimeline {
     ) {
     }
 
+    public static final double MIN_SPEED = 0.25;
+    public static final double MAX_SPEED = 4.0;
+
     private final List<ReplaySample> frames;
     private final double[] relativeTimes;
     private final double duration;
 
     private State state = State.STOPPED;
     private double elapsed;
+    private double speed = 1.0;
 
     public ReplayTimeline(ReplayData data) throws ReplayFormatException {
         this(data == null ? null : data.frames());
@@ -89,21 +93,67 @@ public final class ReplayTimeline {
         return true;
     }
 
+    public boolean resume() {
+        if (isEmpty() || state == State.PLAYING) {
+            return false;
+        }
+        if (elapsed >= duration) {
+            elapsed = 0.0;
+        }
+        state = State.PLAYING;
+        return true;
+    }
+
+    public boolean seek(double seconds) {
+        if (isEmpty() || !Double.isFinite(seconds)) {
+            return false;
+        }
+        elapsed = Math.max(0.0, Math.min(seconds, duration));
+        return true;
+    }
+
+    public boolean restart() {
+        if (isEmpty()) {
+            return false;
+        }
+        elapsed = 0.0;
+        if (state != State.PAUSED) {
+            state = State.PLAYING;
+        }
+        return true;
+    }
+
+    public boolean setSpeed(double multiplier) {
+        if (!isValidSpeed(multiplier)) {
+            return false;
+        }
+        speed = multiplier;
+        return true;
+    }
+
+    public static boolean isValidSpeed(double multiplier) {
+        return Double.isFinite(multiplier)
+            && multiplier >= MIN_SPEED
+            && multiplier <= MAX_SPEED;
+    }
+
     public void stop() {
         state = State.STOPPED;
         elapsed = 0.0;
+        speed = 1.0;
     }
 
     public void reset() {
         state = State.STOPPED;
         elapsed = 0.0;
+        speed = 1.0;
     }
 
     public boolean advance(double deltaSeconds) {
         if (state != State.PLAYING || !Double.isFinite(deltaSeconds) || deltaSeconds <= 0.0) {
             return state == State.PLAYING;
         }
-        elapsed += deltaSeconds;
+        elapsed += deltaSeconds * speed;
         if (elapsed >= duration) {
             elapsed = duration;
             state = State.STOPPED;
@@ -179,6 +229,10 @@ public final class ReplayTimeline {
 
     public double getDuration() {
         return duration;
+    }
+
+    public double getSpeed() {
+        return speed;
     }
 
     public int getFrameCount() {

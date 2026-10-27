@@ -15,6 +15,7 @@ public final class ReplayPlaybackApi {
     private static ReplayTimeline timeline;
     private static GhostMotionController controller;
     private static String lastPath = "";
+    private static boolean reportedFinished;
 
     private ReplayPlaybackApi() {
     }
@@ -113,6 +114,7 @@ public final class ReplayPlaybackApi {
         timeline = loaded;
         controller = loadedController;
         lastPath = requested;
+        reportedFinished = false;
         System.out.println("[pz-replay] replay playback started path=" + requested
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
@@ -133,6 +135,7 @@ public final class ReplayPlaybackApi {
         controller = null;
         timeline = null;
         lastPath = "";
+        reportedFinished = false;
         state.playbackStopped();
         ReplayGhostApi.despawn();
         System.out.println("[pz-replay] replay playback stopped path=" + path
@@ -140,8 +143,86 @@ public final class ReplayPlaybackApi {
         return true;
     }
 
+    public static boolean pause() {
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (controller == null || ghost == null || !controller.pause(ghost)) {
+            return false;
+        }
+        syncTransportState();
+        return true;
+    }
+
+    public static boolean resume() {
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (controller == null || ghost == null || !controller.resume(ghost)) {
+            return false;
+        }
+        reportedFinished = false;
+        syncTransportState();
+        return true;
+    }
+
+    public static boolean togglePause() {
+        if (controller == null) {
+            return false;
+        }
+        if (controller.isPaused() || !controller.isPlaying()) {
+            return resume();
+        }
+        return pause();
+    }
+
+    public static boolean seek(double seconds) {
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (controller == null || ghost == null || !controller.seek(ghost, seconds)) {
+            return false;
+        }
+        if (controller.getCurrentTime() < controller.getDuration()) {
+            reportedFinished = false;
+        }
+        syncTransportState();
+        return true;
+    }
+
+    public static boolean restart() {
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (controller == null || ghost == null || !controller.restart(ghost)) {
+            return false;
+        }
+        reportedFinished = false;
+        syncTransportState();
+        return true;
+    }
+
+    public static boolean setSpeed(double multiplier) {
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (controller == null || ghost == null
+            || !controller.setSpeed(ghost, multiplier)) {
+            return false;
+        }
+        syncTransportState();
+        return true;
+    }
+
     public static boolean isPlaying() {
-        return controller != null && controller.isActive() && ReplayGhostApi.isSpawned();
+        return controller != null && controller.isPlaying() && ReplayGhostApi.isSpawned();
+    }
+
+    public static boolean isActive() {
+        return controller != null && ReplayGhostApi.isSpawned();
+    }
+
+    public static boolean isPaused() {
+        return controller != null && controller.isPaused() && ReplayGhostApi.isSpawned();
+    }
+
+    public static boolean isFinished() {
+        return controller != null && controller.isFinished() && ReplayGhostApi.isSpawned();
+    }
+
+    public static double getSpeed() {
+        return controller == null ? PZReplayLua.state().getPlaybackSpeed()
+            : controller.getSpeed();
     }
 
     public static double getCurrentTime() {
@@ -157,7 +238,7 @@ public final class ReplayPlaybackApi {
     }
 
     public static boolean setCameraFollow(boolean enabled) {
-        if (controller == null || !controller.isActive()) {
+        if (controller == null) {
             return false;
         }
         ReplayGhost ghost = ReplayGhostApi.getGhost();
@@ -200,31 +281,26 @@ public final class ReplayPlaybackApi {
             controller = null;
             timeline = null;
             lastPath = "";
+            reportedFinished = false;
             state.playbackFailed("ghost was removed");
             return;
         }
-        if (controller.isActive()) {
-            if (controller.isCameraFollow()) {
-                ReplayGhost ghost = ReplayGhostApi.getGhost();
-                if (ghost != null) {
-                    controller.refreshCamera(ghost);
-                }
+        if (controller.isCameraFollow()) {
+            ReplayGhost ghost = ReplayGhostApi.getGhost();
+            if (ghost != null) {
+                controller.refreshCamera(ghost);
             }
-            state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
-                controller.isCameraFollow());
-            return;
         }
-
-        double duration = controller.getDuration();
-        String path = lastPath;
-        controller = null;
-        timeline = null;
-        lastPath = "";
-        state.playbackStopped();
-        boolean removed = ReplayGhostApi.despawn();
-        System.out.println("[pz-replay] replay playback finished path=" + path
-            + " duration=" + format(duration) + "s"
-            + " ghost_removed=" + removed);
+        state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
+            controller.isCameraFollow());
+        state.setPlaybackPaused(controller.isPaused());
+        state.setPlaybackSpeed(controller.getSpeed());
+        if (!controller.isPlaying() && controller.isFinished() && !reportedFinished) {
+            reportedFinished = true;
+            System.out.println("[pz-replay] replay playback finished path=" + lastPath
+                + " duration=" + format(controller.getDuration()) + "s"
+                + " ghost_removed=false");
+        }
     }
 
     static void onGhostDespawned() {
@@ -234,6 +310,15 @@ public final class ReplayPlaybackApi {
         controller = null;
         timeline = null;
         lastPath = "";
+        reportedFinished = false;
+    }
+
+    private static void syncTransportState() {
+        ReplayControlState state = PZReplayLua.state();
+        state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
+            controller.isCameraFollow());
+        state.setPlaybackPaused(controller.isPaused());
+        state.setPlaybackSpeed(controller.getSpeed());
     }
 
     private static void logWarnings(String path, List<String> warnings) {

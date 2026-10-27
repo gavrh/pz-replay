@@ -77,6 +77,56 @@ class ReplayControlStateTest {
     }
 
     @Test
+    void playbackPauseAndSpeedAreExposedAndReset() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(20.0));
+        assertEquals(1.0, state.getPlaybackSpeed());
+        assertFalse(state.isPlaybackPaused());
+
+        state.setPlaybackPaused(true);
+        state.setPlaybackSpeed(2.0);
+
+        assertTrue(state.isPlaybackPaused());
+        assertEquals(2.0, state.getPlaybackSpeed());
+
+        state.playbackStopped();
+        assertFalse(state.isPlaybackPaused());
+        assertEquals(1.0, state.getPlaybackSpeed());
+
+        assertTrue(state.playbackStarted(20.0));
+        assertEquals(1.0, state.getPlaybackSpeed());
+        state.setPlaybackSpeed(4.0);
+        state.playbackFailed("missing replay");
+        assertEquals(1.0, state.getPlaybackSpeed());
+    }
+
+    @Test
+    void playbackProgressTracksSeekAndRestartTimes() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(30.0));
+
+        state.playbackProgress(12.5, 30.0, true);
+        assertEquals(12.5, state.getPlaybackTime());
+        assertEquals(30.0, state.getPlaybackDuration());
+
+        state.playbackProgress(0.0, 30.0, true);
+        assertEquals(0.0, state.getPlaybackTime());
+    }
+
+    @Test
+    void invalidSpeedIsIgnored() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(10.0));
+        state.setPlaybackSpeed(2.0);
+        state.setPlaybackSpeed(Double.NaN);
+        state.setPlaybackSpeed(Double.POSITIVE_INFINITY);
+        state.setPlaybackSpeed(0.0);
+        state.setPlaybackSpeed(-1.0);
+
+        assertEquals(2.0, state.getPlaybackSpeed());
+    }
+
+    @Test
     void compatibilityWarningsAreClearedOnNewPlayback() {
         ReplayControlState state = new ReplayControlState();
         state.playbackStarted(10.0);
