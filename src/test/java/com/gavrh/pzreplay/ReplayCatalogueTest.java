@@ -102,6 +102,44 @@ class ReplayCatalogueTest {
         assertTrue(result.entries().get(0).valid());
     }
 
+    @Test
+    void catalogueRefreshesAfterRenameAndDeleteAndRemapsLastReplay() throws Exception {
+        Path original = tempDir.resolve("original.pzrp.gz");
+        BinaryReplayCodec.write(original, metadata("Original", 1L, 2L), frames(), true);
+        ReplayCatalogue.Result before = ReplayCatalogue.list(tempDir, original.toString());
+        assertEquals("original.pzrp.gz", before.entries().get(0).fileName());
+        assertTrue(before.entries().get(0).lastReplay());
+
+        ReplayFileManager.Result renamed =
+            ReplayFileManager.rename(tempDir, original.toString(), "renamed");
+        assertTrue(renamed.ok(), renamed.error());
+        String lastReplay = ReplayCatalogue.remapLastReplay(original.toString(),
+            original.toString(), renamed.path());
+        assertEquals(renamed.path(), lastReplay);
+
+        ReplayCatalogue.Result afterRename = ReplayCatalogue.list(tempDir, lastReplay);
+        assertEquals(1, afterRename.entries().size());
+        assertEquals("renamed.pzrp.gz", afterRename.entries().get(0).fileName());
+        assertTrue(afterRename.entries().get(0).lastReplay());
+        assertTrue(afterRename.entries().get(0).valid());
+
+        ReplayFileManager.Result deleted =
+            ReplayFileManager.delete(tempDir, renamed.path());
+        assertTrue(deleted.ok(), deleted.error());
+        String afterDelete = ReplayCatalogue.remapLastReplay(lastReplay, renamed.path(), "");
+        assertEquals("", afterDelete);
+        assertTrue(ReplayCatalogue.list(tempDir, afterDelete).entries().isEmpty());
+    }
+
+    @Test
+    void remapLastReplayLeavesUnrelatedPathsUntouched() {
+        assertEquals("/replays/a.pzrp.gz",
+            ReplayCatalogue.remapLastReplay("/replays/a.pzrp.gz", "/replays/b.pzrp.gz",
+                "/replays/c.pzrp.gz"));
+        assertEquals("", ReplayCatalogue.remapLastReplay("", "/replays/b.pzrp.gz",
+            "/replays/c.pzrp.gz"));
+    }
+
     private static ReplayMetadata metadata(String player, long start, long end) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
