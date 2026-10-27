@@ -41,6 +41,7 @@ public final class ReplayCompatibility {
         checkMap(metadata.mapName(), current.mapName(), warnings);
         checkSave(metadata.saveName(), current.saveName(), warnings);
         checkGameMode(metadata.gameMode(), current.gameMode(), warnings);
+        warnings.addAll(metadata.appearance().warnings());
         return new Result(warnings);
     }
 

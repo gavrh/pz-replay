@@ -16,7 +16,8 @@ public record ReplayMetadata(
     float startZ,
     double sampleRateHz,
     long startTimeMillis,
-    long endTimeMillis
+    long endTimeMillis,
+    ReplayAppearance appearance
 ) {
     public static final int CURRENT_FORMAT_VERSION = 1;
 
@@ -27,12 +28,22 @@ public record ReplayMetadata(
         gameMode = safe(gameMode);
         mapName = safe(mapName);
         playerName = safe(playerName);
+        appearance = appearance == null ? ReplayAppearance.none() : appearance;
+    }
+
+    public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
+        String saveName, String gameMode, String mapName, String playerName, float startX,
+        float startY, float startZ, double sampleRateHz, long startTimeMillis,
+        long endTimeMillis) {
+        this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
+            startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis,
+            ReplayAppearance.none());
     }
 
     public ReplayMetadata withEnd(long endTimeMillis) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis);
+            startTimeMillis, endTimeMillis, appearance);
     }
 
     public Map<String, String> toValues() {
@@ -50,6 +61,10 @@ public record ReplayMetadata(
         values.put("sample_rate_hz", Double.toString(sampleRateHz));
         values.put("start_time_ms", Long.toString(startTimeMillis));
         values.put("end_time_ms", Long.toString(endTimeMillis));
+        if (appearance.isPresent()) {
+            values.put("appearance_version", Integer.toString(appearance.version()));
+            values.put("appearance_data", appearance.data());
+        }
         return values;
     }
 
@@ -81,7 +96,8 @@ public record ReplayMetadata(
             parseFloat(values, "start_z"),
             parseDouble(values, "sample_rate_hz"),
             parseLong(values, "start_time_ms"),
-            parseLong(values, "end_time_ms")
+            parseLong(values, "end_time_ms"),
+            ReplayAppearance.fromValues(values)
         );
     }
 

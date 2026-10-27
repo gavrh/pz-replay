@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.CRC32;
@@ -39,7 +40,9 @@ class ReplayFormatTest {
             0f,
             30.0,
             1_700_000_000_000L,
-            1_700_000_060_000L
+            1_700_000_060_000L,
+            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+                Base64.getEncoder().encodeToString("snapshot".getBytes(StandardCharsets.UTF_8)))
         );
     }
 
@@ -137,18 +140,71 @@ class ReplayFormatTest {
     }
 
     @Test
-    void binaryReadsVersionOneMetadataWithoutGameMode() throws Exception {
+    void binaryReadsVersionOneMetadataWithoutGameModeOrAppearance() throws Exception {
         Map<String, String> values = metadata().toValues();
         values.remove("game_mode");
+        values.remove("appearance_version");
+        values.remove("appearance_data");
         Path file = tempDir.resolve("legacy.pzrp");
         Files.write(file, rawPayload(values));
 
         ReplayData data = BinaryReplayCodec.read(file);
 
         assertEquals("", data.metadata().gameMode());
+        assertEquals(ReplayAppearance.none(), data.metadata().appearance());
         assertEquals(metadata().saveName(), data.metadata().saveName());
         assertEquals(metadata().mapName(), data.metadata().mapName());
         assertEquals(metadata().playerName(), data.metadata().playerName());
+    }
+
+    @Test
+    void binaryIgnoresUnknownOptionalMetadata() throws Exception {
+        Map<String, String> values = metadata().toValues();
+        values.put("future_optional_key", "ignored");
+        Path file = tempDir.resolve("future.pzrp");
+        Files.write(file, rawPayload(values));
+
+        ReplayData data = BinaryReplayCodec.read(file);
+
+        assertEquals(metadata(), data.metadata());
+    }
+
+    @Test
+    void binaryRejectsMetadataAboveTheSizeLimit() {
+        ReplayMetadata oversized = new ReplayMetadata(
+            ReplayMetadata.CURRENT_FORMAT_VERSION,
+            "0.0.0-dev",
+            "42.21.0",
+            "pz-replay-test",
+            "Sandbox",
+            "Muldraugh, KY",
+            "Replay Tester",
+            1000f,
+            2000f,
+            0f,
+            30.0,
+            1L,
+            2L,
+            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "A".repeat(2 * 1024 * 1024))
+        );
+
+        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
+            () -> BinaryReplayCodec.write(tempDir.resolve("oversized.pzrp"), oversized,
+                frames(), true));
+        assertTrue(exception.getMessage().contains("metadata is too large"));
+    }
+
+    @Test
+    void binaryRoundTripsAppearanceMetadataOnly() throws Exception {
+        Path file = tempDir.resolve("appearance.pzrp.gz");
+        BinaryReplayCodec.write(file, metadata(), frames(), true);
+
+        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
+
+        assertEquals(metadata().appearance(), metadataOnly.appearance());
+        assertEquals(ReplayAppearance.CURRENT_VERSION, metadataOnly.appearance().version());
+        assertEquals("snapshot",
+            new String(metadataOnly.appearance().decode(), StandardCharsets.UTF_8));
     }
 
     @Test
