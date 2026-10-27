@@ -31,7 +31,7 @@ final class AppearanceSnapshot {
         if (desc == null) {
             throw new IOException("no character descriptor");
         }
-        ByteBuffer payload = ByteBuffer.allocate(MAX_BYTES).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer payload = ByteBuffer.allocate(2 * MAX_BYTES + 4096).order(ByteOrder.BIG_ENDIAN);
         payload.put((byte) (player.isFemale() ? 1 : 0));
         GameWindow.WriteString(payload, desc.getTorso() == null ? "" : desc.getTorso());
 
