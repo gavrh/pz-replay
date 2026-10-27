@@ -118,7 +118,7 @@ function ui.updateIndicator()
     end
     local killSwitch = PZReplay and PZReplay.isKillSwitchEnabled()
     local recording = PZReplay and PZReplay.isRecording()
-    local playing = PZReplayPlayback and PZReplayPlayback.isPlaying()
+    local playing = PZReplayPlayback and PZReplayPlayback.isActive()
     local panelOpen = ui.panel ~= nil and ui.panel:getIsVisible()
     local active = not killSwitch and not panelOpen and getPlayer() ~= nil
         and (recording or playing)
@@ -187,7 +187,7 @@ local function toggleCapture()
 end
 
 local function togglePlayback()
-    if PZReplayPlayback.isPlaying() then
+    if PZReplayPlayback.isActive() then
         PZReplayPlayback.stop()
         ui.refreshPanel()
         return
@@ -208,7 +208,7 @@ local function togglePlayback()
 end
 
 local function toggleCameraFollow()
-    if PZReplayPlayback.isPlaying() then
+    if PZReplayPlayback.isActive() then
         PZReplayPlayback.setCameraFollow(not PZReplayPlayback.isCameraFollow())
     else
         PZReplay.setCameraFollowDefault(not PZReplay.isCameraFollowDefault())
