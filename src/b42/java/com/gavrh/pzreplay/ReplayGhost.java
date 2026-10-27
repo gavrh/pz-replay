@@ -45,14 +45,7 @@ public final class ReplayGhost extends IsoPlayer {
             return false;
         }
         try {
-            boolean paused = motion.pause();
-            if (paused) {
-                setScriptedMovement(false);
-                setRunning(false);
-                setSprinting(false);
-                setSneaking(false);
-            }
-            return paused;
+            return motion.pause(this);
         } catch (Throwable t) {
             failMotion(t);
             return false;
