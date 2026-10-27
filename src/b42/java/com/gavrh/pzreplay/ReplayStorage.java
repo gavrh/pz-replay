@@ -7,11 +7,20 @@ import zombie.core.Core;
 final class ReplayStorage {
     private static final String DIRECTORY = "pz-replay";
     private static final String EXTENSION = ".pzrp.gz";
+    private static final String SETTINGS_FILE = "settings.properties";
 
     private ReplayStorage() {
     }
 
+    static Path directory() {
+        return Paths.get(Core.getMyDocumentFolder(), DIRECTORY);
+    }
+
     static Path pathFor(String captureName) {
-        return Paths.get(Core.getMyDocumentFolder(), DIRECTORY, captureName + EXTENSION);
+        return directory().resolve(captureName + EXTENSION);
+    }
+
+    static Path settingsPath() {
+        return directory().resolve(SETTINGS_FILE);
     }
 }
