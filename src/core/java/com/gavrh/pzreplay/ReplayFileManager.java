@@ -9,6 +9,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -50,7 +51,9 @@ public final class ReplayFileManager {
         }
 
         Path target = source.resolveSibling(base + ReplayCatalogue.EXTENSION);
-        if (target.equals(source)) {
+        String sourceName = source.getFileName().toString();
+        String targetName = target.getFileName().toString();
+        if (sourceName.equals(targetName)) {
             return Result.success(source);
         }
 
@@ -60,7 +63,11 @@ public final class ReplayFileManager {
                 return Result.failure("a replay named \"" + base
                     + "\" already exists");
             }
-            move(source, target);
+            if (sourceName.equalsIgnoreCase(targetName) && isSameFile(source, target)) {
+                moveThroughTemporary(source, target);
+            } else {
+                move(source, target);
+            }
             return Result.success(target);
         } catch (AccessDeniedException exception) {
             return Result.failure("permission denied: " + source.getFileName());
@@ -176,6 +183,26 @@ public final class ReplayFileManager {
             }
         }
         return null;
+    }
+
+    private static boolean isSameFile(Path source, Path target) throws IOException {
+        return Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+            && Files.isSameFile(source, target);
+    }
+
+    private static void moveThroughTemporary(Path source, Path target) throws IOException {
+        Path temporary = source.resolveSibling(".pzrp-rename-" + UUID.randomUUID());
+        move(source, temporary);
+        try {
+            move(temporary, target);
+        } catch (IOException | RuntimeException exception) {
+            try {
+                move(temporary, source);
+            } catch (IOException | RuntimeException rollback) {
+                exception.addSuppressed(rollback);
+            }
+            throw exception;
+        }
     }
 
     private static void move(Path source, Path target) throws IOException {

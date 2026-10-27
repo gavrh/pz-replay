@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -135,6 +136,24 @@ class ReplayFileManagerTest {
         assertTrue(result.ok(), result.error());
         assertEquals(tempDir.resolve("take one.pzrp.gz").toString(), result.path());
         assertArrayEquals(CONTENT, Files.readAllBytes(Path.of(result.path())));
+        try (Stream<Path> files = Files.list(tempDir)) {
+            assertEquals(1L, files.count());
+        }
+    }
+
+    @Test
+    void renameToSameNameIsANoOp() throws Exception {
+        Path source = validReplay("same name.pzrp.gz");
+
+        ReplayFileManager.Result result =
+            ReplayFileManager.rename(tempDir, source.toString(), "same name");
+
+        assertTrue(result.ok(), result.error());
+        assertEquals(source.toString(), result.path());
+        assertArrayEquals(CONTENT, Files.readAllBytes(source));
+        try (Stream<Path> files = Files.list(tempDir)) {
+            assertEquals(1L, files.count());
+        }
     }
 
     @Test
