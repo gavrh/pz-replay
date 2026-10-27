@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import me.zed_0xff.zombie_buddy.Exposer;
@@ -71,14 +72,23 @@ public final class ReplayPlaybackApi {
 
         ReplayCompatibility.Result compatibility =
             ReplayCompatibility.check(data.metadata(), context());
-        logCompatibility(requested, compatibility);
+        List<String> warnings = new ArrayList<>(compatibility.warnings());
+        AppearanceSnapshot appearance = null;
+        if (data.metadata().appearance().isCurrent()) {
+            try {
+                appearance = AppearanceSnapshot.decode(data.metadata().appearance());
+            } catch (ReplayFormatException exception) {
+                addWarning(warnings, "appearance data is corrupt or incomplete");
+            }
+        }
+        logWarnings(requested, warnings);
         System.out.println("[pz-replay] replay loaded path=" + requested + " "
             + ReplayReader.summary(data));
 
         GhostMotionController loadedController = new GhostMotionController(loaded);
         ReplayTimeline.Sample first = loaded.sampleAt(0.0);
         ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
-            first.z(), first.facing());
+            first.z(), first.facing(), appearance, warning -> addWarning(warnings, warning));
         if (ghost == null) {
             fail(requested, "ghost spawn failed");
             return false;
@@ -95,7 +105,7 @@ public final class ReplayPlaybackApi {
             fail(requested, "playback already active");
             return false;
         }
-        state.setCompatibilityWarnings(compatibility.warnings());
+        state.setCompatibilityWarnings(warnings);
         boolean following = settings.isCameraFollowDefault()
             && loadedController.setCameraFollow(true, ghost);
         state.setCameraFollow(following);
@@ -106,6 +116,7 @@ public final class ReplayPlaybackApi {
         System.out.println("[pz-replay] replay playback started path=" + requested
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
+            + " appearance=" + (appearance == null ? "current" : "recorded")
             + " camera_follow=" + following);
         return true;
     }
@@ -225,14 +236,20 @@ public final class ReplayPlaybackApi {
         lastPath = "";
     }
 
-    private static void logCompatibility(String path, ReplayCompatibility.Result result) {
-        if (result.isCompatible()) {
+    private static void logWarnings(String path, List<String> warnings) {
+        if (warnings.isEmpty()) {
             System.out.println("[pz-replay] replay compatible path=" + path);
             return;
         }
-        for (String warning : result.warnings()) {
+        for (String warning : warnings) {
             System.out.println("[pz-replay] replay compatibility warning path=" + path
                 + " warning=" + warning);
+        }
+    }
+
+    private static void addWarning(List<String> warnings, String warning) {
+        if (warning != null && !warning.isBlank() && !warnings.contains(warning)) {
+            warnings.add(warning);
         }
     }
 
