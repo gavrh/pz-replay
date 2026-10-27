@@ -13,6 +13,8 @@ public final class ReplayControlState {
     private String captureError = "";
 
     private boolean playing;
+    private boolean playbackPaused;
+    private double playbackSpeed = 1.0;
     private double playbackTime;
     private double playbackDuration;
     private boolean cameraFollow;
@@ -57,6 +59,8 @@ public final class ReplayControlState {
             return false;
         }
         playing = true;
+        playbackPaused = false;
+        playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = Math.max(0.0, duration);
         cameraFollow = false;
@@ -72,8 +76,20 @@ public final class ReplayControlState {
         cameraFollow = followCamera;
     }
 
+    public synchronized void setPlaybackPaused(boolean paused) {
+        playbackPaused = paused;
+    }
+
+    public synchronized void setPlaybackSpeed(double speed) {
+        if (Double.isFinite(speed) && speed > 0.0) {
+            playbackSpeed = speed;
+        }
+    }
+
     public synchronized void playbackStopped() {
         playing = false;
+        playbackPaused = false;
+        playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
         cameraFollow = false;
@@ -81,6 +97,8 @@ public final class ReplayControlState {
 
     public synchronized void playbackFailed(String error) {
         playing = false;
+        playbackPaused = false;
+        playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
         cameraFollow = false;
@@ -135,6 +153,14 @@ public final class ReplayControlState {
 
     public synchronized boolean isPlaying() {
         return playing;
+    }
+
+    public synchronized boolean isPlaybackPaused() {
+        return playbackPaused;
+    }
+
+    public synchronized double getPlaybackSpeed() {
+        return playbackSpeed;
     }
 
     public synchronized double getPlaybackTime() {
