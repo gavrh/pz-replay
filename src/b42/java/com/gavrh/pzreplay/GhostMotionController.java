@@ -159,11 +159,18 @@ public final class GhostMotionController {
             restoreCamera();
             return true;
         }
-        if (!isActive() || ghost == null) {
+        IsoPlayer player = IsoPlayer.getInstance();
+        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
+        if (!isActive() || ghost == null || camera == null) {
             return false;
         }
         cameraFollow = true;
-        applyCamera(ghost);
+        if (!applyCamera(ghost)) {
+            cameraFollow = false;
+            return false;
+        }
+        IsoCamera.setCameraCharacter(player);
+        camera.center();
         return true;
     }
 
@@ -273,22 +280,43 @@ public final class GhostMotionController {
         applyCamera(ghost);
     }
 
-    private void applyCamera(ReplayGhost ghost) {
-        if (cameraFollow) {
-            IsoCamera.setCameraCharacter(ghost);
+    private boolean applyCamera(ReplayGhost ghost) {
+        if (!cameraFollow) {
+            return false;
         }
+        IsoPlayer player = IsoPlayer.getInstance();
+        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
+        if (camera == null) {
+            return false;
+        }
+        camera.deferedX = ghost.getX() - player.getX();
+        camera.deferedY = ghost.getY() - player.getY();
+        return true;
     }
 
     private void restoreCamera() {
+        clearCameraOffsets();
         IsoPlayer player = IsoPlayer.getInstance();
         if (player == null) {
             IsoCamera.clearCameraCharacter();
             return;
         }
         IsoCamera.setCameraCharacter(player);
-        int index = player.getIndex();
-        if (cameraAt(index) != null) {
-            cameraAt(index).center();
+        PlayerCamera camera = cameraAt(player.getIndex());
+        if (camera != null) {
+            camera.center();
+        }
+    }
+
+    private static void clearCameraOffsets() {
+        if (IsoCamera.cameras == null) {
+            return;
+        }
+        for (PlayerCamera camera : IsoCamera.cameras) {
+            if (camera != null) {
+                camera.deferedX = 0f;
+                camera.deferedY = 0f;
+            }
         }
     }
 
