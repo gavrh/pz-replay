@@ -120,6 +120,18 @@ public final class ReplayCatalogue {
         }
     }
 
+    public static String remapLastReplay(String lastPath, String changedPath,
+        String replacementPath) {
+        String current = lastPath == null ? "" : lastPath;
+        if (current.isBlank() || changedPath == null || changedPath.isBlank()) {
+            return current;
+        }
+        if (!normalize(current).equals(normalize(changedPath))) {
+            return current;
+        }
+        return replacementPath == null ? "" : replacementPath;
+    }
+
     private static String normalize(String path) {
         if (path == null || path.isBlank()) {
             return "";
