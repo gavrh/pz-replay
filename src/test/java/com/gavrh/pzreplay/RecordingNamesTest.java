@@ -55,6 +55,21 @@ class RecordingNamesTest {
     }
 
     @Test
+    void missingDirectoryIsTreatedAsFree() {
+        Path missing = tempDir.resolve("missing");
+
+        assertEquals("route", RecordingNames.unique(missing, "route"));
+    }
+
+    @Test
+    void nonDirectoryFailsClosedInsteadOfAssumingNoCollision() throws Exception {
+        Path file = tempDir.resolve("not-a-directory");
+        Files.createFile(file);
+
+        assertEquals("", RecordingNames.unique(file, "route"));
+    }
+
+    @Test
     void collisionAddsASuffixInsteadOfOverwriting() throws Exception {
         Files.createFile(tempDir.resolve("route" + ReplayCatalogue.EXTENSION));
 

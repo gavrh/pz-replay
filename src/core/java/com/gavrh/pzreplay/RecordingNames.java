@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.stream.Stream;
@@ -44,19 +45,23 @@ public final class RecordingNames {
         if (stem.isEmpty()) {
             return "";
         }
-        if (!isTaken(directory, stem)) {
-            return stem;
-        }
-        for (int suffix = 2; suffix <= MAX_COLLISION_SUFFIX; suffix++) {
-            String candidate = withSuffix(stem, suffix);
-            if (!isTaken(directory, candidate)) {
-                return candidate;
+        try {
+            if (!isTaken(directory, stem)) {
+                return stem;
             }
+            for (int suffix = 2; suffix <= MAX_COLLISION_SUFFIX; suffix++) {
+                String candidate = withSuffix(stem, suffix);
+                if (!isTaken(directory, candidate)) {
+                    return candidate;
+                }
+            }
+        } catch (IOException | RuntimeException exception) {
+            return "";
         }
         return "";
     }
 
-    static boolean isTaken(Path directory, String stem) {
+    static boolean isTaken(Path directory, String stem) throws IOException {
         if (directory == null) {
             return false;
         }
@@ -68,7 +73,7 @@ public final class RecordingNames {
         try (Stream<Path> stream = Files.list(directory)) {
             return stream.anyMatch(path -> path.getFileName().toString()
                 .equalsIgnoreCase(fileName));
-        } catch (IOException | RuntimeException exception) {
+        } catch (NoSuchFileException exception) {
             return false;
         }
     }
