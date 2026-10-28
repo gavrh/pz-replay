@@ -2,8 +2,10 @@ package com.gavrh.pzreplay;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public final class ReplayCatalogueView {
     public static final String SORT_DATE = "date";
@@ -25,9 +27,28 @@ public final class ReplayCatalogueView {
 
     public static List<ReplayCatalogue.Entry> apply(List<ReplayCatalogue.Entry> entries,
         String query, String sort, boolean ascending) {
+        return apply(entries, query, sort, ascending, false, Set.of());
+    }
+
+    public static List<ReplayCatalogue.Entry> apply(List<ReplayCatalogue.Entry> entries,
+        String query, String sort, boolean ascending, boolean favoritesOnly,
+        Set<String> favoritePaths) {
         String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        Set<String> favorites = new HashSet<>();
+        if (favoritePaths != null) {
+            for (String path : favoritePaths) {
+                String normalized = ReplayFavorites.normalize(path);
+                if (!normalized.isEmpty()) {
+                    favorites.add(normalized);
+                }
+            }
+        }
+
         List<ReplayCatalogue.Entry> filtered = new ArrayList<>();
         for (ReplayCatalogue.Entry entry : entries) {
+            if (favoritesOnly && !favorites.contains(ReplayFavorites.normalize(entry.path()))) {
+                continue;
+            }
             if (matches(entry, needle)) {
                 filtered.add(entry);
             }
