@@ -292,6 +292,8 @@ function PZReplayLibrary:onKeyPress(key)
             self.browser:selectIndex(self.browser.list.count)
         elseif key == Keyboard.KEY_RETURN then
             self:playSelected()
+        elseif key == Keyboard.KEY_F and not self.browser:isSearchFocused() then
+            self.browser:toggleFavorite()
         end
     end
     return true

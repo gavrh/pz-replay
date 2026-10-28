@@ -86,10 +86,12 @@ function PZReplayBrowser:createChildren()
     local searchLabelWidth = getTextManager():MeasureStringX(FONT, "Search") + 6
     local sortWidth = getTextManager():MeasureStringX(FONT, "Sort: Duration") + 24
     local directionWidth = getTextManager():MeasureStringX(FONT, "Shortest") + 24
+    local filterWidth = getTextManager():MeasureStringX(FONT, "All replays") + 24
     local directionX = self.width - PAD - directionWidth
     local sortX = directionX - gap - sortWidth
+    local filterX = sortX - gap - filterWidth
     local searchX = PAD + searchLabelWidth
-    local searchWidth = math.max(120, sortX - gap - searchX)
+    local searchWidth = math.max(90, filterX - gap - searchX)
 
     self.searchLabelX = PAD
     self.searchLabelY = searchY
@@ -100,6 +102,12 @@ function PZReplayBrowser:createChildren()
     self.searchEntry:instantiate()
     self.searchEntry.onTextChange = function() self:onSearchChanged() end
     self:addChild(self.searchEntry)
+
+    self.favoritesButton = ISButton:new(filterX, searchY, filterWidth, buttonHeight,
+        "All replays", self, PZReplayBrowser.onFavoritesFilter)
+    self.favoritesButton:initialise()
+    self.favoritesButton:instantiate()
+    self:addChild(self.favoritesButton)
 
     self.sortButton = ISButton:new(sortX, searchY, sortWidth, buttonHeight, "Sort: Date",
         self, PZReplayBrowser.onSort)
@@ -113,7 +121,14 @@ function PZReplayBrowser:createChildren()
     self.directionButton:instantiate()
     self:addChild(self.directionButton)
 
-    self.list = ISScrollingListBox:new(PAD, listY, self.width - PAD * 2, listHeight)
+    local detailsWidth = math.min(300, math.max(150, math.floor(self.width * 0.34)))
+    local listWidth = self.width - PAD * 2 - gap - detailsWidth
+    self.detailsX = PAD + listWidth + gap
+    self.detailsY = listY
+    self.detailsWidth = detailsWidth
+    self.detailsHeight = listHeight
+
+    self.list = ISScrollingListBox:new(PAD, listY, listWidth, listHeight)
     self.list:initialise()
     self.list:instantiate()
     self.list.itemheight = fontHeight(FONT) * 3 + 8
@@ -185,7 +200,16 @@ function PZReplayBrowser:createChildren()
     self.renameButton:instantiate()
     self:addChild(self.renameButton)
 
+    local favoriteWidth = getTextManager():MeasureStringX(FONT, "Unfavorite") + 24
+    nextX = nextX - gap - favoriteWidth
+    self.favoriteButton = ISButton:new(nextX, buttonY, favoriteWidth, buttonHeight,
+        "Favorite", self, PZReplayBrowser.onFavorite)
+    self.favoriteButton:initialise()
+    self.favoriteButton:instantiate()
+    self:addChild(self.favoriteButton)
+
     self:updateSortButtons()
+    self:updateFilterButtons()
 end
 
 function PZReplayBrowser:drawRow(list, y, item, alt)
@@ -203,6 +227,9 @@ function PZReplayBrowser:drawRow(list, y, item, alt)
         list.borderColor.r, list.borderColor.g, list.borderColor.b)
 
     local name = entry.name
+    if entry.favorite then
+        name = "* " .. name
+    end
     if entry.lastReplay then
         name = name .. "  (last)"
     end
@@ -262,7 +289,7 @@ function PZReplayBrowser:reload(preferredPath, fallbackIndex)
     end
     self:closeDialog()
     PZReplayCatalogue.applyQuery(self.searchText or "", self.sortField,
-        self.sortAscending)
+        self.sortAscending, self.favoritesOnly == true)
     PZReplayCatalogue.refresh()
     self:rebuildList(preferredPath or "", fallbackIndex or -1)
 end
@@ -280,7 +307,7 @@ function PZReplayBrowser:applyView()
     local previousIndex = self.list and self.list.selected > 0
         and self.list.selected - 1 or -1
     PZReplayCatalogue.applyQuery(self.searchText or "", self.sortField,
-        self.sortAscending)
+        self.sortAscending, self.favoritesOnly == true)
     self:rebuildList(previousPath, previousIndex)
 end
 
@@ -303,7 +330,8 @@ function PZReplayBrowser:rebuildList(preferredPath, fallbackIndex)
             save = PZReplayCatalogue.getSave(index),
             gameMode = PZReplayCatalogue.getGameMode(index),
             player = PZReplayCatalogue.getPlayer(index),
-            lastReplay = PZReplayCatalogue.isLastReplay(index)
+            lastReplay = PZReplayCatalogue.isLastReplay(index),
+            favorite = PZReplayCatalogue.isFavorite(index)
         }
         local item = self.list:addItem(entry.name, entry)
         item.height = self.list.itemheight
@@ -316,17 +344,38 @@ function PZReplayBrowser:rebuildList(preferredPath, fallbackIndex)
     end
 
     local catalogueError = PZReplayCatalogue.getCatalogueError()
+    local favoritesError = PZReplayCatalogue.getFavoritesError()
+    local favoriteCount = PZReplayCatalogue.getFavoriteCount()
+    local status
+    local statusIsError = false
     if catalogueError ~= "" then
-        self:setStatus(catalogueError, true)
+        status = catalogueError
+        statusIsError = true
     elseif total == 0 then
-        self:setStatus("No replays found.")
+        status = "No replays found."
+    elseif count == 0 and self.favoritesOnly and favoriteCount == 0 then
+        status = "No favorite replays yet. Select a replay and choose Favorite."
+    elseif count == 0 and self.favoritesOnly then
+        status = "No favorites match the search."
     elseif count == 0 then
-        self:setStatus("No replays match the search.")
+        status = "No replays match the search."
+    elseif self.favoritesOnly then
+        status = string.format("%d favorite%s", count, count == 1 and "" or "s")
     elseif count ~= total then
-        self:setStatus(string.format("%d of %d replays", count, total))
+        status = string.format("%d of %d replays (%d favorite%s)", count, total,
+            favoriteCount, favoriteCount == 1 and "" or "s")
     else
-        self:setStatus(string.format("%d replay%s", count, count == 1 and "" or "s"))
+        status = string.format("%d replay%s", count, count == 1 and "" or "s")
+        if favoriteCount > 0 then
+            status = status .. string.format(" (%d favorite%s)", favoriteCount,
+                favoriteCount == 1 and "" or "s")
+        end
     end
+    if favoritesError ~= "" then
+        status = status .. " Favorites unavailable."
+        statusIsError = true
+    end
+    self:setStatus(status, statusIsError)
 
     if preferredPath ~= "" and catalogueError == "" and total > 0
         and not PZReplayCatalogue.hasPath(preferredPath) then
@@ -514,6 +563,94 @@ function PZReplayBrowser:updateSortButtons()
     self.directionButton:setTitle(self.sortAscending and direction.asc or direction.desc)
 end
 
+function PZReplayBrowser:updateFilterButtons()
+    if self.favoritesButton then
+        self.favoritesButton:setTitle(self.favoritesOnly and "Favorites" or "All replays")
+    end
+end
+
+function PZReplayBrowser:isSearchFocused()
+    return self.searchEntry ~= nil and self.searchEntry:isFocused()
+end
+
+function PZReplayBrowser:onFavoritesFilter()
+    if self:isDialogOpen() then return end
+    self.favoritesOnly = not self.favoritesOnly
+    self:updateFilterButtons()
+    self:applyView()
+end
+
+function PZReplayBrowser:toggleFavorite()
+    if self:isDialogOpen() then
+        return false
+    end
+    local entry = self:getSelected()
+    if not entry then
+        self:setStatus("Select a replay first.", true)
+        return false
+    end
+    if not PZReplayCatalogue or not PZReplayCatalogue.toggleFavorite then
+        self:setStatus("Favorites are unavailable.", true)
+        return false
+    end
+    local state = PZReplayCatalogue.toggleFavorite(entry.path)
+    if state < 0 then
+        local error = PZReplayCatalogue.getLastOperationError()
+        self:setStatus(error ~= "" and error or "Could not change favorite.", true)
+        return false
+    end
+    local favorite = state == 1
+    self:applyView()
+    local message = favorite and ("Added " .. entry.name .. " to favorites.")
+        or ("Removed " .. entry.name .. " from favorites.")
+    local warning = PZReplayCatalogue.getLastOperationError()
+    if warning ~= "" then
+        message = message .. " " .. warning
+        self:setStatus(message, true)
+    else
+        self:setStatus(message)
+    end
+    return true
+end
+
+function PZReplayBrowser:onFavorite()
+    self:toggleFavorite()
+end
+
+function PZReplayBrowser:drawDetails()
+    if not self.detailsX then
+        return
+    end
+    self:drawRect(self.detailsX, self.detailsY, self.detailsWidth, self.detailsHeight,
+        0.5, 0.03, 0.03, 0.04)
+    self:drawRectBorder(self.detailsX, self.detailsY, self.detailsWidth,
+        self.detailsHeight, 0.8, 0.55, 0.55, 0.55)
+    local lineHeight = fontHeight(FONT)
+    local x = self.detailsX + 6
+    local width = self.detailsWidth - 12
+    local y = self.detailsY + 4
+    self:drawText("Details", x, y, 1, 1, 1, 1, FONT)
+    y = y + lineHeight + 2
+
+    local entry = self:getSelected()
+    if not entry then
+        self:drawText("Select a replay.", x, y, 0.72, 0.72, 0.72, 1.0, FONT)
+        return
+    end
+    local index = self.list.selected - 1
+    local rows = PZReplayCatalogue.getDetailRowCount(index)
+    for row = 0, rows - 1 do
+        if y + lineHeight > self.detailsY + self.detailsHeight - 2 then
+            break
+        end
+        local label = PZReplayCatalogue.getDetailLabel(index, row)
+        local value = PZReplayCatalogue.getDetailValue(index, row)
+        self:drawText(fitText(label .. ": " .. value, width, FONT), x, y,
+            0.78, 0.78, 0.78, 1.0, FONT)
+        y = y + lineHeight
+    end
+end
+
 function PZReplayBrowser:onRename()
     if self:isDialogOpen() then return end
     local entry = self:getSelected()
@@ -642,6 +779,14 @@ function PZReplayBrowser:updateButtons()
     if self.deleteButton then
         self.deleteButton:setEnable(blocked)
     end
+    if self.favoriteButton then
+        self.favoriteButton:setEnable(entry ~= nil and not dialogOpen)
+        self.favoriteButton:setTitle(entry ~= nil and entry.favorite and "Unfavorite"
+            or "Favorite")
+    end
+    if self.favoritesButton then
+        self.favoritesButton:setEnable(not dialogOpen)
+    end
     if self.refreshButton then
         self.refreshButton:setEnable(not dialogOpen)
     end
@@ -652,6 +797,7 @@ end
 
 function PZReplayBrowser:render()
     if self.list then
+        self:drawDetails()
         local statusY = self.list.y + self.list.height + 2
         local red = self.statusIsError == true
         self:drawText(fitText(self.status or "", self.width - PAD * 2, FONT), PAD, statusY,
@@ -677,6 +823,7 @@ function PZReplayBrowser:new(x, y, width, height, options)
     o.searchText = ""
     o.sortField = "date"
     o.sortAscending = false
+    o.favoritesOnly = false
     o.background = false
     o.borderColor = { r = 0, g = 0, b = 0, a = 0 }
     o:setWantMouseEvents(true)
