@@ -103,6 +103,10 @@ public final class PZReplayLua {
         return STATE.getRecordingResult();
     }
 
+    public static long getRecordingResultVersion() {
+        return STATE.getRecordingResultVersion();
+    }
+
     public static void tick() {
         tickCountdown();
         ReplayRecorder.INSTANCE.tick();

@@ -99,7 +99,10 @@ function PZReplayHud:update()
 
     local result = PZReplay and PZReplay.getLastRecordingResult
         and PZReplay.getLastRecordingResult() or ""
-    if result ~= self.resultText then
+    local resultVersion = PZReplay and PZReplay.getRecordingResultVersion
+        and PZReplay.getRecordingResultVersion() or 0
+    if resultVersion ~= self.resultVersion then
+        self.resultVersion = resultVersion
         self.resultText = result
         self.resultUntil = result ~= "" and getTimestampMs() + RESULT_VISIBLE_MILLIS or 0
     end
@@ -141,6 +144,7 @@ function PZReplayHud:new()
     setmetatable(o, self)
     self.__index = self
     o.lines = {}
+    o.resultVersion = -1
     o.resultText = ""
     o.resultUntil = 0
     o:setWantKeyEvents(false)

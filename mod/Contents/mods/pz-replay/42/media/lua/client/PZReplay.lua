@@ -125,7 +125,10 @@ function ui.updateIndicator()
 
     local result = PZReplay and PZReplay.getLastRecordingResult
         and PZReplay.getLastRecordingResult() or ""
-    if result ~= ui.resultText then
+    local resultVersion = PZReplay and PZReplay.getRecordingResultVersion
+        and PZReplay.getRecordingResultVersion() or 0
+    if resultVersion ~= (ui.resultVersion or -1) then
+        ui.resultVersion = resultVersion
         ui.resultText = result
         ui.resultUntil = result ~= "" and getTimestampMs() + RESULT_VISIBLE_MILLIS or 0
     end

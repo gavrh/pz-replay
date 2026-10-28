@@ -9,6 +9,7 @@ public final class ReplayControlState {
     private int countdownDurationSeconds;
     private String recordingName = "";
     private String recordingResult = "";
+    private long recordingResultVersion;
     private float recordingSeconds;
     private int recordedFrames;
     private double configuredSampleRateHz = CaptureSession.DEFAULT_SAMPLE_RATE_HZ;
@@ -32,6 +33,7 @@ public final class ReplayControlState {
         countdownRemainingSeconds = durationSeconds;
         recordingName = safe(name);
         recordingResult = "";
+        recordingResultVersion++;
     }
 
     public synchronized void countdownProgress(double remainingSeconds) {
@@ -48,6 +50,7 @@ public final class ReplayControlState {
         countdownRemainingSeconds = 0.0;
         recordingName = "";
         recordingResult = "Countdown cancelled.";
+        recordingResultVersion++;
     }
 
     public synchronized void recordingStarted(double sampleRateHz) {
@@ -64,6 +67,7 @@ public final class ReplayControlState {
         actualSampleRateHz = 0.0;
         recordingName = safe(name);
         recordingResult = "";
+        recordingResultVersion++;
         captureError = "";
     }
 
@@ -91,6 +95,7 @@ public final class ReplayControlState {
         } else {
             recordingResult = "Recording stopped.";
         }
+        recordingResultVersion++;
     }
 
     public synchronized void captureFailed(String error) {
@@ -99,6 +104,7 @@ public final class ReplayControlState {
         countdownRemainingSeconds = 0.0;
         captureError = safe(error);
         recordingResult = "Recording failed: " + captureError;
+        recordingResultVersion++;
     }
 
     public synchronized boolean playbackStarted(double duration) {
@@ -188,6 +194,10 @@ public final class ReplayControlState {
 
     public synchronized String getRecordingResult() {
         return recordingResult;
+    }
+
+    public synchronized long getRecordingResultVersion() {
+        return recordingResultVersion;
     }
 
     public synchronized float getRecordingSeconds() {
