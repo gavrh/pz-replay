@@ -1,5 +1,6 @@
 require "ISUI/ISPanel"
 require "ISUI/ISButton"
+require "ISUI/ISTextEntryBox"
 require "RadioCom/ISUIRadio/ISSliderPanel"
 require "PZReplayBrowser"
 
@@ -14,6 +15,8 @@ local STATUS_LINES = 5
 local TAB_HEIGHT = 26
 local TRANSPORT_SLIDER_HEIGHT = 18
 local SPEEDS = { 0.25, 0.5, 1, 2, 4 }
+local COUNTDOWN_MIN = 0
+local COUNTDOWN_MAX = 10
 
 local function fontHeight(font)
     return getTextManager():getFontHeight(font)
@@ -117,8 +120,9 @@ function PZReplayPanel:createChildren()
     self.cameraButton:instantiate()
     self:addChild(self.cameraButton)
 
+    self:createNameEntry(buttonHeight)
     self:createTransport(buttonHeight)
-    local browserY = self.contentY + self.transportHeight + 4
+    local browserY = self.contentY + self.nameHeight + self.transportHeight + 4
     local browserHeight = self.height - browserY - PAD
 
     self.browser = PZReplayBrowser:new(self.contentX, browserY,
@@ -129,6 +133,7 @@ function PZReplayPanel:createChildren()
             end,
             canPlay = function()
                 return not PZReplay.isKillSwitchEnabled() and not PZReplay.isRecording()
+                    and not PZReplay.isCountingDown()
             end,
             onPlay = function(path)
                 local started = PZReplayPlayback and PZReplayPlayback.play(path)
@@ -151,8 +156,20 @@ function PZReplayPanel:createChildren()
     self:setView("replays")
 end
 
+function PZReplayPanel:createNameEntry(buttonHeight)
+    self.nameY = self.contentY
+    self.nameHeight = buttonHeight + 4
+    local entryX = PAD + 44
+    local entryWidth = math.min(320, self.contentWidth - 44)
+    self.nameEntry = ISTextEntryBox:new("", entryX, self.nameY, entryWidth, buttonHeight)
+    self.nameEntry.font = FONT
+    self.nameEntry:initialise()
+    self.nameEntry:instantiate()
+    self:addChild(self.nameEntry)
+end
+
 function PZReplayPanel:createTransport(buttonHeight)
-    self.transportY = self.contentY
+    self.transportY = self.contentY + self.nameHeight
     self.transportHeight = buttonHeight + 4 + TRANSPORT_SLIDER_HEIGHT
 
     self.playPauseButton = ISButton:new(PAD, self.transportY, 90, buttonHeight,
@@ -195,6 +212,13 @@ function PZReplayPanel:createSettings(buttonHeight)
     self.ratePlus = self:addSettingsButton("+", controlX + 96, y, 28, buttonHeight,
         PZReplayPanel.onRateUp)
     self.rateRowY = y
+
+    y = y + rowHeight
+    self.countdownRowY = y
+    self.countdownMinus = self:addSettingsButton("-", controlX, y, 28, buttonHeight,
+        PZReplayPanel.onCountdownDown)
+    self.countdownPlus = self:addSettingsButton("+", controlX + 96, y, 28, buttonHeight,
+        PZReplayPanel.onCountdownUp)
 
     y = y + rowHeight
     self.cameraDefaultRowY = y
@@ -240,6 +264,7 @@ function PZReplayPanel:setView(view)
     self.view = view
     local replayView = view == "replays"
     self.browser:setVisible(replayView)
+    self.nameEntry:setVisible(replayView)
     self.playPauseButton:setVisible(replayView)
     self.restartButton:setVisible(replayView)
     self.speedButton:setVisible(replayView)
@@ -248,6 +273,8 @@ function PZReplayPanel:setView(view)
     self.settingsTab:setEnable(replayView)
     self.rateMinus:setVisible(not replayView)
     self.ratePlus:setVisible(not replayView)
+    self.countdownMinus:setVisible(not replayView)
+    self.countdownPlus:setVisible(not replayView)
     self.cameraDefaultButton:setVisible(not replayView)
     self.debugButton:setVisible(not replayView)
     self.killButton:setVisible(not replayView)
@@ -274,6 +301,9 @@ function PZReplayPanel:close()
     local callback = self.onPanelClosed
     self.onPanelClosed = nil
     self.rebindingAction = nil
+    if self.nameEntry then
+        self.nameEntry:unfocus()
+    end
     self:setCapture(false)
     self:setWantKeyEvents(false)
     self:setWantMouseEvents(false)
@@ -295,21 +325,35 @@ function PZReplayPanel:refreshControls()
     if not PZReplay then return end
     local killSwitch = PZReplay.isKillSwitchEnabled()
     local recording = PZReplay.isRecording()
+    local countingDown = PZReplay.isCountingDown()
     local playing = PZReplayPlayback and PZReplayPlayback.isActive()
     local samples = string.format("%.0f Hz", PZReplay.getSampleRate())
 
     self.rateValue = samples
+    self.countdownValue = string.format("%d s", PZReplay.getCountdownSeconds())
     self.cameraDefaultButton:setTitle(PZReplay.isCameraFollowDefault() and "On" or "Off")
     self.debugButton:setTitle(PZReplay.isDebugControlsEnabled() and "On" or "Off")
     self.killButton:setTitle(killSwitch and "On" or "Off")
-    self.captureButton:setTitle(recording and "Stop recording" or "Record")
-    self.captureButton:setEnable(recording or (not killSwitch and not playing))
+    local captureTitle = "Record"
+    if countingDown then
+        captureTitle = "Cancel start"
+    elseif recording then
+        captureTitle = "Stop recording"
+    end
+    self.captureButton:setTitle(captureTitle)
+    self.captureButton:setEnable(recording or countingDown
+        or (not killSwitch and not playing))
+    self.nameEntry:setEditable(not killSwitch and not recording and not countingDown)
     local cameraOn = playing and PZReplayPlayback.isCameraFollow()
         or (not playing and PZReplay.isCameraFollowDefault())
     self.cameraButton:setTitle(cameraOn and "Camera: On" or "Camera: Off")
     self.cameraButton:setEnable(not killSwitch)
     self.rateMinus:setEnable(not killSwitch and PZReplay.getSampleRate() > 20)
     self.ratePlus:setEnable(not killSwitch and PZReplay.getSampleRate() < 30)
+    self.countdownMinus:setEnable(not killSwitch
+        and PZReplay.getCountdownSeconds() > COUNTDOWN_MIN)
+    self.countdownPlus:setEnable(not killSwitch
+        and PZReplay.getCountdownSeconds() < COUNTDOWN_MAX)
     self.cameraDefaultButton:setEnable(not killSwitch)
     self.debugButton:setEnable(not killSwitch)
     self.killButton:setEnable(true)
@@ -335,7 +379,7 @@ function PZReplayPanel:refreshControls()
         transportLabel = "Pause"
     end
     self.playPauseButton:setTitle(transportLabel)
-    self.playPauseButton:setEnable(not killSwitch and not recording
+    self.playPauseButton:setEnable(not killSwitch and not recording and not countingDown
         and (playing or PZReplay.getLastReplayPath() ~= ""))
     self.restartButton:setEnable(playing)
     local speed = PZReplayPlayback and PZReplayPlayback.getSpeed() or 1
@@ -436,15 +480,33 @@ function PZReplayPanel:onTransportSeek(value)
     end
 end
 
+function PZReplayPanel:getName()
+    if not self.nameEntry then
+        return ""
+    end
+    return self.nameEntry:getText() or ""
+end
+
 function PZReplayPanel:onCapture()
-    if PZReplay.isRecording() then
+    if PZReplay.isCountingDown() then
+        PZReplay.cancelCountdown()
+        self.browser:setStatus("Countdown cancelled.")
+    elseif PZReplay.isRecording() then
         PZReplay.stopRecording()
         self.browser:refresh()
-        self.browser:setStatus("Recording stopped and saved.")
+        self.browser:setStatus(PZReplay.getLastRecordingResult())
     else
-        local started = PZReplay.startRecording("")
+        local started = PZReplay.startRecording(self:getName())
         if started then
-            self.browser:setStatus("Recording started.")
+            self.nameEntry:unfocus()
+        end
+        if started and PZReplay.isCountingDown() then
+            local name = PZReplay.getRecordingName()
+            self.browser:setStatus(string.format("Starting in %.0fs as %s",
+                PZReplay.getCountdownRemainingSeconds(), name))
+        elseif started then
+            self.browser:setStatus("Recording started as "
+                .. PZReplay.getRecordingName() .. ".")
         else
             self.browser:setStatus(PZReplay.getCaptureError())
         end
@@ -461,6 +523,18 @@ end
 function PZReplayPanel:onRateUp()
     local rate = math.min(30, math.floor(PZReplay.getSampleRate() + 1))
     PZReplay.setSampleRate(rate)
+    self:refreshControls()
+end
+
+function PZReplayPanel:onCountdownDown()
+    local seconds = math.max(COUNTDOWN_MIN, PZReplay.getCountdownSeconds() - 1)
+    PZReplay.setCountdownSeconds(seconds)
+    self:refreshControls()
+end
+
+function PZReplayPanel:onCountdownUp()
+    local seconds = math.min(COUNTDOWN_MAX, PZReplay.getCountdownSeconds() + 1)
+    PZReplay.setCountdownSeconds(seconds)
     self:refreshControls()
 end
 
@@ -539,17 +613,27 @@ function PZReplayPanel:onKeyRelease(key)
     end
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if key == Keyboard.KEY_ESCAPE or (panelKey and key == panelKey) then
+        if PZReplay.isCountingDown() then
+            PZReplay.cancelCountdown()
+            self.browser:setStatus("Countdown cancelled.")
+        end
         self:close()
         return true
     end
     return false
 end
 
+function PZReplayPanel:isEditingText()
+    return self.nameEntry ~= nil and self.nameEntry:getIsVisible()
+        and self.nameEntry:isFocused()
+end
+
 function PZReplayPanel:onKeyPress(key)
     if not self:getIsVisible() then
         return false
     end
-    if not self.rebindingAction and self.view == "replays" and self.browser then
+    if not self.rebindingAction and not self:isEditingText()
+        and self.view == "replays" and self.browser then
         if key == Keyboard.KEY_UP then
             self.browser:moveSelection(-1)
         elseif key == Keyboard.KEY_DOWN then
@@ -591,7 +675,19 @@ function PZReplayPanel:render()
     if self.view == "settings" then
         self:renderSettings()
     elseif self.view == "replays" then
+        self:renderName()
         self:renderTransport()
+    end
+end
+
+function PZReplayPanel:renderName()
+    local lineHeight = fontHeight(FONT)
+    local y = self.nameY + math.floor((self.nameHeight - lineHeight) / 2)
+    self:drawText("Name", PAD, y, 0.86, 0.86, 0.86, 1.0, FONT)
+    local hintX = self.nameEntry:getX() + self.nameEntry:getWidth() + 8
+    if hintX < self.width - PAD then
+        self:drawText(fitText("blank = auto name", self.width - PAD - hintX, FONT),
+            hintX, y, 0.58, 0.58, 0.58, 1.0, FONT)
     end
 end
 
@@ -612,22 +708,34 @@ function PZReplayPanel:renderStatus()
     local y = self.titleHeight + 4
     local killSwitch = PZReplay.isKillSwitchEnabled()
     local recording = PZReplay.isRecording()
+    local countingDown = PZReplay.isCountingDown()
     local playing = PZReplayPlayback and PZReplayPlayback.isActive()
 
     local captureText
     if killSwitch then
         captureText = "pz-replay is disabled by the kill switch."
-    elseif recording then
-        captureText = string.format("Recording  %s  %d frames  %.0f Hz configured  %.1f Hz actual",
-            formatTime(PZReplay.getRecordingSeconds()), PZReplay.getRecordedFrames(),
-            PZReplay.getConfiguredSampleRate(), PZReplay.getActualSampleRate())
-    else
-        captureText = string.format("Capture idle  %.0f Hz configured",
+    elseif countingDown then
+        captureText = string.format("Starting as %s in %.1fs  (%.0f Hz)",
+            PZReplay.getRecordingName(), PZReplay.getCountdownRemainingSeconds(),
             PZReplay.getSampleRate())
+    elseif recording then
+        captureText = string.format("Recording as %s  %s  %d frames  %.0f/%.1f Hz",
+            PZReplay.getRecordingName(), formatTime(PZReplay.getRecordingSeconds()),
+            PZReplay.getRecordedFrames(), PZReplay.getConfiguredSampleRate(),
+            PZReplay.getActualSampleRate())
+    else
+        local result = PZReplay.getLastRecordingResult()
+        if result ~= "" then
+            captureText = result
+        else
+            captureText = string.format("Capture idle  %.0f Hz configured",
+                PZReplay.getSampleRate())
+        end
     end
     self:drawText(fitText(captureText, self.width - PAD * 2, FONT), PAD, y,
-        recording and 1.0 or 0.86, recording and 0.55 or 0.86,
-        recording and 0.45 or 0.86, 1.0, FONT)
+        (recording or countingDown) and 1.0 or 0.86,
+        recording and 0.55 or (countingDown and 0.85 or 0.86),
+        recording and 0.45 or (countingDown and 0.4 or 0.86), 1.0, FONT)
     y = y + lineHeight
 
     local playbackText
@@ -700,6 +808,10 @@ function PZReplayPanel:renderSettings()
 
     self:drawText("Sample rate", labelX, self.rateRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
     self:drawText(self.rateValue or "", valueX, self.rateRowY + 5, 1, 1, 1, 1, FONT)
+
+    self:drawText("Countdown", labelX, self.countdownRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
+    self:drawText(self.countdownValue or "", valueX, self.countdownRowY + 5,
+        1, 1, 1, 1, FONT)
 
     self:drawText("Camera follow default", labelX, self.cameraDefaultRowY + 5,
         0.9, 0.9, 0.9, 1, FONT)

@@ -44,6 +44,108 @@ class ReplayControlStateTest {
     }
 
     @Test
+    void countdownStateTransitionsIntoRecording() {
+        ReplayControlState state = new ReplayControlState();
+        state.countdownStarted(3, "route");
+
+        assertTrue(state.isCountingDown());
+        assertEquals(3, state.getCountdownDurationSeconds());
+        assertEquals(3.0, state.getCountdownRemainingSeconds());
+        assertEquals("route", state.getRecordingName());
+        assertEquals("", state.getRecordingResult());
+
+        state.countdownProgress(1.5);
+        assertEquals(1.5, state.getCountdownRemainingSeconds());
+
+        state.countdownFinished();
+        assertFalse(state.isCountingDown());
+        assertEquals(0.0, state.getCountdownRemainingSeconds());
+
+        state.recordingStarted(30.0, "route");
+        assertTrue(state.isRecording());
+        assertFalse(state.isCountingDown());
+        assertEquals("route", state.getRecordingName());
+    }
+
+    @Test
+    void cancelledCountdownClearsNameAndReportsResult() {
+        ReplayControlState state = new ReplayControlState();
+        state.countdownStarted(3, "route");
+
+        state.countdownCancelled();
+
+        assertFalse(state.isCountingDown());
+        assertFalse(state.isRecording());
+        assertEquals("", state.getRecordingName());
+        assertEquals("Countdown cancelled.", state.getRecordingResult());
+    }
+
+    @Test
+    void recordingResultVersionAdvancesForEveryResultEvent() {
+        ReplayControlState state = new ReplayControlState();
+        long version = state.getRecordingResultVersion();
+
+        state.countdownStarted(3, "route");
+        long started = state.getRecordingResultVersion();
+        assertTrue(started > version);
+
+        state.countdownProgress(1.0);
+        assertEquals(started, state.getRecordingResultVersion());
+
+        state.countdownCancelled();
+        long cancelled = state.getRecordingResultVersion();
+        assertTrue(cancelled > started);
+
+        state.countdownStarted(3, "route");
+        state.countdownCancelled();
+        long cancelledAgain = state.getRecordingResultVersion();
+        assertTrue(cancelledAgain > cancelled);
+        assertEquals("Countdown cancelled.", state.getRecordingResult());
+
+        state.recordingStarted(30.0, "route");
+        long recording = state.getRecordingResultVersion();
+        assertTrue(recording > cancelledAgain);
+
+        state.recordingStopped("/tmp/pz-replay/route.pzrp.gz", "frames=3", "");
+        long stopped = state.getRecordingResultVersion();
+        assertTrue(stopped > recording);
+
+        state.captureFailed("no frames");
+        assertTrue(state.getRecordingResultVersion() > stopped);
+    }
+
+    @Test
+    void recordingResultReportsSavedFailedAndStoppedOutcomes() {
+        ReplayControlState state = new ReplayControlState();
+        state.recordingStarted(30.0, "route");
+        state.recordingStopped("/tmp/pz-replay/route.pzrp.gz", "frames=3", "");
+
+        assertEquals("Saved route.pzrp.gz", state.getRecordingResult());
+        assertEquals("", state.getCaptureError());
+
+        state.recordingStarted(30.0, "route");
+        state.recordingStopped("", "", "no frames");
+        assertEquals("Recording failed: no frames", state.getRecordingResult());
+
+        state.recordingStarted(30.0, "route");
+        state.recordingStopped("", "", "");
+        assertEquals("Recording stopped.", state.getRecordingResult());
+    }
+
+    @Test
+    void captureFailureClearsCountdownAndReportsFailure() {
+        ReplayControlState state = new ReplayControlState();
+        state.countdownStarted(3, "route");
+
+        state.captureFailed("no local player is loaded");
+
+        assertFalse(state.isCountingDown());
+        assertFalse(state.isRecording());
+        assertEquals("Recording failed: no local player is loaded",
+            state.getRecordingResult());
+    }
+
+    @Test
     void playbackCannotStartWhileRecordingOrPlaying() {
         ReplayControlState state = new ReplayControlState();
         state.recordingStarted(30.0);

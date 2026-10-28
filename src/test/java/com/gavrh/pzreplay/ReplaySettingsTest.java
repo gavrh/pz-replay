@@ -22,6 +22,7 @@ class ReplaySettingsTest {
         ReplaySettings settings = new ReplaySettings();
 
         assertEquals(CaptureSession.DEFAULT_SAMPLE_RATE_HZ, settings.getSampleRate());
+        assertEquals(RecordingCountdown.DEFAULT_SECONDS, settings.getCountdownSeconds());
         assertFalse(settings.isCameraFollowDefault());
         assertFalse(settings.isDebugControls());
         assertFalse(settings.isKillSwitch());
@@ -60,10 +61,46 @@ class ReplaySettingsTest {
     }
 
     @Test
+    void countdownAcceptsZeroThroughTenAndRejectsOutside() {
+        ReplaySettings settings = new ReplaySettings();
+
+        assertTrue(settings.setCountdownSeconds(0));
+        assertEquals(0, settings.getCountdownSeconds());
+        assertTrue(settings.setCountdownSeconds(10));
+        assertEquals(10, settings.getCountdownSeconds());
+        assertTrue(settings.setCountdownSeconds(4));
+        assertEquals(4, settings.getCountdownSeconds());
+
+        assertFalse(settings.setCountdownSeconds(-1));
+        assertFalse(settings.setCountdownSeconds(11));
+        assertEquals(4, settings.getCountdownSeconds());
+    }
+
+    @Test
+    void malformedCountdownFallsBackToDefault() throws Exception {
+        Path path = tempDir.resolve("countdown.properties");
+        Files.writeString(path, "countdown_seconds=abc\n");
+        assertEquals(RecordingCountdown.DEFAULT_SECONDS,
+            ReplaySettings.load(path).getCountdownSeconds());
+
+        Files.writeString(path, "countdown_seconds=99\n");
+        assertEquals(RecordingCountdown.DEFAULT_SECONDS,
+            ReplaySettings.load(path).getCountdownSeconds());
+
+        Files.writeString(path, "countdown_seconds=-1\n");
+        assertEquals(RecordingCountdown.DEFAULT_SECONDS,
+            ReplaySettings.load(path).getCountdownSeconds());
+
+        Files.writeString(path, "countdown_seconds=0\n");
+        assertEquals(0, ReplaySettings.load(path).getCountdownSeconds());
+    }
+
+    @Test
     void persistenceRoundTripsAllSettings() throws Exception {
         Path path = tempDir.resolve("pz-replay/settings.properties");
         ReplaySettings settings = new ReplaySettings();
         settings.setSampleRate(20.0);
+        settings.setCountdownSeconds(7);
         settings.setCameraFollowDefault(true);
         settings.setDebugControls(true);
         settings.setKillSwitch(true);
@@ -73,6 +110,7 @@ class ReplaySettingsTest {
         ReplaySettings loaded = ReplaySettings.load(path);
 
         assertEquals(20.0, loaded.getSampleRate());
+        assertEquals(7, loaded.getCountdownSeconds());
         assertTrue(loaded.isCameraFollowDefault());
         assertTrue(loaded.isDebugControls());
         assertTrue(loaded.isKillSwitch());

@@ -25,6 +25,8 @@ final class ReplayRecorder {
     private String lastError;
     private String lastReplayPath;
     private String lastReplaySummary;
+    private String captureResultPath;
+    private String captureResultSummary;
 
     private ReplayRecorder() {
     }
@@ -50,7 +52,18 @@ final class ReplayRecorder {
         }
         session = startedSession;
 
-        captureName = normalizeName(name);
+        String resolvedName = RecordingNames.unique(ReplayStorage.directory(),
+            RecordingNames.resolve(name, CaptureMetadataFactory.newCaptureId()));
+        if (resolvedName.isEmpty()) {
+            lastError = "recording name is unavailable";
+            System.out.println("[pz-replay] capture start failed: " + lastError);
+            return false;
+        }
+        if (name != null && !name.isBlank() && !resolvedName.equals(name.trim())) {
+            System.out.println("[pz-replay] capture name resolved requested=" + name.trim()
+                + " using=" + resolvedName);
+        }
+        captureName = resolvedName;
         tickCounter = 0;
         captureCostNanos = 0;
         captureCostMaxNanos = 0;
@@ -59,6 +72,8 @@ final class ReplayRecorder {
         capturePaused = false;
         captureInVehicle = false;
         lastError = null;
+        captureResultPath = null;
+        captureResultSummary = null;
 
         long nowMillis = System.currentTimeMillis();
         session.start(nowMillis);
@@ -135,6 +150,10 @@ final class ReplayRecorder {
         return session.isRecording();
     }
 
+    String getCaptureName() {
+        return captureName == null ? "" : captureName;
+    }
+
     String getStatus() {
         CaptureSession.Summary summary = session.status();
         StringBuilder builder = new StringBuilder(session.isRecording() ? "recording" : "idle")
@@ -152,6 +171,14 @@ final class ReplayRecorder {
 
     String getLastReplaySummary() {
         return lastReplaySummary == null ? "" : lastReplaySummary;
+    }
+
+    String getCaptureResultPath() {
+        return captureResultPath == null ? "" : captureResultPath;
+    }
+
+    String getCaptureResultSummary() {
+        return captureResultSummary == null ? "" : captureResultSummary;
     }
 
     CaptureSession.Summary getSummary() {
@@ -209,6 +236,18 @@ final class ReplayRecorder {
         long durationMillis = Math.round(summary.durationSeconds() * 1000.0);
         ReplayMetadata finalMetadata = metadata.withEnd(
             metadata.startTimeMillis() + durationMillis);
+        String resolvedName = RecordingNames.unique(ReplayStorage.directory(), captureName);
+        if (resolvedName.isEmpty()) {
+            lastError = "recording name is unavailable";
+            System.out.println("[pz-replay] recording failed name=" + captureName
+                + " error=" + lastError);
+            return;
+        }
+        if (!resolvedName.equals(captureName)) {
+            System.out.println("[pz-replay] capture name collision requested=" + captureName
+                + " using=" + resolvedName);
+            captureName = resolvedName;
+        }
         Path path = ReplayStorage.pathFor(captureName);
         boolean written = false;
         try {
@@ -217,12 +256,15 @@ final class ReplayRecorder {
             ReplayData data = ReplayReader.read(path);
             lastReplayPath = path.toString();
             lastReplaySummary = ReplayReader.summary(data);
-            System.out.println("[pz-replay] replay written path=" + lastReplayPath
-                + " bytes=" + Files.size(path) + " " + lastReplaySummary);
+            captureResultPath = lastReplayPath;
+            captureResultSummary = lastReplaySummary;
+            System.out.println("[pz-replay] recording saved name=" + captureName
+                + " path=" + lastReplayPath + " bytes=" + Files.size(path)
+                + " " + lastReplaySummary);
         } catch (IOException | ReplayFormatException exception) {
             lastError = "replay write failed: " + exception.getMessage();
-            System.out.println("[pz-replay] replay write failed path=" + path
-                + " error=" + lastError);
+            System.out.println("[pz-replay] recording failed name=" + captureName
+                + " path=" + path + " error=" + lastError);
             if (written) {
                 try {
                     Files.deleteIfExists(path);
@@ -277,12 +319,6 @@ final class ReplayRecorder {
         } catch (RuntimeException exception) {
             return 0f;
         }
-    }
-
-    private static String normalizeName(String name) {
-        String trimmed = name == null ? "" : name.trim();
-        String sanitized = trimmed.replaceAll("[^A-Za-z0-9._-]+", "_");
-        return sanitized.isEmpty() ? CaptureMetadataFactory.newCaptureId() : sanitized;
     }
 
     private static ReplaySample.Locomotion locomotion(boolean sprinting, boolean running,
