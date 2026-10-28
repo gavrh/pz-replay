@@ -32,6 +32,7 @@ public final class ReplaySettings {
 
     private final Map<String, Integer> keys = new LinkedHashMap<>();
     private double sampleRateHz = CaptureSession.DEFAULT_SAMPLE_RATE_HZ;
+    private int countdownSeconds = RecordingCountdown.DEFAULT_SECONDS;
     private boolean cameraFollowDefault;
     private boolean debugControls;
     private boolean killSwitch;
@@ -70,6 +71,11 @@ public final class ReplaySettings {
         if (isValidSampleRate(rate)) {
             settings.sampleRateHz = rate;
         }
+        int countdown = parseInt(values.get("countdown_seconds"),
+            RecordingCountdown.DEFAULT_SECONDS);
+        if (RecordingCountdown.isValidSeconds(countdown)) {
+            settings.countdownSeconds = countdown;
+        }
         settings.cameraFollowDefault = parseBoolean(values.get("camera_follow_default"));
         settings.debugControls = parseBoolean(values.get("debug_controls"));
         settings.killSwitch = parseBoolean(values.get("kill_switch"));
@@ -92,6 +98,7 @@ public final class ReplaySettings {
         StringBuilder text = new StringBuilder();
         text.append("sample_rate_hz=")
             .append(String.format(Locale.ROOT, "%.2f", sampleRateHz)).append('\n');
+        text.append("countdown_seconds=").append(countdownSeconds).append('\n');
         text.append("camera_follow_default=").append(cameraFollowDefault).append('\n');
         text.append("debug_controls=").append(debugControls).append('\n');
         text.append("kill_switch=").append(killSwitch).append('\n');
@@ -117,6 +124,18 @@ public final class ReplaySettings {
 
     public double getSampleRate() {
         return sampleRateHz;
+    }
+
+    public boolean setCountdownSeconds(int seconds) {
+        if (!RecordingCountdown.isValidSeconds(seconds)) {
+            return false;
+        }
+        countdownSeconds = seconds;
+        return true;
+    }
+
+    public int getCountdownSeconds() {
+        return countdownSeconds;
     }
 
     public boolean isCameraFollowDefault() {
