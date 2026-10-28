@@ -2,6 +2,7 @@ require "ISUI/ISPanel"
 require "ISUI/ISButton"
 require "ISUI/ISLabel"
 require "PZReplayBrowser"
+require "PZReplayLoad"
 
 if PZReplayLibrary then return end
 
@@ -148,6 +149,13 @@ function PZReplayLibrary:createChildren()
     self.closeButton:instantiate()
     self:addChild(self.closeButton)
 
+    local playWidth = getTextManager():MeasureStringX(FONT, "Play") + 24
+    self.playButton = ISButton:new(self.closeButton:getX() - 6 - playWidth, 4, playWidth,
+        TITLE_HEIGHT - 8, "Play", self, PZReplayLibrary.onPlay)
+    self.playButton:initialise()
+    self.playButton:instantiate()
+    self:addChild(self.playButton)
+
     local hintHeight = fontHeight(FONT) + 8
     local browserY = TITLE_HEIGHT + PAD
     local browserHeight = self.height - browserY - hintHeight - PAD
@@ -160,6 +168,7 @@ function PZReplayLibrary:createChildren()
 end
 
 function PZReplayLibrary:open()
+    self.loadHidden = false
     self.browser:refresh()
     self:setVisible(true)
     self:setCapture(true)
@@ -167,11 +176,13 @@ function PZReplayLibrary:open()
     self:setWantKeyEvents(true)
     self:setWantMouseEvents(true)
     self:bringToTop()
+    self:updatePlayButton()
 end
 
 function PZReplayLibrary:close()
     local callback = self.onClosed
     self.onClosed = nil
+    self.loadHidden = false
     self:setCapture(false)
     self:setWantKeyEvents(false)
     self:setWantMouseEvents(false)
@@ -182,7 +193,84 @@ function PZReplayLibrary:close()
 end
 
 function PZReplayLibrary:onClose()
+    if PZReplayLoad and PZReplayLoad.isPending() then
+        PZReplayLoad.cancel("library closed")
+    end
     self:close()
+end
+
+function PZReplayLibrary:isHiddenForLoad()
+    return self.loadHidden == true
+end
+
+function PZReplayLibrary:hideForLoad()
+    self.loadHidden = true
+    self:setCapture(false)
+    self:setWantKeyEvents(false)
+    self:setWantMouseEvents(false)
+    self:setVisible(false)
+end
+
+function PZReplayLibrary:restoreAfterLoadFailure(message)
+    self.loadHidden = false
+    self:setVisible(true)
+    self:setCapture(true)
+    self:setAlwaysOnTop(true)
+    self:setWantKeyEvents(true)
+    self:setWantMouseEvents(true)
+    self:bringToTop()
+    self.browser:setStatus(message or "The replay could not be loaded.", true)
+    self:updatePlayButton()
+end
+
+function PZReplayLibrary:closeCancelledLoad()
+    if not self.loadHidden then
+        return
+    end
+    self:close()
+end
+
+function PZReplayLibrary:playSelected()
+    local entry = self.browser and self.browser:getSelected()
+    if not entry then
+        self.browser:setStatus("Select a replay first.", true)
+        return false, "Select a replay first."
+    end
+    if not entry.valid then
+        local message = "Cannot play: " .. entry.error
+        self.browser:setStatus(message, true)
+        return false, message
+    end
+    if PZReplayLoad.isPending() then
+        local message = "A replay load is already in progress."
+        self.browser:setStatus(message, true)
+        return false, message
+    end
+    local started, message = PZReplayLoad.load(entry.path, self)
+    if not started then
+        self.browser:setStatus(message or "The replay could not be loaded.", true)
+    end
+    self:updatePlayButton()
+    return started, message
+end
+
+function PZReplayLibrary:onPlay()
+    self:playSelected()
+end
+
+function PZReplayLibrary:updatePlayButton()
+    if not self.playButton then
+        return
+    end
+    local entry = self.browser and self.browser:getSelected()
+    local dialogOpen = self.browser and self.browser:isDialogOpen()
+    local pending = PZReplayLoad and PZReplayLoad.isPending()
+    self.playButton:setEnable(entry ~= nil and entry.valid and not dialogOpen
+        and not pending)
+end
+
+function PZReplayLibrary:update()
+    self:updatePlayButton()
 end
 
 function PZReplayLibrary:onKeyPress(key)
@@ -203,7 +291,7 @@ function PZReplayLibrary:onKeyPress(key)
         elseif key == Keyboard.KEY_END then
             self.browser:selectIndex(self.browser.list.count)
         elseif key == Keyboard.KEY_RETURN then
-            self.browser:playSelected()
+            self:playSelected()
         end
     end
     return true
@@ -237,7 +325,7 @@ function PZReplayLibrary:prerender()
 end
 
 function PZReplayLibrary:render()
-    local text = "Browse and manage replays. Playback requires a loaded save; open Replays from the in-game pause menu."
+    local text = "Select a replay and choose Play to load its recorded save."
     self:drawText(fitText(text, self.width - PAD * 2, FONT), PAD,
         self.height - PAD - fontHeight(FONT), 0.82, 0.82, 0.82, 1.0, FONT)
 end
