@@ -74,6 +74,18 @@ local function failAfterLoad(player, message)
     notify(player, message)
 end
 
+local function mapMatches(expected, loaded)
+    if expected == "" then
+        return true
+    end
+    for part in string.gmatch(expected, "[^;]+") do
+        if part:match("^%s*(.-)%s*$") == loaded then
+            return true
+        end
+    end
+    return false
+end
+
 local function worldMismatch(player)
     local expectedSave = api().getSaveName()
     local expectedMode = api().getGameMode()
@@ -93,7 +105,7 @@ local function worldMismatch(player)
         return "The loaded game mode does not match the replay."
     end
     local loadedMap = world:getMap() or ""
-    if expectedMap ~= "" and loadedMap ~= expectedMap then
+    if not mapMatches(expectedMap, loadedMap) then
         return "The loaded map does not match the replay."
     end
     local loadedPlayer = player.getFullName and player:getFullName() or ""
