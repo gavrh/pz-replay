@@ -38,6 +38,7 @@ Events.OnMainMenuEnter.Add(reportWhenReady)
 PZReplayUi = PZReplayUi or {}
 
 local ui = PZReplayUi
+local RESULT_VISIBLE_MILLIS = 4000
 
 local function isDebugEnabled()
     return PZReplay
@@ -118,11 +119,27 @@ function ui.updateIndicator()
     end
     local killSwitch = PZReplay and PZReplay.isKillSwitchEnabled()
     local recording = PZReplay and PZReplay.isRecording()
+    local countingDown = PZReplay and PZReplay.isCountingDown()
     local playing = PZReplayPlayback and PZReplayPlayback.isActive()
     local panelOpen = ui.panel ~= nil and ui.panel:getIsVisible()
+
+    local result = PZReplay and PZReplay.getLastRecordingResult
+        and PZReplay.getLastRecordingResult() or ""
+    if result ~= ui.resultText then
+        ui.resultText = result
+        ui.resultUntil = result ~= "" and getTimestampMs() + RESULT_VISIBLE_MILLIS or 0
+    end
+    local showingResult = ui.resultText ~= "" and getTimestampMs() < ui.resultUntil
+
     local active = not killSwitch and not panelOpen and getPlayer() ~= nil
-        and (recording or playing)
+        and (recording or countingDown or playing or showingResult)
     ui.hud:setVisible(active)
+end
+
+local function cancelCountdown()
+    if PZReplay and PZReplay.isCountingDown and PZReplay.isCountingDown() then
+        PZReplay.cancelCountdown()
+    end
 end
 
 local function stopCapture()
@@ -132,7 +149,11 @@ local function stopCapture()
 end
 
 local function stopCaptureOnDeath()
-    if PZReplay and PZReplay.isRecording and PZReplay.isRecording() then
+    if not PZReplay or not PZReplay.stopRecordingOnDeath then
+        return
+    end
+    local countingDown = PZReplay.isCountingDown and PZReplay.isCountingDown()
+    if PZReplay.isRecording() or countingDown then
         PZReplay.stopRecordingOnDeath()
     end
 end
@@ -156,6 +177,7 @@ local function cleanupPlayback()
 end
 
 local function cleanupAll()
+    cancelCountdown()
     stopCapture()
     cleanupPlayback()
     if ui.panel then
@@ -170,23 +192,38 @@ local function cleanupAll()
 end
 
 local function toggleCapture()
-    if PZReplay.isRecording() then
+    if PZReplay.isCountingDown() then
+        PZReplay.cancelCountdown()
+        if ui.panel and ui.panel:getIsVisible() then
+            ui.panel.browser:setStatus("Countdown cancelled.")
+        end
+    elseif PZReplay.isRecording() then
         PZReplay.stopRecording()
         if ui.panel and ui.panel:getIsVisible() then
             ui.panel.browser:refresh()
-            ui.panel.browser:setStatus("Recording stopped and saved.")
+            ui.panel.browser:setStatus(PZReplay.getLastRecordingResult())
         end
     else
         local started = PZReplay.startRecording("")
         if ui.panel and ui.panel:getIsVisible() then
-            ui.panel.browser:setStatus(started and "Recording started."
-                or PZReplay.getCaptureError())
+            local status
+            if started and PZReplay.isCountingDown() then
+                status = "Countdown started."
+            elseif started then
+                status = "Recording started."
+            else
+                status = PZReplay.getCaptureError()
+            end
+            ui.panel.browser:setStatus(status)
         end
     end
     ui.refreshPanel()
 end
 
 local function togglePlayback()
+    if PZReplay.isCountingDown() then
+        return
+    end
     if PZReplayPlayback.isActive() then
         PZReplayPlayback.stop()
         ui.refreshPanel()
@@ -223,6 +260,9 @@ function ui.handleKey(key)
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if ui.panel and ui.panel:getIsVisible() then
         if ui.panel.rebindingAction then
+            return false
+        end
+        if ui.panel.isEditingText and ui.panel:isEditingText() then
             return false
         end
         if panelKey and key == panelKey then
@@ -269,6 +309,13 @@ Events.OnTick.Add(function()
     ui.updateIndicator()
 end)
 
+Events.OnTickEvenPaused.Add(function()
+    if PZReplay and PZReplay.isCountingDown and PZReplay.isCountingDown()
+        and PZReplay.countdownTick then
+        PZReplay.countdownTick()
+    end
+end)
+
 Events.OnKeyStartPressed.Add(function(key)
     ui.handleKey(key)
 end)
@@ -282,9 +329,11 @@ end)
 
 Events.OnPlayerDeath.Add(stopCaptureOnDeath)
 Events.OnPlayerDeath.Add(cleanupPlayback)
+Events.OnSave.Add(cancelCountdown)
 Events.OnSave.Add(cleanupPlayback)
 Events.OnMainMenuEnter.Add(cleanupAll)
 
 PZReplayUi.toggleCapture = toggleCapture
 PZReplayUi.togglePlayback = togglePlayback
 PZReplayUi.toggleCameraFollow = toggleCameraFollow
+PZReplayUi.cancelCountdown = cancelCountdown

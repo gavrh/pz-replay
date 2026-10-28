@@ -3,11 +3,16 @@ package com.gavrh.pzreplay;
 import java.util.List;
 import me.zed_0xff.zombie_buddy.Exposer;
 import se.krka.kahlua.integration.annotations.LuaMethod;
+import zombie.GameTime;
+import zombie.characters.IsoPlayer;
 import zombie.input.GameKeyboard;
 
 @Exposer.LuaClass(name = "PZReplay")
 public final class PZReplayLua {
     private static final ReplayControlState STATE = new ReplayControlState();
+    private static final RecordingCountdown COUNTDOWN = new RecordingCountdown();
+    private static String countdownName = "";
+    private static boolean countdownPaused;
 
     public PZReplayLua() {
     }
@@ -23,29 +28,39 @@ public final class PZReplayLua {
 
     public static boolean startRecording(String name) {
         ReplaySettings settings = ReplaySettingsStore.get();
-        if (settings.isKillSwitch()) {
-            failCapture("kill switch is enabled");
+        if (COUNTDOWN.isRunning() || ReplayRecorder.INSTANCE.isRecording()) {
             return false;
         }
-        if (ReplayPlaybackApi.isPlaying()) {
-            failCapture("stop playback before recording");
-            return false;
-        }
-        if (ReplayRecorder.INSTANCE.isRecording()) {
+        String blocker = startBlocker(settings);
+        if (blocker != null) {
+            failCapture(blocker);
             return false;
         }
 
-        boolean started = ReplayRecorder.INSTANCE.start(name, settings.getSampleRate());
-        if (started) {
-            STATE.recordingStarted(settings.getSampleRate());
-        } else {
-            String error = ReplayRecorder.INSTANCE.getLastError();
-            failCapture(error.isBlank() ? "capture could not start" : error);
+        String resolvedName = resolveRecordingName(name);
+        if (resolvedName.isEmpty()) {
+            failCapture("recording name is unavailable");
+            return false;
         }
-        return started;
+        int countdownSeconds = settings.getCountdownSeconds();
+        if (countdownSeconds == 0) {
+            return startCapture(resolvedName, settings);
+        }
+        if (!COUNTDOWN.start(countdownSeconds, System.currentTimeMillis())) {
+            return false;
+        }
+        countdownName = resolvedName;
+        countdownPaused = false;
+        STATE.countdownStarted(countdownSeconds, resolvedName);
+        System.out.println("[pz-replay] countdown started name=" + resolvedName
+            + " seconds=" + countdownSeconds);
+        return true;
     }
 
     public static boolean stopRecording() {
+        if (COUNTDOWN.isRunning()) {
+            return cancelCountdownInternal("requested");
+        }
         boolean stopped = ReplayRecorder.INSTANCE.stop();
         if (stopped) {
             finishCapture();
@@ -54,6 +69,9 @@ public final class PZReplayLua {
     }
 
     public static boolean stopRecordingOnDeath() {
+        if (COUNTDOWN.isRunning()) {
+            return cancelCountdownInternal("player died");
+        }
         boolean stopped = ReplayRecorder.INSTANCE.stop(CaptureSession.StopReason.PLAYER_DEAD);
         if (stopped) {
             finishCapture();
@@ -61,10 +79,39 @@ public final class PZReplayLua {
         return stopped;
     }
 
+    public static boolean cancelCountdown() {
+        return cancelCountdownInternal("requested");
+    }
+
+    public static boolean isCountingDown() {
+        return COUNTDOWN.isRunning();
+    }
+
+    public static double getCountdownRemainingSeconds() {
+        return STATE.getCountdownRemainingSeconds();
+    }
+
+    public static int getCountdownDurationSeconds() {
+        return STATE.getCountdownDurationSeconds();
+    }
+
+    public static String getRecordingName() {
+        return COUNTDOWN.isRunning() ? countdownName : ReplayRecorder.INSTANCE.getCaptureName();
+    }
+
+    public static String getLastRecordingResult() {
+        return STATE.getRecordingResult();
+    }
+
     public static void tick() {
+        tickCountdown();
         ReplayRecorder.INSTANCE.tick();
         syncRecordingState();
         ReplayPlaybackApi.tick();
+    }
+
+    public static void countdownTick() {
+        tickCountdown();
     }
 
     public static void recordTick() {
@@ -120,6 +167,17 @@ public final class PZReplayLua {
         return ReplaySettingsStore.get().getSampleRate();
     }
 
+    public static int getCountdownSeconds() {
+        return ReplaySettingsStore.get().getCountdownSeconds();
+    }
+
+    public static boolean setCountdownSeconds(int seconds) {
+        if (!ReplaySettingsStore.get().setCountdownSeconds(seconds)) {
+            return false;
+        }
+        return ReplaySettingsStore.save();
+    }
+
     public static boolean setSampleRate(double sampleRateHz) {
         if (!ReplaySettingsStore.get().setSampleRate(sampleRateHz)) {
             return false;
@@ -155,6 +213,7 @@ public final class PZReplayLua {
             return true;
         }
         if (enabled) {
+            cancelCountdownInternal("kill switch is enabled");
             if (ReplayRecorder.INSTANCE.isRecording()) {
                 stopRecording();
             }
@@ -211,6 +270,101 @@ public final class PZReplayLua {
         return STATE;
     }
 
+    private static void tickCountdown() {
+        if (!COUNTDOWN.isRunning()) {
+            return;
+        }
+        ReplaySettings settings = ReplaySettingsStore.get();
+        if (settings.isKillSwitch()) {
+            cancelCountdownInternal("kill switch is enabled");
+            return;
+        }
+        boolean paused = GameTime.isGamePaused();
+        if (paused != countdownPaused) {
+            countdownPaused = paused;
+            System.out.println("[pz-replay] countdown " + (paused ? "paused" : "resumed"));
+        }
+        boolean finished = COUNTDOWN.tick(System.currentTimeMillis(), paused);
+        if (!finished) {
+            STATE.countdownProgress(COUNTDOWN.getRemainingSeconds());
+            return;
+        }
+
+        String name = countdownName;
+        countdownName = "";
+        countdownPaused = false;
+        STATE.countdownFinished();
+        if (ReplayRecorder.INSTANCE.isRecording()) {
+            failCapture("recording is already active");
+            return;
+        }
+        String blocker = startBlocker(settings);
+        if (blocker != null) {
+            failCapture(blocker);
+            return;
+        }
+        System.out.println("[pz-replay] countdown finished name=" + name);
+        startCapture(name, settings);
+    }
+
+    private static String startBlocker(ReplaySettings settings) {
+        if (settings.isKillSwitch()) {
+            return "kill switch is enabled";
+        }
+        if (ReplayPlaybackApi.isPlaying()) {
+            return "stop playback before recording";
+        }
+        return playerBlocker();
+    }
+
+    private static String playerBlocker() {
+        IsoPlayer player = IsoPlayer.getInstance();
+        if (player == null) {
+            return "no local player is loaded";
+        }
+        if (player instanceof ReplayGhost) {
+            return "ghost is the global player";
+        }
+        if (!player.isLocalPlayer()) {
+            return "no local player is loaded";
+        }
+        if (player.isDead()) {
+            return "player is dead";
+        }
+        return null;
+    }
+
+    private static String resolveRecordingName(String name) {
+        String base = RecordingNames.resolve(name, CaptureMetadataFactory.newCaptureId());
+        return RecordingNames.unique(ReplayStorage.directory(), base);
+    }
+
+    private static boolean startCapture(String name, ReplaySettings settings) {
+        boolean started = ReplayRecorder.INSTANCE.start(name, settings.getSampleRate());
+        if (started) {
+            STATE.recordingStarted(settings.getSampleRate(),
+                ReplayRecorder.INSTANCE.getCaptureName());
+        } else {
+            String error = ReplayRecorder.INSTANCE.getLastError();
+            failCapture(error.isBlank() ? "capture could not start" : error);
+        }
+        return started;
+    }
+
+    private static boolean cancelCountdownInternal(String reason) {
+        if (!COUNTDOWN.isRunning()) {
+            return false;
+        }
+        String name = countdownName;
+        COUNTDOWN.cancel();
+        countdownName = "";
+        countdownPaused = false;
+        STATE.countdownCancelled();
+        System.out.println("[pz-replay] countdown cancelled name=" + name
+            + " reason=" + reason + " path=none frames=0");
+        return true;
+    }
+
     private static void syncRecordingState() {
         if (ReplayRecorder.INSTANCE.isRecording()) {
             CaptureSession.Summary summary = ReplayRecorder.INSTANCE.getSummary();
@@ -227,8 +381,8 @@ public final class PZReplayLua {
         if (error.isBlank() && summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
             error = "no frames";
         }
-        STATE.recordingStopped(ReplayRecorder.INSTANCE.getLastReplayPath(),
-            ReplayRecorder.INSTANCE.getLastReplaySummary(), error);
+        STATE.recordingStopped(ReplayRecorder.INSTANCE.getCaptureResultPath(),
+            ReplayRecorder.INSTANCE.getCaptureResultSummary(), error);
     }
 
     private static void failCapture(String message) {
