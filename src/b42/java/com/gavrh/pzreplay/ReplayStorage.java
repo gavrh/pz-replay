@@ -8,6 +8,7 @@ final class ReplayStorage {
     private static final String DIRECTORY = "pz-replay";
     private static final String EXTENSION = ".pzrp.gz";
     private static final String SETTINGS_FILE = "settings.properties";
+    private static final String FAVORITES_FILE = "favorites.properties";
 
     private ReplayStorage() {
     }
@@ -22,5 +23,9 @@ final class ReplayStorage {
 
     static Path settingsPath() {
         return directory().resolve(SETTINGS_FILE);
+    }
+
+    static Path favoritesPath() {
+        return directory().resolve(FAVORITES_FILE);
     }
 }
