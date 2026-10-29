@@ -17,8 +17,13 @@ public final class ReplayTimeline {
         float z,
         float facing,
         ReplaySample.Locomotion locomotion,
-        ReplaySample.Stance stance
+        ReplaySample.Stance stance,
+        boolean aiming,
+        ReplayEquipment equipment
     ) {
+        public Sample {
+            equipment = equipment == null ? ReplayEquipment.none() : equipment;
+        }
     }
 
     public static final double MIN_SPEED = 0.25;
@@ -27,19 +32,28 @@ public final class ReplayTimeline {
     private final List<ReplaySample> frames;
     private final double[] relativeTimes;
     private final double duration;
+    private final ReplayEquipment equipment;
 
     private State state = State.STOPPED;
     private double elapsed;
     private double speed = 1.0;
 
     public ReplayTimeline(ReplayData data) throws ReplayFormatException {
-        this(data == null ? null : data.frames());
+        this(data == null ? null : data.frames(),
+            data == null || data.metadata() == null
+                ? ReplayEquipment.none() : data.metadata().equipment());
     }
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
+        this(frames, ReplayEquipment.none());
+    }
+
+    private ReplayTimeline(List<ReplaySample> frames, ReplayEquipment equipment)
+        throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
+        this.equipment = equipment == null ? ReplayEquipment.none() : equipment;
         List<ReplaySample> validated = new ArrayList<>(frames);
         if (validated.isEmpty()) {
             this.frames = List.of();
@@ -199,7 +213,9 @@ public final class ReplayTimeline {
             MotionMath.lerp(start.z(), end.z(), alpha),
             MotionMath.interpolateFacing(start.angle(), end.angle(), alpha),
             start.locomotion(),
-            start.stance()
+            start.stance(),
+            start.aiming(),
+            equipment
         );
     }
 
@@ -239,6 +255,10 @@ public final class ReplayTimeline {
         return frames.size();
     }
 
+    public ReplayEquipment getEquipment() {
+        return equipment;
+    }
+
     private int lastFrameAtOrBefore(double target) {
         int low = 0;
         int high = relativeTimes.length;
@@ -262,7 +282,9 @@ public final class ReplayTimeline {
             frame.z(),
             MotionMath.normalizeFacing(frame.angle()),
             frame.locomotion(),
-            frame.stance()
+            frame.stance(),
+            frame.aiming(),
+            equipment
         );
     }
 
