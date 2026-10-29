@@ -82,11 +82,11 @@ public final class ReplayPlaybackApi {
                 addWarning(warnings, "appearance data is corrupt or incomplete");
             }
         }
-        logWarnings(requested, warnings);
         System.out.println("[pz-replay] replay loaded path=" + requested + " "
             + ReplayReader.summary(data));
 
-        GhostMotionController loadedController = new GhostMotionController(loaded);
+        GhostMotionController loadedController = new GhostMotionController(loaded,
+            warning -> addWarning(warnings, warning));
         ReplayTimeline.Sample first = loaded.sampleAt(0.0);
         ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
             first.z(), first.facing(), appearance, warning -> addWarning(warnings, warning));
@@ -99,6 +99,7 @@ public final class ReplayPlaybackApi {
             fail(requested, "ghost motion start failed");
             return false;
         }
+        logWarnings(requested, warnings);
 
         ReplayControlState state = PZReplayLua.state();
         if (!state.playbackStarted(loaded.getDuration())) {
@@ -123,6 +124,7 @@ public final class ReplayPlaybackApi {
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
+            + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
         return true;
     }
