@@ -2,19 +2,35 @@ require "ISUI/ISPanel"
 require "ISUI/ISButton"
 require "ISUI/ISScrollingListBox"
 require "ISUI/ISTextEntryBox"
+require "PZReplayText"
 
 if PZReplayBrowser then return end
+
+local T = PZReplayText
 
 PZReplayBrowser = ISPanel:derive("PZReplayBrowser")
 
 local FONT = UIFont.Small
 local PAD = 8
 local SORT_FIELDS = { "date", "name", "duration" }
-local SORT_LABELS = { date = "Date", name = "Name", duration = "Duration" }
+local SORT_LABELS = {
+    date = { key = "UI_pzreplay_browser_sort_date", fallback = "Date" },
+    name = { key = "UI_pzreplay_browser_sort_name", fallback = "Name" },
+    duration = { key = "UI_pzreplay_browser_sort_duration", fallback = "Duration" }
+}
 local SORT_DIRECTIONS = {
-    date = { asc = "Oldest", desc = "Newest" },
-    name = { asc = "A-Z", desc = "Z-A" },
-    duration = { asc = "Shortest", desc = "Longest" }
+    date = {
+        asc = { key = "UI_pzreplay_browser_sort_oldest", fallback = "Oldest" },
+        desc = { key = "UI_pzreplay_browser_sort_newest", fallback = "Newest" }
+    },
+    name = {
+        asc = { key = "UI_pzreplay_browser_sort_asc", fallback = "A-Z" },
+        desc = { key = "UI_pzreplay_browser_sort_desc", fallback = "Z-A" }
+    },
+    duration = {
+        asc = { key = "UI_pzreplay_browser_sort_shortest", fallback = "Shortest" },
+        desc = { key = "UI_pzreplay_browser_sort_longest", fallback = "Longest" }
+    }
 }
 
 local function fontHeight(font)
@@ -50,18 +66,18 @@ end
 
 local function formatDate(millis)
     if not millis or millis <= 0 then
-        return "unknown date"
+        return T.get("UI_pzreplay_browser_unknown_date", "unknown date")
     end
     local ok, value = pcall(os.date, "%Y-%m-%d %H:%M", math.floor(millis / 1000))
     if not ok or not value then
-        return "unknown date"
+        return T.get("UI_pzreplay_browser_unknown_date", "unknown date")
     end
     return value
 end
 
 local function formatSize(bytes)
     if not bytes or bytes < 0 then
-        return "unknown size"
+        return T.get("UI_pzreplay_browser_unknown_size", "unknown size")
     end
     if bytes < 1024 then
         return string.format("%d B", bytes)
@@ -83,10 +99,15 @@ function PZReplayBrowser:createChildren()
     local listHeight = statusY - listY - 2
     local gap = 6
 
-    local searchLabelWidth = getTextManager():MeasureStringX(FONT, "Search") + 6
-    local sortWidth = getTextManager():MeasureStringX(FONT, "Sort: Duration") + 24
-    local directionWidth = getTextManager():MeasureStringX(FONT, "Shortest") + 24
-    local filterWidth = getTextManager():MeasureStringX(FONT, "All replays") + 24
+    local searchLabel = T.get("UI_pzreplay_common_search", "Search")
+    local sortLabel = T.format("UI_pzreplay_browser_sort", "Sort: %s",
+        T.get("UI_pzreplay_browser_sort_duration", "Duration"))
+    local directionLabel = T.get("UI_pzreplay_browser_sort_shortest", "Shortest")
+    local filterLabel = T.get("UI_pzreplay_common_all_replays", "All replays")
+    local searchLabelWidth = getTextManager():MeasureStringX(FONT, searchLabel) + 6
+    local sortWidth = getTextManager():MeasureStringX(FONT, sortLabel) + 24
+    local directionWidth = getTextManager():MeasureStringX(FONT, directionLabel) + 24
+    local filterWidth = getTextManager():MeasureStringX(FONT, filterLabel) + 24
     local directionX = self.width - PAD - directionWidth
     local sortX = directionX - gap - sortWidth
     local filterX = sortX - gap - filterWidth
@@ -104,19 +125,22 @@ function PZReplayBrowser:createChildren()
     self:addChild(self.searchEntry)
 
     self.favoritesButton = ISButton:new(filterX, searchY, filterWidth, buttonHeight,
-        "All replays", self, PZReplayBrowser.onFavoritesFilter)
+        filterLabel, self, PZReplayBrowser.onFavoritesFilter)
     self.favoritesButton:initialise()
     self.favoritesButton:instantiate()
     self:addChild(self.favoritesButton)
 
-    self.sortButton = ISButton:new(sortX, searchY, sortWidth, buttonHeight, "Sort: Date",
+    self.sortButton = ISButton:new(sortX, searchY, sortWidth, buttonHeight,
+        T.format("UI_pzreplay_browser_sort", "Sort: %s",
+            T.get("UI_pzreplay_browser_sort_date", "Date")),
         self, PZReplayBrowser.onSort)
     self.sortButton:initialise()
     self.sortButton:instantiate()
     self:addChild(self.sortButton)
 
     self.directionButton = ISButton:new(directionX, searchY, directionWidth, buttonHeight,
-        "Newest", self, PZReplayBrowser.onSortDirection)
+        T.get("UI_pzreplay_browser_sort_newest", "Newest"),
+        self, PZReplayBrowser.onSortDirection)
     self.directionButton:initialise()
     self.directionButton:instantiate()
     self:addChild(self.directionButton)
@@ -150,60 +174,70 @@ function PZReplayBrowser:createChildren()
     self:addChild(self.list)
 
     local nextX = self.width - PAD
-    local refreshWidth = getTextManager():MeasureStringX(FONT, "Refresh") + 24
+    local refreshLabel = T.get("UI_pzreplay_common_refresh", "Refresh")
+    local refreshWidth = getTextManager():MeasureStringX(FONT, refreshLabel) + 24
     nextX = nextX - refreshWidth
     self.refreshButton = ISButton:new(nextX, buttonY, refreshWidth, buttonHeight,
-        "Refresh", self, PZReplayBrowser.onRefresh)
+        refreshLabel, self, PZReplayBrowser.onRefresh)
     self.refreshButton:initialise()
     self.refreshButton:instantiate()
     self:addChild(self.refreshButton)
 
-    local dismissWidth = getTextManager():MeasureStringX(FONT, "Dismiss") + 24
+    local dismissLabel = T.get("UI_pzreplay_common_dismiss", "Dismiss")
+    local dismissWidth = getTextManager():MeasureStringX(FONT, dismissLabel) + 24
     nextX = nextX - gap - dismissWidth
     self.dismissButton = ISButton:new(nextX, buttonY, dismissWidth, buttonHeight,
-        "Dismiss", self, PZReplayBrowser.onDismiss)
+        dismissLabel, self, PZReplayBrowser.onDismiss)
     self.dismissButton:initialise()
     self.dismissButton:instantiate()
     self:addChild(self.dismissButton)
 
     if self.options.allowPlayback ~= false then
-        local stopWidth = getTextManager():MeasureStringX(FONT, "Stop") + 24
+        local stopLabel = T.get("UI_pzreplay_common_stop", "Stop")
+        local stopWidth = getTextManager():MeasureStringX(FONT, stopLabel) + 24
         nextX = nextX - gap - stopWidth
         self.stopButton = ISButton:new(nextX, buttonY, stopWidth, buttonHeight,
-            "Stop", self, PZReplayBrowser.onStop)
+            stopLabel, self, PZReplayBrowser.onStop)
         self.stopButton:initialise()
         self.stopButton:instantiate()
         self:addChild(self.stopButton)
 
-        local playWidth = getTextManager():MeasureStringX(FONT, "Play") + 24
+        local playLabel = T.get("UI_pzreplay_common_play", "Play")
+        local playWidth = getTextManager():MeasureStringX(FONT, playLabel) + 24
         nextX = nextX - gap - playWidth
         self.playButton = ISButton:new(nextX, buttonY, playWidth, buttonHeight,
-            "Play", self, PZReplayBrowser.onPlay)
+            playLabel, self, PZReplayBrowser.onPlay)
         self.playButton:initialise()
         self.playButton:instantiate()
         self:addChild(self.playButton)
     end
 
-    local deleteWidth = getTextManager():MeasureStringX(FONT, "Delete") + 24
+    local deleteLabel = T.get("UI_pzreplay_common_delete", "Delete")
+    local deleteWidth = getTextManager():MeasureStringX(FONT, deleteLabel) + 24
     nextX = nextX - gap - deleteWidth
     self.deleteButton = ISButton:new(nextX, buttonY, deleteWidth, buttonHeight,
-        "Delete", self, PZReplayBrowser.onDelete)
+        deleteLabel, self, PZReplayBrowser.onDelete)
     self.deleteButton:initialise()
     self.deleteButton:instantiate()
     self:addChild(self.deleteButton)
 
-    local renameWidth = getTextManager():MeasureStringX(FONT, "Rename") + 24
+    local renameLabel = T.get("UI_pzreplay_common_rename", "Rename")
+    local renameWidth = getTextManager():MeasureStringX(FONT, renameLabel) + 24
     nextX = nextX - gap - renameWidth
     self.renameButton = ISButton:new(nextX, buttonY, renameWidth, buttonHeight,
-        "Rename", self, PZReplayBrowser.onRename)
+        renameLabel, self, PZReplayBrowser.onRename)
     self.renameButton:initialise()
     self.renameButton:instantiate()
     self:addChild(self.renameButton)
 
-    local favoriteWidth = getTextManager():MeasureStringX(FONT, "Unfavorite") + 24
+    local favoriteLabel = T.get("UI_pzreplay_common_favorite", "Favorite")
+    local unfavoriteLabel = T.get("UI_pzreplay_common_unfavorite", "Unfavorite")
+    local favoriteWidth = math.max(
+        getTextManager():MeasureStringX(FONT, favoriteLabel),
+        getTextManager():MeasureStringX(FONT, unfavoriteLabel)) + 24
     nextX = nextX - gap - favoriteWidth
     self.favoriteButton = ISButton:new(nextX, buttonY, favoriteWidth, buttonHeight,
-        "Favorite", self, PZReplayBrowser.onFavorite)
+        favoriteLabel, self, PZReplayBrowser.onFavorite)
     self.favoriteButton:initialise()
     self.favoriteButton:instantiate()
     self:addChild(self.favoriteButton)
@@ -231,7 +265,7 @@ function PZReplayBrowser:drawRow(list, y, item, alt)
         name = "* " .. name
     end
     if entry.lastReplay then
-        name = name .. "  (last)"
+        name = name .. T.get("UI_pzreplay_common_last", "  (last)")
     end
     local nameColor = entry.valid and { r = 1.0, g = 1.0, b = 1.0, a = 1.0 }
         or { r = 1.0, g = 0.55, b = 0.45, a = 1.0 }
@@ -254,11 +288,14 @@ function PZReplayBrowser:drawRow(list, y, item, alt)
     local context
     if entry.valid then
         context = string.format("%s  %s  %s",
-            entry.map ~= "" and entry.map or "unknown map",
-            entry.player ~= "" and entry.player or "unknown player",
-            string.format("%.0f Hz", entry.sampleRate))
+            entry.map ~= "" and entry.map
+                or T.get("UI_pzreplay_browser_unknown_map", "unknown map"),
+            entry.player ~= "" and entry.player
+                or T.get("UI_pzreplay_browser_unknown_player", "unknown player"),
+            T.format("UI_pzreplay_panel_hz", "%.0f Hz", entry.sampleRate))
     else
-        context = "unreadable: " .. entry.error
+        context = T.format("UI_pzreplay_browser_unreadable", "unreadable: %s",
+            T.message(entry.error))
     end
     list:drawText(fitText(context, list:getWidth() - 16, FONT), 8,
         y + 3 + lineHeight * 2, 0.72, 0.72, 0.72, 1.0, FONT)
@@ -284,7 +321,8 @@ end
 
 function PZReplayBrowser:reload(preferredPath, fallbackIndex)
     if not PZReplayCatalogue then
-        self:setStatus("Replay catalogue is unavailable.", true)
+        self:setStatus(T.get("UI_pzreplay_browser_catalogue_unavailable",
+            "Replay catalogue is unavailable."), true)
         return
     end
     self:closeDialog()
@@ -296,7 +334,8 @@ end
 
 function PZReplayBrowser:applyView()
     if not PZReplayCatalogue then
-        self:setStatus("Replay catalogue is unavailable.", true)
+        self:setStatus(T.get("UI_pzreplay_browser_catalogue_unavailable",
+            "Replay catalogue is unavailable."), true)
         return
     end
     if not self.list then
@@ -349,37 +388,64 @@ function PZReplayBrowser:rebuildList(preferredPath, fallbackIndex)
     local status
     local statusIsError = false
     if catalogueError ~= "" then
-        status = catalogueError
+        status = T.message(catalogueError)
         statusIsError = true
     elseif total == 0 then
-        status = "No replays found."
+        status = T.get("UI_pzreplay_browser_no_replays", "No replays found.")
     elseif count == 0 and self.favoritesOnly and favoriteCount == 0 then
-        status = "No favorite replays yet. Select a replay and choose Favorite."
+        status = T.get("UI_pzreplay_browser_no_favorites",
+            "No favorite replays yet. Select a replay and choose Favorite.")
     elseif count == 0 and self.favoritesOnly then
-        status = "No favorites match the search."
+        status = T.get("UI_pzreplay_browser_no_favorites_match",
+            "No favorites match the search.")
     elseif count == 0 then
-        status = "No replays match the search."
+        status = T.get("UI_pzreplay_browser_no_match",
+            "No replays match the search.")
     elseif self.favoritesOnly then
-        status = string.format("%d favorite%s", count, count == 1 and "" or "s")
+        if count == 1 then
+            status = T.format("UI_pzreplay_browser_favorite_count_one",
+                "%d favorite", count)
+        else
+            status = T.format("UI_pzreplay_browser_favorite_count_many",
+                "%d favorites", count)
+        end
     elseif count ~= total then
-        status = string.format("%d of %d replays (%d favorite%s)", count, total,
-            favoriteCount, favoriteCount == 1 and "" or "s")
+        if favoriteCount == 1 then
+            status = T.format("UI_pzreplay_browser_count_filtered_one",
+                "%d of %d replays (%d favorite)", count, total, favoriteCount)
+        else
+            status = T.format("UI_pzreplay_browser_count_filtered",
+                "%d of %d replays (%d favorites)", count, total, favoriteCount)
+        end
     else
-        status = string.format("%d replay%s", count, count == 1 and "" or "s")
+        if count == 1 then
+            status = T.format("UI_pzreplay_browser_replay_count_one", "%d replay", count)
+        else
+            status = T.format("UI_pzreplay_browser_replay_count_many", "%d replays", count)
+        end
         if favoriteCount > 0 then
-            status = status .. string.format(" (%d favorite%s)", favoriteCount,
-                favoriteCount == 1 and "" or "s")
+            if favoriteCount == 1 then
+                status = status .. " " .. T.format(
+                    "UI_pzreplay_browser_favorite_suffix_one", "(%d favorite)",
+                    favoriteCount)
+            else
+                status = status .. " " .. T.format(
+                    "UI_pzreplay_browser_favorite_suffix", "(%d favorites)",
+                    favoriteCount)
+            end
         end
     end
     if favoritesError ~= "" then
-        status = status .. " Favorites unavailable."
+        status = status .. " " .. T.get("UI_pzreplay_browser_favorites_unavailable",
+            "Favorites unavailable.")
         statusIsError = true
     end
     self:setStatus(status, statusIsError)
 
     if preferredPath ~= "" and catalogueError == "" and total > 0
         and not PZReplayCatalogue.hasPath(preferredPath) then
-        self:setStatus("Replay is no longer available: " .. fileName(preferredPath), true)
+        self:setStatus(T.format("UI_pzreplay_browser_replay_gone",
+            "Replay is no longer available: %s", fileName(preferredPath)), true)
     end
 
     if self.list.selected >= 1 then
@@ -457,11 +523,13 @@ end
 
 function PZReplayBrowser:managementBlockReason(entry)
     if self:isRecording() then
-        return "Recording is active. Stop recording before managing replays."
+        return T.get("UI_pzreplay_browser_recording_active_manage",
+            "Recording is active. Stop recording before managing replays.")
     end
     local activePath = self:activePlaybackPath()
     if entry and activePath ~= "" and samePath(activePath, entry.path) then
-        return "This replay is being played. Stop playback before managing it."
+        return T.get("UI_pzreplay_browser_playback_active_manage",
+            "This replay is being played. Stop playback before managing it.")
     end
     return nil
 end
@@ -472,27 +540,34 @@ function PZReplayBrowser:playSelected()
     end
     local entry = self:getSelected()
     if not entry then
-        self:setStatus("Select a replay first.", true)
+        self:setStatus(T.get("UI_pzreplay_common_select_first",
+            "Select a replay first."), true)
         return false
     end
     if not entry.valid then
-        self:setStatus("Cannot play: " .. entry.error, true)
+        self:setStatus(T.format("UI_pzreplay_browser_cannot_play", "Cannot play: %s",
+            T.message(entry.error)), true)
         return false
     end
     if self.options.allowPlayback == false then
-        self:setStatus("Playback requires a loaded save. Open Replays from the in-game pause menu.")
+        self:setStatus(T.get("UI_pzreplay_browser_playback_needs_save",
+            "Playback requires a loaded save. Open Replays from the in-game pause menu."))
         return false
     end
     if self.options.canPlay and not self.options.canPlay() then
-        self:setStatus("Playback is unavailable.", true)
+        self:setStatus(T.get("UI_pzreplay_browser_playback_unavailable",
+            "Playback is unavailable."), true)
         return false
     end
     if not self.options.onPlay then
-        self:setStatus("Playback is unavailable.", true)
+        self:setStatus(T.get("UI_pzreplay_browser_playback_unavailable",
+            "Playback is unavailable."), true)
         return false
     end
     local started, message = self.options.onPlay(entry.path)
-    self:setStatus(message or (started and "Playback started." or "Playback failed."), not started)
+    self:setStatus(message or (started
+        and T.get("UI_pzreplay_browser_playback_started", "Playback started.")
+        or T.get("UI_pzreplay_browser_playback_failed", "Playback failed.")), not started)
     self:updateButtons()
     return started
 end
@@ -501,7 +576,10 @@ function PZReplayBrowser:stopPlayback()
     if self:isDialogOpen() then return end
     if self.options.onStop then
         local stopped, message = self.options.onStop()
-        self:setStatus(message or (stopped and "Playback stopped." or "Playback is not active."))
+        self:setStatus(message or (stopped
+            and T.get("UI_pzreplay_browser_playback_stopped", "Playback stopped.")
+            or T.get("UI_pzreplay_browser_playback_not_active",
+                "Playback is not active.")))
     end
     self:updateButtons()
 end
@@ -558,14 +636,19 @@ function PZReplayBrowser:updateSortButtons()
     if not self.sortButton or not self.directionButton then
         return
     end
-    self.sortButton:setTitle("Sort: " .. SORT_LABELS[self.sortField])
+    local label = SORT_LABELS[self.sortField]
+    self.sortButton:setTitle(T.format("UI_pzreplay_browser_sort", "Sort: %s",
+        T.get(label.key, label.fallback)))
     local direction = SORT_DIRECTIONS[self.sortField]
-    self.directionButton:setTitle(self.sortAscending and direction.asc or direction.desc)
+    local current = self.sortAscending and direction.asc or direction.desc
+    self.directionButton:setTitle(T.get(current.key, current.fallback))
 end
 
 function PZReplayBrowser:updateFilterButtons()
     if self.favoritesButton then
-        self.favoritesButton:setTitle(self.favoritesOnly and "Favorites" or "All replays")
+        self.favoritesButton:setTitle(self.favoritesOnly
+            and T.get("UI_pzreplay_common_favorites", "Favorites")
+            or T.get("UI_pzreplay_common_all_replays", "All replays"))
     end
 end
 
@@ -586,24 +669,31 @@ function PZReplayBrowser:toggleFavorite()
     end
     local entry = self:getSelected()
     if not entry then
-        self:setStatus("Select a replay first.", true)
+        self:setStatus(T.get("UI_pzreplay_common_select_first",
+            "Select a replay first."), true)
         return false
     end
     if not PZReplayCatalogue or not PZReplayCatalogue.toggleFavorite then
-        self:setStatus("Favorites are unavailable.", true)
+        self:setStatus(T.get("UI_pzreplay_browser_favorites_unavailable_error",
+            "Favorites are unavailable."), true)
         return false
     end
     local state = PZReplayCatalogue.toggleFavorite(entry.path)
     if state < 0 then
         local error = PZReplayCatalogue.getLastOperationError()
-        self:setStatus(error ~= "" and error or "Could not change favorite.", true)
+        self:setStatus(error ~= "" and T.message(error)
+            or T.get("UI_pzreplay_browser_favorite_failed", "Could not change favorite."),
+            true)
         return false
     end
     local favorite = state == 1
     self:applyView()
-    local message = favorite and ("Added " .. entry.name .. " to favorites.")
-        or ("Removed " .. entry.name .. " from favorites.")
-    local warning = PZReplayCatalogue.getLastOperationError()
+    local message = favorite
+        and T.format("UI_pzreplay_browser_favorite_added", "Added %s to favorites.",
+            entry.name)
+        or T.format("UI_pzreplay_browser_favorite_removed",
+            "Removed %s from favorites.", entry.name)
+    local warning = T.message(PZReplayCatalogue.getLastOperationError())
     if warning ~= "" then
         message = message .. " " .. warning
         self:setStatus(message, true)
@@ -629,12 +719,14 @@ function PZReplayBrowser:drawDetails()
     local x = self.detailsX + 6
     local width = self.detailsWidth - 12
     local y = self.detailsY + 4
-    self:drawText("Details", x, y, 1, 1, 1, 1, FONT)
+    self:drawText(T.get("UI_pzreplay_common_details", "Details"), x, y,
+        1, 1, 1, 1, FONT)
     y = y + lineHeight + 2
 
     local entry = self:getSelected()
     if not entry then
-        self:drawText("Select a replay.", x, y, 0.72, 0.72, 0.72, 1.0, FONT)
+        self:drawText(T.get("UI_pzreplay_common_select_replay", "Select a replay."),
+            x, y, 0.72, 0.72, 0.72, 1.0, FONT)
         return
     end
     local index = self.list.selected - 1
@@ -643,8 +735,8 @@ function PZReplayBrowser:drawDetails()
         if y + lineHeight > self.detailsY + self.detailsHeight - 2 then
             break
         end
-        local label = PZReplayCatalogue.getDetailLabel(index, row)
-        local value = PZReplayCatalogue.getDetailValue(index, row)
+        local label = T.detailLabel(PZReplayCatalogue.getDetailLabel(index, row))
+        local value = T.message(PZReplayCatalogue.getDetailValue(index, row))
         self:drawText(fitText(label .. ": " .. value, width, FONT), x, y,
             0.78, 0.78, 0.78, 1.0, FONT)
         y = y + lineHeight
@@ -655,7 +747,8 @@ function PZReplayBrowser:onRename()
     if self:isDialogOpen() then return end
     local entry = self:getSelected()
     if not entry then
-        self:setStatus("Select a replay first.", true)
+        self:setStatus(T.get("UI_pzreplay_common_select_first",
+            "Select a replay first."), true)
         return
     end
     local reason = self:managementBlockReason(entry)
@@ -670,7 +763,8 @@ function PZReplayBrowser:onDelete()
     if self:isDialogOpen() then return end
     local entry = self:getSelected()
     if not entry then
-        self:setStatus("Select a replay first.", true)
+        self:setStatus(T.get("UI_pzreplay_common_select_first",
+            "Select a replay first."), true)
         return
     end
     local reason = self:managementBlockReason(entry)
@@ -688,24 +782,27 @@ function PZReplayBrowser:performRename(entry, newName)
         return false, reason
     end
     if not PZReplayCatalogue or not PZReplayCatalogue.rename then
-        local error = "Replay management is unavailable."
+        local error = T.get("UI_pzreplay_browser_management_unavailable",
+            "Replay management is unavailable.")
         self:setStatus(error, true)
         return false, error
     end
     if not PZReplayCatalogue.rename(entry.path, newName or "") then
-        local error = PZReplayCatalogue.getLastOperationError()
+        local error = T.message(PZReplayCatalogue.getLastOperationError())
         if error == "" then
-            error = "Rename failed."
+            error = T.get("UI_pzreplay_browser_rename_failed", "Rename failed.")
         end
         self:setStatus(error, true)
         return false, error
     end
     local newPath = PZReplayCatalogue.getLastOperationPath()
     self:reload(newPath, -1)
-    local message = "Renamed " .. entry.name .. " to " .. fileName(newPath)
-    local warning = PZReplayCatalogue.getLastOperationError()
+    local message = T.format("UI_pzreplay_browser_renamed", "Renamed %s to %s",
+        entry.name, fileName(newPath))
+    local warning = T.message(PZReplayCatalogue.getLastOperationError())
     if warning ~= "" then
-        self:setStatus(message .. " (" .. warning .. ")", true)
+        self:setStatus(T.format("UI_pzreplay_browser_operation_warning", "%s (%s)",
+            message, warning), true)
         return true, warning
     end
     self:setStatus(message)
@@ -719,14 +816,15 @@ function PZReplayBrowser:performDelete(entry)
         return false, reason
     end
     if not PZReplayCatalogue or not PZReplayCatalogue.delete then
-        local error = "Replay management is unavailable."
+        local error = T.get("UI_pzreplay_browser_management_unavailable",
+            "Replay management is unavailable.")
         self:setStatus(error, true)
         return false, error
     end
     if not PZReplayCatalogue.delete(entry.path) then
-        local error = PZReplayCatalogue.getLastOperationError()
+        local error = T.message(PZReplayCatalogue.getLastOperationError())
         if error == "" then
-            error = "Delete failed."
+            error = T.get("UI_pzreplay_browser_delete_failed", "Delete failed.")
         end
         self:setStatus(error, true)
         return false, error
@@ -734,10 +832,11 @@ function PZReplayBrowser:performDelete(entry)
     local fallbackIndex = self.list and self.list.selected > 0
         and self.list.selected - 1 or -1
     self:reload("", fallbackIndex)
-    local message = "Deleted " .. entry.name
-    local warning = PZReplayCatalogue.getLastOperationError()
+    local message = T.format("UI_pzreplay_browser_deleted", "Deleted %s", entry.name)
+    local warning = T.message(PZReplayCatalogue.getLastOperationError())
     if warning ~= "" then
-        self:setStatus(message .. " (" .. warning .. ")", true)
+        self:setStatus(T.format("UI_pzreplay_browser_operation_warning", "%s (%s)",
+            message, warning), true)
         return true, warning
     end
     self:setStatus(message)
@@ -793,8 +892,9 @@ function PZReplayBrowser:updateButtons()
     end
     if self.favoriteButton then
         self.favoriteButton:setEnable(entry ~= nil and not dialogOpen)
-        self.favoriteButton:setTitle(entry ~= nil and entry.favorite and "Unfavorite"
-            or "Favorite")
+        self.favoriteButton:setTitle(entry ~= nil and entry.favorite
+            and T.get("UI_pzreplay_common_unfavorite", "Unfavorite")
+            or T.get("UI_pzreplay_common_favorite", "Favorite"))
     end
     if self.favoritesButton then
         self.favoritesButton:setEnable(not dialogOpen)
@@ -817,7 +917,8 @@ function PZReplayBrowser:render()
         if self.searchEntry then
             local y = self.searchEntry:getY()
                 + math.floor((self.searchEntry:getHeight() - fontHeight(FONT)) / 2)
-            self:drawText("Search", self.searchLabelX, y, 0.82, 0.82, 0.82, 1.0, FONT)
+            self:drawText(T.get("UI_pzreplay_common_search", "Search"),
+                self.searchLabelX, y, 0.82, 0.82, 0.82, 1.0, FONT)
         end
     end
 end
@@ -854,14 +955,16 @@ function PZReplayManageDialog:createChildren()
     self.textEntry:instantiate()
     self:addChild(self.textEntry)
 
-    self.confirmButton = ISButton:new(0, 0, 110, buttonHeight, "Rename", self,
-        PZReplayManageDialog.onConfirm)
+    self.confirmButton = ISButton:new(0, 0, 110, buttonHeight,
+        T.get("UI_pzreplay_common_rename", "Rename"),
+        self, PZReplayManageDialog.onConfirm)
     self.confirmButton:initialise()
     self.confirmButton:instantiate()
     self:addChild(self.confirmButton)
 
-    self.cancelButton = ISButton:new(0, 0, 110, buttonHeight, "Cancel", self,
-        PZReplayManageDialog.onCancel)
+    self.cancelButton = ISButton:new(0, 0, 110, buttonHeight,
+        T.get("UI_pzreplay_common_cancel", "Cancel"),
+        self, PZReplayManageDialog.onCancel)
     self.cancelButton:initialise()
     self.cancelButton:instantiate()
     self:addChild(self.cancelButton)
@@ -896,7 +999,9 @@ function PZReplayManageDialog:open(mode, entry)
     self:layout()
     local renaming = mode == "rename"
     self.textEntry:setVisible(renaming)
-    self.confirmButton:setTitle(renaming and "Rename" or "Delete")
+    self.confirmButton:setTitle(renaming
+        and T.get("UI_pzreplay_common_rename", "Rename")
+        or T.get("UI_pzreplay_common_delete", "Delete"))
     self.confirmButton:setEnable(true)
     if renaming then
         self.textEntry:setText(baseName(entry.name))
@@ -932,7 +1037,8 @@ function PZReplayManageDialog:onConfirm()
         ok, message = self.owner:performDelete(self.entryData)
     end
     if not ok then
-        self.errorText = message or "Operation failed."
+        self.errorText = message
+            or T.get("UI_pzreplay_browser_dialog_operation_failed", "Operation failed.")
     end
 end
 
@@ -940,9 +1046,11 @@ function PZReplayManageDialog:onCancel()
     local mode = self.mode
     self.owner:closeDialog()
     if mode == "delete" then
-        self.owner:setStatus("Delete cancelled.")
+        self.owner:setStatus(T.get("UI_pzreplay_browser_delete_cancelled",
+            "Delete cancelled."))
     else
-        self.owner:setStatus("Rename cancelled.")
+        self.owner:setStatus(T.get("UI_pzreplay_browser_rename_cancelled",
+            "Rename cancelled."))
     end
 end
 
@@ -971,17 +1079,19 @@ function PZReplayManageDialog:prerender()
     local name = self.entryData and self.entryData.name or ""
     local title
     if self.mode == "rename" then
-        title = "Rename replay"
+        title = T.get("UI_pzreplay_browser_dialog_rename_title", "Rename replay")
         self:drawText(fitText(name, self.innerWidth - DIALOG_PAD * 2, FONT),
             self.innerX + DIALOG_PAD, self.innerY + 32, 0.82, 0.82, 0.82, 1.0, FONT)
-        self:drawText("New name", self.innerX + DIALOG_PAD, self.innerY + 58,
-            0.9, 0.9, 0.9, 1.0, FONT)
+        self:drawText(T.get("UI_pzreplay_browser_dialog_new_name", "New name"),
+            self.innerX + DIALOG_PAD, self.innerY + 58, 0.9, 0.9, 0.9, 1.0, FONT)
     else
-        title = "Delete replay"
-        self:drawText(fitText("Delete " .. name .. "?", self.innerWidth - DIALOG_PAD * 2,
+        title = T.get("UI_pzreplay_browser_dialog_delete_title", "Delete replay")
+        self:drawText(fitText(T.format("UI_pzreplay_browser_dialog_delete_confirm",
+            "Delete %s?", name), self.innerWidth - DIALOG_PAD * 2,
             FONT), self.innerX + DIALOG_PAD, self.innerY + 32,
             1.0, 0.85, 0.8, 1.0, FONT)
-        self:drawText("This cannot be undone.", self.innerX + DIALOG_PAD,
+        self:drawText(T.get("UI_pzreplay_browser_dialog_delete_irreversible",
+            "This cannot be undone."), self.innerX + DIALOG_PAD,
             self.innerY + 52, 0.82, 0.82, 0.82, 1.0, FONT)
     end
     self:drawText(title, self.innerX + DIALOG_PAD, self.innerY + 10,

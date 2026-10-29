@@ -1,4 +1,8 @@
+require "PZReplayText"
+
 if PZReplayLoad then return end
+
+local T = PZReplayText
 
 PZReplayLoad = {}
 
@@ -24,13 +28,15 @@ end
 local function collectSaves()
     local saves = api()
     if not saves then
-        return false, "Load and play is unavailable."
+        return false, T.get("UI_pzreplay_load_unavailable",
+            "Load and play is unavailable.")
     end
     saves.beginSaves()
 
     local ok, folders = pcall(getFullSaveDirectoryTable)
     if not ok or type(folders) ~= "table" then
-        return false, "The game save list is unavailable."
+        return false, T.get("UI_pzreplay_load_save_list_unavailable",
+            "The game save list is unavailable.")
     end
 
     for _, folder in ipairs(folders) do
@@ -93,24 +99,28 @@ local function worldMismatch(player)
     local expectedPlayer = api().getPlayerName()
     local world = getWorld()
     if not world then
-        return "The world is not ready."
+        return T.get("UI_pzreplay_load_world_not_ready", "The world is not ready.")
     end
 
     local loadedSave = world:getWorld() or ""
     if expectedSave ~= "" and loadedSave ~= expectedSave then
-        return "The loaded save does not match the replay."
+        return T.get("UI_pzreplay_load_save_mismatch",
+            "The loaded save does not match the replay.")
     end
     local loadedMode = world:getGameMode() or ""
     if expectedMode ~= "" and loadedMode ~= "" and loadedMode ~= expectedMode then
-        return "The loaded game mode does not match the replay."
+        return T.get("UI_pzreplay_load_mode_mismatch",
+            "The loaded game mode does not match the replay.")
     end
     local loadedMap = world:getMap() or ""
     if not mapMatches(expectedMap, loadedMap) then
-        return "The loaded map does not match the replay."
+        return T.get("UI_pzreplay_load_map_mismatch",
+            "The loaded map does not match the replay.")
     end
     local loadedPlayer = player.getFullName and player:getFullName() or ""
     if expectedPlayer ~= "" and loadedPlayer ~= expectedPlayer then
-        return "The loaded player does not match the replay."
+        return T.get("UI_pzreplay_load_player_mismatch",
+            "The loaded player does not match the replay.")
     end
     return nil
 end
@@ -122,15 +132,18 @@ local function startLoadedPlayback(player)
     local path = api().getPendingPath()
     local mismatch = worldMismatch(player)
     if mismatch then
-        failAfterLoad(player, "Replay not started: " .. mismatch)
+        failAfterLoad(player, T.format("UI_pzreplay_load_not_started",
+            "Replay not started: %s", mismatch))
         return
     end
     if PZReplayPlayback.isActive() then
-        failAfterLoad(player, "Replay not started: playback is already active.")
+        failAfterLoad(player, T.get("UI_pzreplay_load_playback_active",
+            "Replay not started: playback is already active."))
         return
     end
     if PZReplayGhost.isSpawned() then
-        failAfterLoad(player, "Replay not started: a ghost is already spawned.")
+        failAfterLoad(player, T.get("UI_pzreplay_load_ghost_active",
+            "Replay not started: a ghost is already spawned."))
         return
     end
 
@@ -138,13 +151,16 @@ local function startLoadedPlayback(player)
     if not started then
         local errorMessage = PZReplayPlayback.getLastPlaybackError()
         if not errorMessage or errorMessage == "" then
-            errorMessage = "playback could not start"
+            errorMessage = T.get("UI_pzreplay_load_playback_could_not_start",
+                "playback could not start")
         end
-        failAfterLoad(player, "Replay not started: " .. errorMessage)
+        failAfterLoad(player, T.format("UI_pzreplay_load_not_started",
+            "Replay not started: %s", T.message(errorMessage)))
         return
     end
     if not PZReplayGhost.isSpawned() then
-        failAfterLoad(player, "Replay not started: the replay ghost was not created.")
+        failAfterLoad(player, T.get("UI_pzreplay_load_ghost_missing",
+            "Replay not started: the replay ghost was not created."))
         return
     end
 
@@ -152,10 +168,15 @@ local function startLoadedPlayback(player)
     local warnings = api().getWarningCount()
     log("playback started path=" .. path .. " warnings=" .. tostring(warnings))
     if warnings > 0 then
-        notify(player, "Replay started with " .. tostring(warnings) .. " warning"
-            .. (warnings == 1 and "." or "s."))
+        if warnings == 1 then
+            notify(player, T.format("UI_pzreplay_load_started_warning_one",
+                "Replay started with %d warning.", warnings))
+        else
+            notify(player, T.format("UI_pzreplay_load_started_warning_many",
+                "Replay started with %d warnings.", warnings))
+        end
     else
-        notify(player, "Replay started.")
+        notify(player, T.get("UI_pzreplay_load_started", "Replay started."))
     end
 end
 
@@ -165,25 +186,28 @@ end
 
 function PZReplayLoad.cancel(reason)
     if api() and api().cancelPending(reason or "cancelled") then
-        restoreLibrary("Replay load cancelled.")
+        restoreLibrary(T.get("UI_pzreplay_load_cancelled", "Replay load cancelled."))
     end
 end
 
 function PZReplayLoad.load(path, library)
     if not path or path == "" then
-        return false, "Select a replay first."
+        return false, T.get("UI_pzreplay_common_select_first", "Select a replay first.")
     end
     if PZReplayLoad.isPending() then
-        return false, "A replay load is already in progress."
+        return false, T.get("UI_pzreplay_load_already_in_progress",
+            "A replay load is already in progress.")
     end
     if not api() then
-        return false, "Load and play is unavailable."
+        return false, T.get("UI_pzreplay_load_unavailable",
+            "Load and play is unavailable.")
     end
     if PZReplay and PZReplay.isKillSwitchEnabled and PZReplay.isKillSwitchEnabled() then
-        return false, "pz-replay is disabled by the kill switch."
+        return false, T.get("UI_pzreplay_panel_status_disabled",
+            "pz-replay is disabled by the kill switch.")
     end
     if not MainScreen or not MainScreen.instance or not MainScreen.continueLatestSave then
-        return false, "The main menu is not ready."
+        return false, T.get("UI_pzreplay_load_menu_not_ready", "The main menu is not ready.")
     end
 
     local savesOk, savesError = collectSaves()
@@ -191,11 +215,14 @@ function PZReplayLoad.load(path, library)
         return false, savesError
     end
     if not api().resolve(path) then
-        local message = api().getErrorMessage()
-        return false, message ~= "" and message or "The replay could not be loaded."
+        local message = T.message(api().getErrorMessage())
+        return false, message ~= ""
+            and message or T.get("UI_pzreplay_load_could_not_load",
+                "The replay could not be loaded.")
     end
     if not api().beginPending() then
-        return false, "A replay load is already in progress."
+        return false, T.get("UI_pzreplay_load_already_in_progress",
+            "A replay load is already in progress.")
     end
 
     library:hideForLoad()
@@ -208,11 +235,13 @@ function PZReplayLoad.load(path, library)
     local ok, errorMessage = pcall(MainScreen.continueLatestSave, gameMode, saveName)
     if not ok then
         api().cancelPending("load request failed")
-        library:restoreAfterLoadFailure("The save could not be loaded: "
-            .. tostring(errorMessage))
-        return false, "The save could not be loaded."
+        library:restoreAfterLoadFailure(T.format(
+            "UI_pzreplay_load_save_could_not_load", "The save could not be loaded: %s",
+            tostring(errorMessage)))
+        return false, T.get("UI_pzreplay_load_save_failed",
+            "The save could not be loaded.")
     end
-    return true, "Loading " .. saveName .. "..."
+    return true, T.format("UI_pzreplay_load_loading", "Loading %s...", saveName)
 end
 
 function PZReplayLoad.abandon(message)
@@ -240,11 +269,13 @@ function PZReplayLoad.tick()
         return
     end
     local elapsed = api().getPendingSeconds()
+    local failedMessage = T.get("UI_pzreplay_load_did_not_load",
+        "The save did not load. Replay playback was not started.")
     if screen and screen.getIsVisible and screen:getIsVisible()
         and elapsed > MENU_GRACE_SECONDS then
-        PZReplayLoad.abandon("The save did not load. Replay playback was not started.")
+        PZReplayLoad.abandon(failedMessage)
     elseif elapsed > HARD_TIMEOUT_SECONDS then
-        PZReplayLoad.abandon("The save did not load. Replay playback was not started.")
+        PZReplayLoad.abandon(failedMessage)
     end
 end
 

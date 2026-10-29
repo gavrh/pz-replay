@@ -1,6 +1,9 @@
 require "ISUI/ISPanel"
+require "PZReplayText"
 
 if PZReplayHud then return end
+
+local T = PZReplayText
 
 PZReplayHud = ISPanel:derive("PZReplayHud")
 
@@ -68,13 +71,14 @@ function PZReplayHud:update()
 
     if countingDown then
         lines[#lines + 1] = {
-            text = string.format("STARTING  %.1fs",
+            text = T.format("UI_pzreplay_hud_starting", "STARTING  %.1fs",
                 PZReplay.getCountdownRemainingSeconds()),
             r = 1.0, g = 0.85, b = 0.4
         }
     elseif recording then
         lines[#lines + 1] = {
-            text = string.format("REC  %s  %d frames  %.1f/%.0f Hz",
+            text = T.format("UI_pzreplay_hud_recording",
+                "REC  %s  %d frames  %.1f/%.0f Hz",
                 formatTime(PZReplay.getRecordingSeconds()), PZReplay.getRecordedFrames(),
                 PZReplay.getActualSampleRate(), PZReplay.getConfiguredSampleRate()),
             r = 1.0, g = 0.5, b = 0.4
@@ -83,24 +87,25 @@ function PZReplayHud:update()
 
     if (countingDown or recording) and name ~= "" then
         lines[#lines + 1] = {
-            text = "Name  " .. name,
+            text = T.format("UI_pzreplay_hud_name", "Name  %s", name),
             r = 0.85, g = 0.85, b = 0.85
         }
     end
 
     if playing then
         lines[#lines + 1] = {
-            text = string.format("REPLAY  %s / %s",
+            text = T.format("UI_pzreplay_hud_replay", "REPLAY  %s / %s",
                 formatTime(PZReplayPlayback.getCurrentTime()),
                 formatTime(PZReplayPlayback.getDuration())),
             r = 0.6, g = 1.0, b = 0.6
         }
-        local label = PZReplayPlayback.getCameraModeLabel() or "Player"
+        local label = T.message(PZReplayPlayback.getCameraModeLabel() or "Player")
         if PZReplayPlayback.isCameraFree() then
-            label = label .. "  arrows pan, ESC exits"
+            label = label .. "  " .. T.get("UI_pzreplay_hud_free_hint",
+                "arrows pan, ESC exits")
         end
         lines[#lines + 1] = {
-            text = "CAMERA  " .. label,
+            text = T.format("UI_pzreplay_hud_camera", "CAMERA  %s", label),
             r = PZReplayPlayback.isCameraFree() and 0.55 or 0.75,
             g = PZReplayPlayback.isCameraFree() and 0.9 or 0.85,
             b = 1.0
@@ -118,7 +123,10 @@ function PZReplayHud:update()
     end
     if self.resultText ~= "" and getTimestampMs() < self.resultUntil then
         local r, g, b = resultColor(self.resultText)
-        lines[#lines + 1] = { text = self.resultText, r = r, g = g, b = b }
+        lines[#lines + 1] = {
+            text = T.message(self.resultText),
+            r = r, g = g, b = b
+        }
     end
 
     self.lines = lines

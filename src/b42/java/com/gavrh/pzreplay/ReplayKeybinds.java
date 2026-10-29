@@ -39,10 +39,23 @@ final class ReplayKeybinds {
     static List<String> warnings() {
         List<String> warnings = new ArrayList<>();
         for (ReplaySettings.Conflict conflict : conflicts()) {
-            warnings.add(label(conflict.action()) + " binding " + keyName(conflict.key())
-                + " conflicts with " + conflict.other());
+            warnings.add(warning(conflict));
         }
         return warnings;
+    }
+
+    static boolean hasConflict(String action) {
+        for (ReplaySettings.Conflict conflict : conflicts()) {
+            if (conflict.action().equals(action)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static String warning(ReplaySettings.Conflict conflict) {
+        return label(conflict.action()) + " binding " + keyName(conflict.key())
+            + " conflicts with " + conflict.other();
     }
 
     static String keyName(int key) {

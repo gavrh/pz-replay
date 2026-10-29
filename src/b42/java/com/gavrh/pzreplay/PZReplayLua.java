@@ -254,6 +254,10 @@ public final class PZReplayLua {
         return ReplaySettingsStore.save();
     }
 
+    public static boolean hasKeyBindingConflict(String action) {
+        return ReplayKeybinds.hasConflict(action);
+    }
+
     public static int getKeyBindingWarningCount() {
         return ReplayKeybinds.warnings().size();
     }
