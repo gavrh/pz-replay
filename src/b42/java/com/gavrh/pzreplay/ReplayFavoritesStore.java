@@ -31,7 +31,12 @@ final class ReplayFavoritesStore {
             error = "";
             return true;
         } catch (IOException | RuntimeException exception) {
-            System.out.println("[pz-replay] favorites save failed: " + exception.getMessage());
+            String message = exception.getMessage();
+            if (message == null || message.isBlank()) {
+                message = exception.getClass().getSimpleName();
+            }
+            error = "favorites could not be saved: " + message;
+            System.out.println("[pz-replay] favorites save failed: " + message);
             return false;
         }
     }
