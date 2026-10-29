@@ -17,6 +17,12 @@ local TRANSPORT_SLIDER_HEIGHT = 18
 local SPEEDS = { 0.25, 0.5, 1, 2, 4 }
 local COUNTDOWN_MIN = 0
 local COUNTDOWN_MAX = 10
+local CAMERA_BUTTON_WIDTH = 84
+local CAMERA_LABELS = {
+    player = "Player",
+    follow_ghost = "Follow",
+    free = "Free"
+}
 
 local function fontHeight(font)
     return getTextManager():getFontHeight(font)
@@ -113,12 +119,12 @@ function PZReplayPanel:createChildren()
     self.captureButton:instantiate()
     self:addChild(self.captureButton)
 
-    self.cameraButton = ISButton:new(self.captureButton.x - 6 - 120,
-        self.titleHeight + self.statusHeight + 2, 120, buttonHeight,
-        "Camera: Off", self, PZReplayPanel.onCamera)
-    self.cameraButton:initialise()
-    self.cameraButton:instantiate()
-    self:addChild(self.cameraButton)
+    self.cameraPlayerButton = self:createCameraButton("player", "Player",
+        self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH * 3 - 8)
+    self.cameraFollowButton = self:createCameraButton("follow_ghost", "Follow",
+        self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH * 2 - 4)
+    self.cameraFreeButton = self:createCameraButton("free", "Free",
+        self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH)
 
     self:createNameEntry(buttonHeight)
     self:createTransport(buttonHeight)
@@ -154,6 +160,17 @@ function PZReplayPanel:createChildren()
 
     self:createSettings(buttonHeight)
     self:setView("replays")
+end
+
+function PZReplayPanel:createCameraButton(mode, label, x)
+    local buttonHeight = fontHeight(FONT) + 8
+    local button = ISButton:new(x, self.titleHeight + self.statusHeight + 2,
+        CAMERA_BUTTON_WIDTH, buttonHeight, label, self, PZReplayPanel.onCameraMode)
+    button.internal = mode
+    button:initialise()
+    button:instantiate()
+    self:addChild(button)
+    return button
 end
 
 function PZReplayPanel:createNameEntry(buttonHeight)
@@ -344,10 +361,13 @@ function PZReplayPanel:refreshControls()
     self.captureButton:setEnable(recording or countingDown
         or (not killSwitch and not playing))
     self.nameEntry:setEditable(not killSwitch and not recording and not countingDown)
-    local cameraOn = playing and PZReplayPlayback.isCameraFollow()
-        or (not playing and PZReplay.isCameraFollowDefault())
-    self.cameraButton:setTitle(cameraOn and "Camera: On" or "Camera: Off")
-    self.cameraButton:setEnable(not killSwitch)
+    local cameraMode = playing and PZReplayPlayback.getCameraMode() or "player"
+    for mode, button in pairs({ player = self.cameraPlayerButton,
+        follow_ghost = self.cameraFollowButton, free = self.cameraFreeButton }) do
+        local label = CAMERA_LABELS[mode] or mode
+        button:setTitle(mode == cameraMode and ("[" .. label .. "]") or label)
+        button:setEnable(not killSwitch and playing)
+    end
     self.rateMinus:setEnable(not killSwitch and PZReplay.getSampleRate() > 20)
     self.ratePlus:setEnable(not killSwitch and PZReplay.getSampleRate() < 30)
     self.countdownMinus:setEnable(not killSwitch
@@ -411,11 +431,19 @@ function PZReplayPanel:onSettingsTab()
     self:setView("settings")
 end
 
-function PZReplayPanel:onCamera()
-    if PZReplayPlayback.isActive() then
-        PZReplayPlayback.setCameraFollow(not PZReplayPlayback.isCameraFollow())
-    else
-        PZReplay.setCameraFollowDefault(not PZReplay.isCameraFollowDefault())
+function PZReplayPanel:onCameraMode(button)
+    if not PZReplayPlayback or not PZReplayPlayback.isActive() then
+        return
+    end
+    local mode = button.internal
+    if not PZReplayPlayback.setCameraMode(mode) then
+        self.browser:setStatus("Camera mode unavailable.")
+        self:refreshControls()
+        return
+    end
+    if mode == "free" then
+        self:close()
+        return
     end
     self:refreshControls()
 end
@@ -748,7 +776,7 @@ function PZReplayPanel:renderStatus()
         elseif PZReplayPlayback.isPlaying() then
             state = "Playing"
         end
-        local camera = PZReplayPlayback.isCameraFollow() and "  camera follow on" or ""
+        local camera = "  camera: " .. (PZReplayPlayback.getCameraModeLabel() or "Player")
         playbackText = string.format("%s  %s / %s  %s%s", state,
             formatClock(PZReplayPlayback.getCurrentTime()),
             formatClock(PZReplayPlayback.getDuration()),
