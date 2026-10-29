@@ -59,7 +59,9 @@ public final class ReplayCameraController {
         } catch (Throwable failure) {
             mode = previous;
             modeBeforeFree = previousBeforeFree;
-            freeCamera.reset();
+            if (previous != ReplayCameraMode.FREE) {
+                freeCamera.reset();
+            }
             restorePlayerCamera();
             if (mode == ReplayCameraMode.FOLLOW_GHOST && ghost != null) {
                 applyFollowOffset(ghost, player, camera);
