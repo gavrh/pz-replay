@@ -36,7 +36,8 @@ final class CaptureMetadataFactory {
             sampleRateHz,
             System.currentTimeMillis(),
             System.currentTimeMillis(),
-            captureAppearance(player)
+            captureAppearance(player),
+            captureEquipment(player)
         );
     }
 
@@ -49,6 +50,18 @@ final class CaptureMetadataFactory {
         } catch (IOException | RuntimeException exception) {
             System.out.println("[pz-replay] appearance capture failed: " + exception);
             return ReplayAppearance.none();
+        }
+    }
+
+    private static ReplayEquipment captureEquipment(IsoPlayer player) {
+        try {
+            ReplayEquipment equipment = EquipmentSnapshot.capture(player);
+            System.out.println("[pz-replay] equipment captured bytes="
+                + equipment.data().length());
+            return equipment;
+        } catch (IOException | RuntimeException exception) {
+            System.out.println("[pz-replay] equipment capture failed: " + exception);
+            return ReplayEquipment.none();
         }
     }
 
