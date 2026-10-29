@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.function.Consumer;
 import zombie.GameTime;
 
 public final class GhostMotionController {
@@ -16,25 +17,37 @@ public final class GhostMotionController {
 
     private final ScriptedGhostPath path;
     private final ReplayTimeline replay;
+    private final Consumer<String> warning;
     private final ReplayCameraController camera = new ReplayCameraController();
     private State state = State.STOPPED;
     private double elapsed;
     private long lastReplayUpdateNanos;
+    private ReplayEquipment appliedEquipment;
 
     public GhostMotionController(ScriptedGhostPath path) {
+        this(path, null);
+    }
+
+    public GhostMotionController(ScriptedGhostPath path, Consumer<String> warning) {
         if (path == null) {
             throw new IllegalArgumentException("path is required");
         }
         this.path = path;
         this.replay = null;
+        this.warning = warning;
     }
 
     public GhostMotionController(ReplayTimeline replay) {
+        this(replay, null);
+    }
+
+    public GhostMotionController(ReplayTimeline replay, Consumer<String> warning) {
         if (replay == null) {
             throw new IllegalArgumentException("replay is required");
         }
         this.path = null;
         this.replay = replay;
+        this.warning = warning;
     }
 
     public void start(ReplayGhost ghost) {
@@ -158,6 +171,8 @@ public final class GhostMotionController {
         }
         camera.restore();
         resetLocomotion(ghost);
+        clearReplayState(ghost);
+        appliedEquipment = null;
         if (wasActive) {
             System.out.println("[pz-replay] replay ghost motion stopped");
         }
@@ -165,6 +180,7 @@ public final class GhostMotionController {
 
     public void reset(ReplayGhost ghost) {
         camera.restore();
+        appliedEquipment = null;
         if (replay != null) {
             replay.reset();
             if (!replay.isEmpty()) {
@@ -284,16 +300,17 @@ public final class GhostMotionController {
 
     private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            ReplaySample.Stance.STAND);
+            ReplaySample.Stance.STAND, false, ReplayEquipment.none());
     }
 
     private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            sample.stance());
+            sample.stance(), sample.aiming(), sample.equipment());
     }
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
-        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance) {
+        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance, boolean aiming,
+        ReplayEquipment equipment) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);
@@ -301,6 +318,8 @@ public final class GhostMotionController {
         ghost.setMovingSquare(ghost.getCurrentSquare());
         ghost.setDirectionAngle(facing);
         applyLocomotion(ghost, locomotion, stance);
+        ghost.setIsAiming(aiming);
+        applyEquipment(ghost, equipment);
     }
 
     private static void applyLocomotion(ReplayGhost ghost, ReplaySample.Locomotion locomotion,
@@ -350,6 +369,47 @@ public final class GhostMotionController {
                 ghost.setOnFloor(false);
             }
         }
+    }
+
+    private void applyEquipment(ReplayGhost ghost, ReplayEquipment equipment) {
+        ReplayEquipment next = equipment == null ? ReplayEquipment.none() : equipment;
+        if (next.equals(appliedEquipment)) {
+            return;
+        }
+        appliedEquipment = next;
+        clearHeldItems(ghost);
+        if (!next.isPresent() || !next.isCurrent()) {
+            return;
+        }
+        try {
+            EquipmentSnapshot.decode(next).applyTo(ghost, this::warn);
+        } catch (ReplayFormatException | RuntimeException exception) {
+            warn("held-item data is corrupt or incomplete");
+            System.out.println("[pz-replay] held-item data could not be applied: "
+                + exception);
+        }
+    }
+
+    private void warn(String message) {
+        if (warning != null) {
+            warning.accept(message);
+        }
+    }
+
+    private static void clearHeldItems(ReplayGhost ghost) {
+        if (ghost == null) {
+            return;
+        }
+        ghost.setPrimaryHandItem(null);
+        ghost.setSecondaryHandItem(null);
+    }
+
+    private static void clearReplayState(ReplayGhost ghost) {
+        if (ghost == null) {
+            return;
+        }
+        ghost.setIsAiming(false);
+        clearHeldItems(ghost);
     }
 
     private static void applyPausedPose(ReplayGhost ghost) {

@@ -216,6 +216,31 @@ class ReplaySaveResolverTest {
     }
 
     @Test
+    void reportsMissingHeldItemDataWithoutBlockingPlayback() {
+        ReplayMetadata metadata = new ReplayMetadata(
+            ReplayMetadata.CURRENT_FORMAT_VERSION,
+            "0.0.0-dev",
+            GAME_VERSION,
+            SAVE_NAME,
+            "Sandbox",
+            MAP_NAME,
+            PLAYER_NAME,
+            1000f,
+            2000f,
+            0f,
+            30.0,
+            0L,
+            RECORDING_END_MILLIS,
+            APPEARANCE,
+            ReplayEquipment.none());
+        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata,
+            List.of(save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
+
+        assertTrue(result.resolved());
+        assertTrue(result.warnings().contains("replay has no held-item data"));
+    }
+
+    @Test
     void rejectsReplayWithoutSaveMapOrPlayerMetadata() {
         ReplayMetadata missingSave = new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION, "0.0.0-dev", GAME_VERSION, "", "Sandbox",

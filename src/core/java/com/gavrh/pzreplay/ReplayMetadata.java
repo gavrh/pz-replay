@@ -17,7 +17,8 @@ public record ReplayMetadata(
     double sampleRateHz,
     long startTimeMillis,
     long endTimeMillis,
-    ReplayAppearance appearance
+    ReplayAppearance appearance,
+    ReplayEquipment equipment
 ) {
     public static final int CURRENT_FORMAT_VERSION = 1;
 
@@ -29,6 +30,16 @@ public record ReplayMetadata(
         mapName = safe(mapName);
         playerName = safe(playerName);
         appearance = appearance == null ? ReplayAppearance.none() : appearance;
+        equipment = equipment == null ? ReplayEquipment.none() : equipment;
+    }
+
+    public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
+        String saveName, String gameMode, String mapName, String playerName, float startX,
+        float startY, float startZ, double sampleRateHz, long startTimeMillis,
+        long endTimeMillis, ReplayAppearance appearance) {
+        this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
+            startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
+            ReplayEquipment.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -37,13 +48,13 @@ public record ReplayMetadata(
         long endTimeMillis) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis,
-            ReplayAppearance.none());
+            ReplayAppearance.none(), ReplayEquipment.none());
     }
 
     public ReplayMetadata withEnd(long endTimeMillis) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance);
+            startTimeMillis, endTimeMillis, appearance, equipment);
     }
 
     public Map<String, String> toValues() {
@@ -64,6 +75,10 @@ public record ReplayMetadata(
         if (appearance.isPresent()) {
             values.put("appearance_version", Integer.toString(appearance.version()));
             values.put("appearance_data", appearance.data());
+        }
+        if (equipment.isPresent()) {
+            values.put("equipment_version", Integer.toString(equipment.version()));
+            values.put("equipment_data", equipment.data());
         }
         return values;
     }
@@ -97,7 +112,8 @@ public record ReplayMetadata(
             parseDouble(values, "sample_rate_hz"),
             parseLong(values, "start_time_ms"),
             parseLong(values, "end_time_ms"),
-            ReplayAppearance.fromValues(values)
+            ReplayAppearance.fromValues(values),
+            ReplayEquipment.fromValues(values)
         );
     }
 

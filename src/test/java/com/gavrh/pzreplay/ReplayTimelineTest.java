@@ -1,6 +1,7 @@
 package com.gavrh.pzreplay;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,51 @@ class ReplayTimelineTest {
             ReplaySample.Locomotion.RUN, ReplaySample.Stance.CROUCH);
         assertSample(timeline.sampleAt(2.0), 2.0, 110f, 230f, 0f, 90f,
             ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND);
+    }
+
+    @Test
+    void exposesAimingFromTheActiveFrame() throws Exception {
+        ReplayTimeline timeline = new ReplayTimeline(List.of(
+            new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND,
+                ReplaySample.flags(true, false, false, false, false, true)),
+            new ReplaySample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
+                ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND,
+                ReplaySample.flags(false, false, false, false, false, true))
+        ));
+
+        assertTrue(timeline.sampleAt(0.0).aiming());
+        assertTrue(timeline.sampleAt(0.5).aiming());
+        assertFalse(timeline.sampleAt(1.0).aiming());
+    }
+
+    @Test
+    void exposesRecordedHeldItemsThroughSamples() throws Exception {
+        ReplayEquipment equipment = new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+            Base64.getEncoder().encodeToString(new byte[] { 1, 2, 3 }));
+        ReplayMetadata metadata = new ReplayMetadata(
+            ReplayMetadata.CURRENT_FORMAT_VERSION,
+            "0.0.0-dev",
+            "42.21.0",
+            "pz-replay-test",
+            "Sandbox",
+            "Muldraugh, KY",
+            "Replay Tester",
+            0f,
+            0f,
+            0f,
+            30.0,
+            1L,
+            2L,
+            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "AQ=="),
+            equipment
+        );
+        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,
+            List.of(frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
+                ReplaySample.Stance.STAND))));
+
+        assertEquals(equipment, timeline.getEquipment());
+        assertEquals(equipment, timeline.sampleAt(0.0).equipment());
     }
 
     @Test

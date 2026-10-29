@@ -12,14 +12,21 @@ class ReplayCompatibilityTest {
         "42.21.0", "pz-replay-test", "Muldraugh, KY", "Sandbox");
     private static final ReplayAppearance APPEARANCE = new ReplayAppearance(
         ReplayAppearance.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 1 }));
+    private static final ReplayEquipment EQUIPMENT = new ReplayEquipment(
+        ReplayEquipment.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 2 }));
 
     private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
         String mapName) {
-        return metadata(gameVersion, saveName, gameMode, mapName, APPEARANCE);
+        return metadata(gameVersion, saveName, gameMode, mapName, APPEARANCE, EQUIPMENT);
     }
 
     private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
         String mapName, ReplayAppearance appearance) {
+        return metadata(gameVersion, saveName, gameMode, mapName, appearance, EQUIPMENT);
+    }
+
+    private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
+        String mapName, ReplayAppearance appearance, ReplayEquipment equipment) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -34,7 +41,8 @@ class ReplayCompatibilityTest {
             30.0,
             1L,
             2L,
-            appearance
+            appearance,
+            equipment
         );
     }
 
@@ -145,6 +153,17 @@ class ReplayCompatibilityTest {
         assertFalse(result.isCompatible());
         assertEquals(1, result.warnings().size());
         assertTrue(result.warnings().get(0).contains("appearance data is corrupt or incomplete"));
+    }
+
+    @Test
+    void warnsWhenHeldItemDataIsMissing() {
+        ReplayCompatibility.Result result = ReplayCompatibility.check(
+            metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",
+                APPEARANCE, ReplayEquipment.none()), CURRENT);
+
+        assertFalse(result.isCompatible());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0).contains("no held-item data"));
     }
 
     @Test

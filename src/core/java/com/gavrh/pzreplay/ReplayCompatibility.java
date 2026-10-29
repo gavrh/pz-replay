@@ -42,6 +42,7 @@ public final class ReplayCompatibility {
         checkSave(metadata.saveName(), current.saveName(), warnings);
         checkGameMode(metadata.gameMode(), current.gameMode(), warnings);
         warnings.addAll(metadata.appearance().warnings());
+        warnings.addAll(metadata.equipment().warnings());
         return new Result(warnings);
     }
 
