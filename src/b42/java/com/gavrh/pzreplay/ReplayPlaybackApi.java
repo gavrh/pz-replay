@@ -144,7 +144,9 @@ public final class ReplayPlaybackApi {
         } else {
             state.playbackStopped();
         }
-        ReplayCameraController.restorePlayerCamera();
+        if (active != null) {
+            ReplayCameraController.restorePlayerCamera();
+        }
         return active != null;
     }
 
