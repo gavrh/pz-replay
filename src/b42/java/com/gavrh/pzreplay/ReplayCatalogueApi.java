@@ -14,8 +14,12 @@ public final class ReplayCatalogueApi {
     private static String searchText = "";
     private static String sortField = ReplayCatalogueView.SORT_DATE;
     private static boolean sortAscending;
+    private static boolean favoritesOnly;
     private static String lastOperationPath = "";
     private static String lastOperationError = "";
+    private static int detailCacheIndex = -1;
+    private static boolean detailCacheFavorite;
+    private static List<ReplayDetails.Row> detailCache = List.of();
 
     private ReplayCatalogueApi() {
     }
@@ -23,19 +27,27 @@ public final class ReplayCatalogueApi {
     public static int refresh() {
         adoptRecorderLastReplay();
         reloadEntries();
+        int removed = pruneStaleFavorites();
         System.out.println("[pz-replay] catalogue refreshed count=" + view.size()
             + " total=" + result.entries().size()
+            + " favorites=" + getFavoriteCount()
+            + " removedFavorites=" + removed
             + " query=" + searchText
             + " error=" + result.error());
         return view.size();
     }
 
     public static int applyQuery(String query, String sort, boolean ascending) {
+        return applyQuery(query, sort, ascending, favoritesOnly);
+    }
+
+    public static int applyQuery(String query, String sort, boolean ascending,
+        boolean filterFavorites) {
         searchText = query == null ? "" : query;
         sortField = ReplayCatalogueView.normalizeSort(sort);
         sortAscending = ascending;
-        view = ReplayCatalogueView.apply(result.entries(), searchText, sortField,
-            sortAscending);
+        favoritesOnly = filterFavorites;
+        reapplyView();
         return view.size();
     }
 
@@ -85,6 +97,10 @@ public final class ReplayCatalogueApi {
         lastOperationPath = renamed.path();
         lastReplayPath = ReplayCatalogue.remapLastReplay(lastReplayPath, entryPath,
             renamed.path());
+        ReplayFavoritesStore.get().remap(entryPath, renamed.path());
+        if (!ReplayFavoritesStore.save()) {
+            lastOperationError = "favorites could not be saved";
+        }
         reloadEntries();
         System.out.println("[pz-replay] replay renamed from=" + entryPath
             + " to=" + renamed.path());
@@ -111,6 +127,10 @@ public final class ReplayCatalogueApi {
         }
 
         lastReplayPath = ReplayCatalogue.remapLastReplay(lastReplayPath, entryPath, "");
+        ReplayFavoritesStore.get().remove(entryPath);
+        if (!ReplayFavoritesStore.save()) {
+            lastOperationError = "favorites could not be saved";
+        }
         reloadEntries();
         System.out.println("[pz-replay] replay deleted path=" + entryPath);
         return true;
@@ -197,6 +217,56 @@ public final class ReplayCatalogueApi {
         return entry != null && entry.lastReplay();
     }
 
+    public static boolean isFavorite(int index) {
+        ReplayCatalogue.Entry entry = entry(index);
+        return entry != null && ReplayFavoritesStore.get().contains(entry.path());
+    }
+
+    public static int getFavoriteCount() {
+        int count = 0;
+        for (ReplayCatalogue.Entry entry : result.entries()) {
+            if (ReplayFavoritesStore.get().contains(entry.path())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public static String getFavoritesError() {
+        return ReplayFavoritesStore.error();
+    }
+
+    public static int toggleFavorite(String path) {
+        clearOperation();
+        String entryPath = existingPath(path);
+        if (entryPath == null) {
+            failOperation("replay is no longer available");
+            return -1;
+        }
+        boolean favorite = ReplayFavoritesStore.get().toggle(entryPath);
+        reapplyView();
+        if (!ReplayFavoritesStore.save()) {
+            lastOperationError = "favorites could not be saved";
+        }
+        System.out.println("[pz-replay] favorite changed path=" + entryPath
+            + " favorite=" + favorite);
+        return favorite ? 1 : 0;
+    }
+
+    public static int getDetailRowCount(int index) {
+        return details(index).size();
+    }
+
+    public static String getDetailLabel(int index, int row) {
+        List<ReplayDetails.Row> rows = details(index);
+        return row < 0 || row >= rows.size() ? "" : rows.get(row).label();
+    }
+
+    public static String getDetailValue(int index, int row) {
+        List<ReplayDetails.Row> rows = details(index);
+        return row < 0 || row >= rows.size() ? "" : rows.get(row).value();
+    }
+
     private static void adoptRecorderLastReplay() {
         String recorderPath = PZReplayLua.getLastReplayPath();
         if (recorderLastPath == null || !recorderLastPath.equals(recorderPath)) {
@@ -212,8 +282,41 @@ public final class ReplayCatalogueApi {
             result = new ReplayCatalogue.Result(List.of(),
                 "cannot list replays: " + exception.getMessage());
         }
+        reapplyView();
+    }
+
+    private static void reapplyView() {
+        detailCacheIndex = -1;
         view = ReplayCatalogueView.apply(result.entries(), searchText, sortField,
-            sortAscending);
+            sortAscending, favoritesOnly, ReplayFavoritesStore.get().paths());
+    }
+
+    private static int pruneStaleFavorites() {
+        if (!result.error().isEmpty()) {
+            return 0;
+        }
+        List<String> knownPaths = result.entries().stream()
+            .map(ReplayCatalogue.Entry::path)
+            .toList();
+        int removed = ReplayFavoritesStore.get().prune(knownPaths);
+        if (removed > 0) {
+            ReplayFavoritesStore.save();
+        }
+        return removed;
+    }
+
+    private static List<ReplayDetails.Row> details(int index) {
+        ReplayCatalogue.Entry entry = entry(index);
+        if (entry == null) {
+            return List.of();
+        }
+        boolean favorite = ReplayFavoritesStore.get().contains(entry.path());
+        if (index != detailCacheIndex || favorite != detailCacheFavorite) {
+            detailCache = ReplayDetails.rows(entry, favorite);
+            detailCacheIndex = index;
+            detailCacheFavorite = favorite;
+        }
+        return detailCache;
     }
 
     private static String existingPath(String path) {

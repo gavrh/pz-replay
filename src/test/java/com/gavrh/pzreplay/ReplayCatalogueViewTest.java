@@ -1,6 +1,7 @@
 package com.gavrh.pzreplay;
 
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,6 +71,40 @@ class ReplayCatalogueViewTest {
     void filterAndSortCombine() {
         assertEquals(List.of("Alpha Run.pzrp.gz", "Charlie.pzrp.gz", "bravo.pzrp.gz"),
             names(ReplayCatalogueView.apply(ENTRIES, ".pzrp.gz", "duration", false)));
+    }
+
+    @Test
+    void favoritesOnlyKeepsFavoritesInTheSameSortOrder() {
+        Set<String> favorites = Set.of(ENTRIES.get(0).path(), ENTRIES.get(2).path());
+
+        assertEquals(List.of("Charlie.pzrp.gz", "Alpha Run.pzrp.gz"),
+            names(ReplayCatalogueView.apply(ENTRIES, "", "date", false, true, favorites)));
+    }
+
+    @Test
+    void favoritesFilterComposesWithSearchAndSort() {
+        Set<String> favorites = Set.of(ENTRIES.get(0).path(), ENTRIES.get(1).path());
+
+        assertEquals(List.of("Alpha Run.pzrp.gz", "bravo.pzrp.gz"),
+            names(ReplayCatalogueView.apply(ENTRIES, ".pzrp.gz", "duration", false,
+                true, favorites)));
+        assertEquals(List.of("Alpha Run.pzrp.gz"),
+            names(ReplayCatalogueView.apply(ENTRIES, "alice", "name", true, true,
+                favorites)));
+        assertEquals(List.of(),
+            names(ReplayCatalogueView.apply(ENTRIES, "alice", "name", true, true,
+                Set.of(ENTRIES.get(1).path()))));
+    }
+
+    @Test
+    void staleFavoritePathIsIgnored() {
+        Set<String> favorites = Set.of("/replays/deleted.pzrp.gz", ENTRIES.get(1).path());
+
+        assertEquals(List.of("bravo.pzrp.gz"),
+            names(ReplayCatalogueView.apply(ENTRIES, "", "name", true, true, favorites)));
+        assertEquals(List.of(),
+            names(ReplayCatalogueView.apply(ENTRIES, "", "name", true, true,
+                Set.of("/replays/deleted.pzrp.gz"))));
     }
 
     @Test
