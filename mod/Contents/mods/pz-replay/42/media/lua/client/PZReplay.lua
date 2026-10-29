@@ -1,6 +1,10 @@
 require "PZReplayHud"
 require "PZReplayPanel"
 require "PZReplayLibrary"
+require "PZReplayOptions"
+require "PZReplayText"
+
+local T = PZReplayText
 
 local function bridgeVersion()
     if getPZReplayVersion then
@@ -202,24 +206,27 @@ local function toggleCapture()
     if PZReplay.isCountingDown() then
         PZReplay.cancelCountdown()
         if ui.panel and ui.panel:getIsVisible() then
-            ui.panel.browser:setStatus("Countdown cancelled.")
+            ui.panel.browser:setStatus(T.get("UI_pzreplay_status_countdown_cancelled",
+                "Countdown cancelled."))
         end
     elseif PZReplay.isRecording() then
         PZReplay.stopRecording()
         if ui.panel and ui.panel:getIsVisible() then
             ui.panel.browser:refresh()
-            ui.panel.browser:setStatus(PZReplay.getLastRecordingResult())
+            ui.panel.browser:setStatus(T.message(PZReplay.getLastRecordingResult()))
         end
     else
         local started = PZReplay.startRecording("")
         if ui.panel and ui.panel:getIsVisible() then
             local status
             if started and PZReplay.isCountingDown() then
-                status = "Countdown started."
+                status = T.get("UI_pzreplay_status_countdown_started",
+                    "Countdown started.")
             elseif started then
-                status = "Recording started."
+                status = T.get("UI_pzreplay_status_recording_started",
+                    "Recording started.")
             else
-                status = PZReplay.getCaptureError()
+                status = T.message(PZReplay.getCaptureError())
             end
             ui.panel.browser:setStatus(status)
         end
@@ -239,14 +246,16 @@ local function togglePlayback()
     local path = PZReplay.getLastReplayPath()
     if path == "" then
         if ui.panel and ui.panel:getIsVisible() then
-            ui.panel.browser:setStatus("Record a replay first.")
+            ui.panel.browser:setStatus(T.get("UI_pzreplay_status_record_first",
+                "Record a replay first."))
         end
         return
     end
     local started = PZReplayPlayback.play(path)
     if ui.panel and ui.panel:getIsVisible() then
-        ui.panel.browser:setStatus(started and "Playback started."
-            or PZReplayPlayback.getLastPlaybackError())
+        ui.panel.browser:setStatus(started
+            and T.get("UI_pzreplay_status_playback_started", "Playback started.")
+            or T.message(PZReplayPlayback.getLastPlaybackError()))
     end
     ui.refreshPanel()
 end
