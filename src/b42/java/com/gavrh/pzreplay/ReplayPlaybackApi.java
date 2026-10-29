@@ -107,9 +107,13 @@ public final class ReplayPlaybackApi {
             return false;
         }
         state.setCompatibilityWarnings(warnings);
-        boolean following = settings.isCameraFollowDefault()
-            && loadedController.setCameraFollow(true, ghost);
-        state.setCameraFollow(following);
+        ReplayCameraMode initialMode = settings.isCameraFollowDefault()
+            ? ReplayCameraMode.FOLLOW_GHOST : ReplayCameraMode.PLAYER;
+        if (!loadedController.setCameraMode(initialMode, ghost)
+            && initialMode != ReplayCameraMode.PLAYER) {
+            loadedController.setCameraMode(ReplayCameraMode.PLAYER, ghost);
+        }
+        state.setCameraMode(loadedController.getCameraMode());
 
         timeline = loaded;
         controller = loadedController;
@@ -119,28 +123,31 @@ public final class ReplayPlaybackApi {
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
-            + " camera_follow=" + following);
+            + " camera_mode=" + loadedController.getCameraMode().id());
         return true;
     }
 
     public static boolean stop() {
         GhostMotionController active = controller;
         ReplayControlState state = PZReplayLua.state();
-        if (active == null) {
+        if (active != null) {
+            double currentTime = active.getCurrentTime();
+            String path = lastPath;
+            controller = null;
+            timeline = null;
+            lastPath = "";
+            reportedFinished = false;
             state.playbackStopped();
-            return false;
+            ReplayGhostApi.despawn();
+            System.out.println("[pz-replay] replay playback stopped path=" + path
+                + " time=" + format(currentTime) + "s");
+        } else {
+            state.playbackStopped();
         }
-        double currentTime = active.getCurrentTime();
-        String path = lastPath;
-        controller = null;
-        timeline = null;
-        lastPath = "";
-        reportedFinished = false;
-        state.playbackStopped();
-        ReplayGhostApi.despawn();
-        System.out.println("[pz-replay] replay playback stopped path=" + path
-            + " time=" + format(currentTime) + "s");
-        return true;
+        if (active != null) {
+            ReplayCameraController.restorePlayerCamera();
+        }
+        return active != null;
     }
 
     public static boolean pause() {
@@ -237,6 +244,23 @@ public final class ReplayPlaybackApi {
         return lastPath;
     }
 
+    public static boolean setCameraMode(String modeId) {
+        ReplayCameraMode mode = ReplayCameraMode.fromId(modeId);
+        if (mode == null || controller == null) {
+            return false;
+        }
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (ghost == null) {
+            return false;
+        }
+        if (!controller.setCameraMode(mode, ghost)) {
+            return false;
+        }
+        PZReplayLua.state().setCameraMode(controller.getCameraMode());
+        syncTransportState();
+        return true;
+    }
+
     public static boolean setCameraFollow(boolean enabled) {
         if (controller == null) {
             return false;
@@ -245,15 +269,43 @@ public final class ReplayPlaybackApi {
         if (ghost == null) {
             return false;
         }
-        boolean changed = controller.setCameraFollow(enabled, ghost);
-        if (changed) {
-            PZReplayLua.state().setCameraFollow(enabled);
+        if (!controller.setCameraFollow(enabled, ghost)) {
+            return false;
         }
-        return changed;
+        PZReplayLua.state().setCameraMode(controller.getCameraMode());
+        syncTransportState();
+        return true;
+    }
+
+    public static boolean exitFreeCamera() {
+        if (controller == null) {
+            return false;
+        }
+        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        if (ghost == null || !controller.exitFreeCamera(ghost)) {
+            return false;
+        }
+        PZReplayLua.state().setCameraMode(controller.getCameraMode());
+        syncTransportState();
+        return true;
     }
 
     public static boolean isCameraFollow() {
         return controller != null && controller.isCameraFollow();
+    }
+
+    public static boolean isCameraFree() {
+        return controller != null && controller.isCameraFree();
+    }
+
+    public static String getCameraMode() {
+        return controller == null ? PZReplayLua.state().getCameraModeId()
+            : controller.getCameraMode().id();
+    }
+
+    public static String getCameraModeLabel() {
+        return controller == null ? PZReplayLua.state().getCameraModeLabel()
+            : controller.getCameraMode().label();
     }
 
     public static String getLastPlaybackError() {
@@ -282,6 +334,7 @@ public final class ReplayPlaybackApi {
             timeline = null;
             lastPath = "";
             reportedFinished = false;
+            ReplayCameraController.restorePlayerCamera();
             state.playbackFailed("ghost was removed");
             return;
         }
@@ -292,7 +345,8 @@ public final class ReplayPlaybackApi {
             }
         }
         state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
-            controller.isCameraFollow());
+            controller.getCameraMode());
+        state.setCameraMode(controller.getCameraMode());
         state.setPlaybackPaused(controller.isPaused());
         state.setPlaybackSpeed(controller.getSpeed());
         if (!controller.isPlaying() && controller.isFinished() && !reportedFinished) {
@@ -311,12 +365,14 @@ public final class ReplayPlaybackApi {
         timeline = null;
         lastPath = "";
         reportedFinished = false;
+        ReplayCameraController.restorePlayerCamera();
     }
 
     private static void syncTransportState() {
         ReplayControlState state = PZReplayLua.state();
         state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
-            controller.isCameraFollow());
+            controller.getCameraMode());
+        state.setCameraMode(controller.getCameraMode());
         state.setPlaybackPaused(controller.isPaused());
         state.setPlaybackSpeed(controller.getSpeed());
     }

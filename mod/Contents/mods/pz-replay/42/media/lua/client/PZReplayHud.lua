@@ -63,7 +63,7 @@ function PZReplayHud:update()
     local lines = {}
     local recording = PZReplay and PZReplay.isRecording()
     local countingDown = PZReplay and PZReplay.isCountingDown()
-    local playing = PZReplayPlayback and PZReplayPlayback.isPlaying()
+    local playing = PZReplayPlayback and PZReplayPlayback.isActive()
     local name = PZReplay and PZReplay.getRecordingName() or ""
 
     if countingDown then
@@ -94,6 +94,16 @@ function PZReplayHud:update()
                 formatTime(PZReplayPlayback.getCurrentTime()),
                 formatTime(PZReplayPlayback.getDuration())),
             r = 0.6, g = 1.0, b = 0.6
+        }
+        local label = PZReplayPlayback.getCameraModeLabel() or "Player"
+        if PZReplayPlayback.isCameraFree() then
+            label = label .. "  arrows pan, ESC exits"
+        end
+        lines[#lines + 1] = {
+            text = "CAMERA  " .. label,
+            r = PZReplayPlayback.isCameraFree() and 0.55 or 0.75,
+            g = PZReplayPlayback.isCameraFree() and 0.9 or 0.85,
+            b = 1.0
         }
     end
 

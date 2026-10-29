@@ -1,9 +1,6 @@
 package com.gavrh.pzreplay;
 
 import zombie.GameTime;
-import zombie.characters.IsoPlayer;
-import zombie.iso.IsoCamera;
-import zombie.iso.PlayerCamera;
 
 public final class GhostMotionController {
     private static final float MAX_STEP_SECONDS = 0.1f;
@@ -19,9 +16,9 @@ public final class GhostMotionController {
 
     private final ScriptedGhostPath path;
     private final ReplayTimeline replay;
+    private final ReplayCameraController camera = new ReplayCameraController();
     private State state = State.STOPPED;
     private double elapsed;
-    private boolean cameraFollow;
     private long lastReplayUpdateNanos;
 
     public GhostMotionController(ScriptedGhostPath path) {
@@ -92,7 +89,7 @@ public final class GhostMotionController {
             }
             lastReplayUpdateNanos = System.nanoTime();
             apply(ghost, replay.sample());
-            applyCamera(ghost);
+            camera.update(ghost, 0.0);
             System.out.println("[pz-replay] replay ghost motion resumed at="
                 + String.format("%.2f", replay.getCurrentTime()));
             return true;
@@ -103,7 +100,7 @@ public final class GhostMotionController {
         }
         state = State.PLAYING;
         apply(ghost, path.sample(elapsed));
-        applyCamera(ghost);
+        camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion resumed at="
             + String.format("%.2f", elapsed));
         return true;
@@ -118,9 +115,10 @@ public final class GhostMotionController {
         if (!replay.isPlaying()) {
             applyPausedPose(ghost);
         }
-        applyCamera(ghost);
+        camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion seeked to="
-            + String.format("%.2f", replay.getCurrentTime()));
+            + String.format("%.2f", replay.getCurrentTime()) + " "
+            + camera.status(ghost));
         return true;
     }
 
@@ -129,7 +127,7 @@ public final class GhostMotionController {
             return false;
         }
         lastReplayUpdateNanos = System.nanoTime();
-        applyCamera(ghost);
+        camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion speed="
             + String.format("%.2f", replay.getSpeed()));
         return true;
@@ -144,8 +142,9 @@ public final class GhostMotionController {
         if (replay.isPaused()) {
             applyPausedPose(ghost);
         }
-        applyCamera(ghost);
-        System.out.println("[pz-replay] replay ghost motion restarted");
+        camera.update(ghost, 0.0);
+        System.out.println("[pz-replay] replay ghost motion restarted "
+            + camera.status(ghost));
         return true;
     }
 
@@ -157,8 +156,7 @@ public final class GhostMotionController {
             state = State.STOPPED;
             elapsed = 0.0;
         }
-        cameraFollow = false;
-        restoreCamera();
+        camera.restore();
         resetLocomotion(ghost);
         if (wasActive) {
             System.out.println("[pz-replay] replay ghost motion stopped");
@@ -166,8 +164,7 @@ public final class GhostMotionController {
     }
 
     public void reset(ReplayGhost ghost) {
-        cameraFollow = false;
-        restoreCamera();
+        camera.restore();
         if (replay != null) {
             replay.reset();
             if (!replay.isEmpty()) {
@@ -184,25 +181,25 @@ public final class GhostMotionController {
 
     public void update(ReplayGhost ghost) {
         if (replay != null) {
-            if (!replay.isPlaying()) {
-                return;
-            }
             long nowNanos = System.nanoTime();
             double delta = (nowNanos - lastReplayUpdateNanos) / 1_000_000_000.0;
             lastReplayUpdateNanos = nowNanos;
             if (GameTime.isGamePaused() || !Double.isFinite(delta) || delta <= 0.0) {
                 return;
             }
-            boolean advancing = replay.advance(Math.min(delta, MAX_STEP_SECONDS));
-            apply(ghost, replay.sample());
-            if (!advancing) {
-                applyPausedPose(ghost);
+            if (replay.isPlaying()) {
+                boolean advancing = replay.advance(Math.min(delta, MAX_STEP_SECONDS));
+                apply(ghost, replay.sample());
+                if (!advancing) {
+                    applyPausedPose(ghost);
+                }
             }
-            applyCamera(ghost);
+            camera.update(ghost, delta);
             return;
         }
 
         if (state != State.PLAYING) {
+            camera.update(ghost, realSecondsSinceLastUpdate());
             return;
         }
 
@@ -219,32 +216,31 @@ public final class GhostMotionController {
             state = State.STOPPED;
         }
         apply(ghost, path.sample(elapsed));
-        applyCamera(ghost);
+        camera.update(ghost, delta);
+    }
+
+    public boolean setCameraMode(ReplayCameraMode mode, ReplayGhost ghost) {
+        return camera.setMode(mode, ghost);
     }
 
     public boolean setCameraFollow(boolean enabled, ReplayGhost ghost) {
-        if (!enabled) {
-            cameraFollow = false;
-            restoreCamera();
-            return true;
-        }
-        IsoPlayer player = IsoPlayer.getInstance();
-        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
-        if ((replay == null && !isActive()) || ghost == null || camera == null) {
-            return false;
-        }
-        cameraFollow = true;
-        if (!applyCamera(ghost)) {
-            cameraFollow = false;
-            return false;
-        }
-        IsoCamera.setCameraCharacter(player);
-        camera.center();
-        return true;
+        return camera.setFollow(enabled, ghost);
+    }
+
+    public boolean exitFreeCamera(ReplayGhost ghost) {
+        return camera.exitFree(ghost);
+    }
+
+    public ReplayCameraMode getCameraMode() {
+        return camera.getMode();
     }
 
     public boolean isCameraFollow() {
-        return cameraFollow;
+        return camera.isFollowing();
+    }
+
+    public boolean isCameraFree() {
+        return camera.isFree();
     }
 
     public boolean isActive() {
@@ -374,53 +370,6 @@ public final class GhostMotionController {
     }
 
     void refreshCamera(ReplayGhost ghost) {
-        applyCamera(ghost);
-    }
-
-    private boolean applyCamera(ReplayGhost ghost) {
-        if (!cameraFollow) {
-            return false;
-        }
-        IsoPlayer player = IsoPlayer.getInstance();
-        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
-        if (camera == null) {
-            return false;
-        }
-        camera.deferedX = ghost.getX() - player.getX();
-        camera.deferedY = ghost.getY() - player.getY();
-        return true;
-    }
-
-    private void restoreCamera() {
-        clearCameraOffsets();
-        IsoPlayer player = IsoPlayer.getInstance();
-        if (player == null) {
-            IsoCamera.clearCameraCharacter();
-            return;
-        }
-        IsoCamera.setCameraCharacter(player);
-        PlayerCamera camera = cameraAt(player.getIndex());
-        if (camera != null) {
-            camera.center();
-        }
-    }
-
-    private static void clearCameraOffsets() {
-        if (IsoCamera.cameras == null) {
-            return;
-        }
-        for (PlayerCamera camera : IsoCamera.cameras) {
-            if (camera != null) {
-                camera.deferedX = 0f;
-                camera.deferedY = 0f;
-            }
-        }
-    }
-
-    private static PlayerCamera cameraAt(int index) {
-        if (IsoCamera.cameras == null || index < 0 || index >= IsoCamera.cameras.length) {
-            return null;
-        }
-        return IsoCamera.cameras[index];
+        camera.update(ghost, 0.0);
     }
 }

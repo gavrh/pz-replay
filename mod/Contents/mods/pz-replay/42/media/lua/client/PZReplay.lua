@@ -84,6 +84,10 @@ function ui.openPanel(onClosed)
     if not ui.panel then
         return
     end
+    if PZReplayPlayback and PZReplayPlayback.isCameraFree
+        and PZReplayPlayback.isCameraFree() then
+        PZReplayPlayback.exitFreeCamera()
+    end
     ui.panel.onPanelClosed = onClosed
     ui.panel:open()
 end
@@ -248,7 +252,9 @@ local function togglePlayback()
 end
 
 local function toggleCameraFollow()
-    if PZReplayPlayback.isActive() then
+    if PZReplayPlayback.isCameraFree() then
+        PZReplayPlayback.exitFreeCamera()
+    elseif PZReplayPlayback.isActive() then
         PZReplayPlayback.setCameraFollow(not PZReplayPlayback.isCameraFollow())
     else
         PZReplay.setCameraFollowDefault(not PZReplay.isCameraFollowDefault())
@@ -256,9 +262,24 @@ local function toggleCameraFollow()
     ui.refreshPanel()
 end
 
+local function exitFreeCamera()
+    if PZReplayPlayback and PZReplayPlayback.isCameraFree
+        and PZReplayPlayback.isCameraFree() then
+        PZReplayPlayback.exitFreeCamera()
+        ui.refreshPanel()
+        return true
+    end
+    return false
+end
+
 function ui.handleKey(key)
     if PZReplayLibrary and PZReplayLibrary.isOpen() then
         return false
+    end
+    local cameraKey = PZReplay and PZReplay.getKeyBinding("camera")
+    if (key == Keyboard.KEY_ESCAPE or (cameraKey and key == cameraKey))
+        and exitFreeCamera() then
+        return true
     end
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if ui.panel and ui.panel:getIsVisible() then
@@ -292,7 +313,6 @@ function ui.handleKey(key)
         togglePlayback()
         return true
     end
-    local cameraKey = PZReplay and PZReplay.getKeyBinding("camera")
     if cameraKey and key == cameraKey then
         toggleCameraFollow()
         return true
@@ -339,4 +359,5 @@ Events.OnMainMenuEnter.Add(cleanupAll)
 PZReplayUi.toggleCapture = toggleCapture
 PZReplayUi.togglePlayback = togglePlayback
 PZReplayUi.toggleCameraFollow = toggleCameraFollow
+PZReplayUi.exitFreeCamera = exitFreeCamera
 PZReplayUi.cancelCountdown = cancelCountdown
