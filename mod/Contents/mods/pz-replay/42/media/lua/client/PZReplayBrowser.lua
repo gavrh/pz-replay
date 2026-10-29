@@ -702,7 +702,13 @@ function PZReplayBrowser:performRename(entry, newName)
     end
     local newPath = PZReplayCatalogue.getLastOperationPath()
     self:reload(newPath, -1)
-    self:setStatus("Renamed " .. entry.name .. " to " .. fileName(newPath))
+    local message = "Renamed " .. entry.name .. " to " .. fileName(newPath)
+    local warning = PZReplayCatalogue.getLastOperationError()
+    if warning ~= "" then
+        self:setStatus(message .. " (" .. warning .. ")", true)
+        return true, warning
+    end
+    self:setStatus(message)
     return true, ""
 end
 
@@ -728,7 +734,13 @@ function PZReplayBrowser:performDelete(entry)
     local fallbackIndex = self.list and self.list.selected > 0
         and self.list.selected - 1 or -1
     self:reload("", fallbackIndex)
-    self:setStatus("Deleted " .. entry.name)
+    local message = "Deleted " .. entry.name
+    local warning = PZReplayCatalogue.getLastOperationError()
+    if warning ~= "" then
+        self:setStatus(message .. " (" .. warning .. ")", true)
+        return true, warning
+    end
+    self:setStatus(message)
     return true, ""
 end
 

@@ -98,7 +98,9 @@ public final class ReplayCatalogueApi {
         lastReplayPath = ReplayCatalogue.remapLastReplay(lastReplayPath, entryPath,
             renamed.path());
         ReplayFavoritesStore.get().remap(entryPath, renamed.path());
-        ReplayFavoritesStore.save();
+        if (!ReplayFavoritesStore.save()) {
+            lastOperationError = "favorites could not be saved";
+        }
         reloadEntries();
         System.out.println("[pz-replay] replay renamed from=" + entryPath
             + " to=" + renamed.path());
@@ -126,7 +128,9 @@ public final class ReplayCatalogueApi {
 
         lastReplayPath = ReplayCatalogue.remapLastReplay(lastReplayPath, entryPath, "");
         ReplayFavoritesStore.get().remove(entryPath);
-        ReplayFavoritesStore.save();
+        if (!ReplayFavoritesStore.save()) {
+            lastOperationError = "favorites could not be saved";
+        }
         reloadEntries();
         System.out.println("[pz-replay] replay deleted path=" + entryPath);
         return true;
