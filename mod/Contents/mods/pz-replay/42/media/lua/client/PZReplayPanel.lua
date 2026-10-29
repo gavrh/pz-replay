@@ -3,8 +3,11 @@ require "ISUI/ISButton"
 require "ISUI/ISTextEntryBox"
 require "RadioCom/ISUIRadio/ISSliderPanel"
 require "PZReplayBrowser"
+require "PZReplayText"
 
 if PZReplayPanel then return end
+
+local T = PZReplayText
 
 PZReplayPanel = ISPanel:derive("PZReplayPanel")
 
@@ -19,9 +22,9 @@ local COUNTDOWN_MIN = 0
 local COUNTDOWN_MAX = 10
 local CAMERA_BUTTON_WIDTH = 84
 local CAMERA_LABELS = {
-    player = "Player",
-    follow_ghost = "Follow",
-    free = "Free"
+    player = { key = "UI_pzreplay_panel_camera_player", fallback = "Player" },
+    follow_ghost = { key = "UI_pzreplay_panel_camera_follow", fallback = "Follow" },
+    free = { key = "UI_pzreplay_panel_camera_free", fallback = "Free" }
 }
 
 local function fontHeight(font)
@@ -66,10 +69,16 @@ local function fileName(path)
 end
 
 local function actionLabel(action)
-    if action == "record" then return "Record / stop" end
-    if action == "play" then return "Play / stop" end
-    if action == "camera" then return "Camera follow" end
-    return "Open / close panel"
+    if action == "record" then
+        return T.get("UI_pzreplay_panel_key_label_record", "Record / stop")
+    end
+    if action == "play" then
+        return T.get("UI_pzreplay_panel_key_label_play", "Play / stop")
+    end
+    if action == "camera" then
+        return T.get("UI_pzreplay_panel_key_label_camera", "Camera follow")
+    end
+    return T.get("UI_pzreplay_panel_key_label_panel", "Open / close panel")
 end
 
 function PZReplayPanel:createChildren()
@@ -95,35 +104,40 @@ function PZReplayPanel:createChildren()
     local buttonHeight = fontHeight(FONT) + 8
 
     self.closeButton = ISButton:new(self.width - PAD - 54, 4, 50, TITLE_HEIGHT - 8,
-        "Close", self, PZReplayPanel.onClose)
+        T.get("UI_pzreplay_common_close", "Close"), self, PZReplayPanel.onClose)
     self.closeButton:initialise()
     self.closeButton:instantiate()
     self:addChild(self.closeButton)
 
     self.replayTab = ISButton:new(PAD, self.titleHeight + self.statusHeight + 2,
-        86, buttonHeight, "Replays", self, PZReplayPanel.onReplayTab)
+        86, buttonHeight, T.get("UI_pzreplay_panel_tab_replays", "Replays"),
+        self, PZReplayPanel.onReplayTab)
     self.replayTab:initialise()
     self.replayTab:instantiate()
     self:addChild(self.replayTab)
 
     self.settingsTab = ISButton:new(PAD + 92, self.titleHeight + self.statusHeight + 2,
-        86, buttonHeight, "Settings", self, PZReplayPanel.onSettingsTab)
+        86, buttonHeight, T.get("UI_pzreplay_panel_tab_settings", "Settings"),
+        self, PZReplayPanel.onSettingsTab)
     self.settingsTab:initialise()
     self.settingsTab:instantiate()
     self:addChild(self.settingsTab)
 
     self.captureButton = ISButton:new(self.width - PAD - 126,
         self.titleHeight + self.statusHeight + 2, 126, buttonHeight,
-        "Record", self, PZReplayPanel.onCapture)
+        T.get("UI_pzreplay_common_record", "Record"), self, PZReplayPanel.onCapture)
     self.captureButton:initialise()
     self.captureButton:instantiate()
     self:addChild(self.captureButton)
 
-    self.cameraPlayerButton = self:createCameraButton("player", "Player",
+    self.cameraPlayerButton = self:createCameraButton("player",
+        T.get(CAMERA_LABELS.player.key, CAMERA_LABELS.player.fallback),
         self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH * 3 - 8)
-    self.cameraFollowButton = self:createCameraButton("follow_ghost", "Follow",
+    self.cameraFollowButton = self:createCameraButton("follow_ghost",
+        T.get(CAMERA_LABELS.follow_ghost.key, CAMERA_LABELS.follow_ghost.fallback),
         self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH * 2 - 4)
-    self.cameraFreeButton = self:createCameraButton("free", "Free",
+    self.cameraFreeButton = self:createCameraButton("free",
+        T.get(CAMERA_LABELS.free.key, CAMERA_LABELS.free.fallback),
         self.captureButton.x - 6 - CAMERA_BUTTON_WIDTH)
 
     self:createNameEntry(buttonHeight)
@@ -144,14 +158,19 @@ function PZReplayPanel:createChildren()
             onPlay = function(path)
                 local started = PZReplayPlayback and PZReplayPlayback.play(path)
                 if started then
-                    return true, "Playing " .. fileName(path)
+                    return true, T.format("UI_pzreplay_panel_status_playing_file",
+                        "Playing %s", fileName(path))
                 end
                 local error = PZReplayPlayback and PZReplayPlayback.getLastPlaybackError()
-                return false, error ~= "" and error or "Playback failed."
+                return false, error ~= "" and T.message(error)
+                    or T.get("UI_pzreplay_browser_playback_failed", "Playback failed.")
             end,
             onStop = function()
                 local stopped = PZReplayPlayback and PZReplayPlayback.stop()
-                return stopped, stopped and "Playback stopped." or "Playback is not active."
+                return stopped, stopped
+                    and T.get("UI_pzreplay_browser_playback_stopped", "Playback stopped.")
+                    or T.get("UI_pzreplay_browser_playback_not_active",
+                        "Playback is not active.")
             end
         })
     self.browser:initialise()
@@ -190,19 +209,20 @@ function PZReplayPanel:createTransport(buttonHeight)
     self.transportHeight = buttonHeight + 4 + TRANSPORT_SLIDER_HEIGHT
 
     self.playPauseButton = ISButton:new(PAD, self.transportY, 90, buttonHeight,
-        "Play", self, PZReplayPanel.onTransportPlayPause)
+        T.get("UI_pzreplay_common_play", "Play"), self, PZReplayPanel.onTransportPlayPause)
     self.playPauseButton:initialise()
     self.playPauseButton:instantiate()
     self:addChild(self.playPauseButton)
 
     self.restartButton = ISButton:new(PAD + 96, self.transportY, 84, buttonHeight,
-        "Restart", self, PZReplayPanel.onTransportRestart)
+        T.get("UI_pzreplay_panel_restart", "Restart"), self, PZReplayPanel.onTransportRestart)
     self.restartButton:initialise()
     self.restartButton:instantiate()
     self:addChild(self.restartButton)
 
     self.speedButton = ISButton:new(PAD + 186, self.transportY, 90, buttonHeight,
-        "Speed: 1x", self, PZReplayPanel.onTransportSpeed)
+        T.format("UI_pzreplay_panel_speed", "Speed: %s", "1x"),
+        self, PZReplayPanel.onTransportSpeed)
     self.speedButton:initialise()
     self.speedButton:instantiate()
     self:addChild(self.speedButton)
@@ -239,17 +259,18 @@ function PZReplayPanel:createSettings(buttonHeight)
 
     y = y + rowHeight
     self.cameraDefaultRowY = y
-    self.cameraDefaultButton = self:addSettingsButton("Off", controlX, y, 80, buttonHeight,
+    local off = T.get("UI_pzreplay_common_off", "Off")
+    self.cameraDefaultButton = self:addSettingsButton(off, controlX, y, 80, buttonHeight,
         PZReplayPanel.onToggleCameraDefault)
 
     y = y + rowHeight
     self.debugRowY = y
-    self.debugButton = self:addSettingsButton("Off", controlX, y, 80, buttonHeight,
+    self.debugButton = self:addSettingsButton(off, controlX, y, 80, buttonHeight,
         PZReplayPanel.onToggleDebug)
 
     y = y + rowHeight
     self.killRowY = y
-    self.killButton = self:addSettingsButton("Off", controlX, y, 80, buttonHeight,
+    self.killButton = self:addSettingsButton(off, controlX, y, 80, buttonHeight,
         PZReplayPanel.onToggleKillSwitch)
 
     self.keyRows = {}
@@ -263,8 +284,9 @@ function PZReplayPanel:createSettings(buttonHeight)
 
     y = y + rowHeight
     self.resetRowY = y
-    self.resetKeysButton = self:addSettingsButton("Reset keys", PAD, y, 120,
-        buttonHeight, PZReplayPanel.onResetKeys)
+    self.resetKeysButton = self:addSettingsButton(
+        T.get("UI_pzreplay_panel_reset_keys", "Reset keys"),
+        PAD, y, 120, buttonHeight, PZReplayPanel.onResetKeys)
 end
 
 function PZReplayPanel:addSettingsButton(title, x, y, width, height, onclick, action)
@@ -344,18 +366,21 @@ function PZReplayPanel:refreshControls()
     local recording = PZReplay.isRecording()
     local countingDown = PZReplay.isCountingDown()
     local playing = PZReplayPlayback and PZReplayPlayback.isActive()
-    local samples = string.format("%.0f Hz", PZReplay.getSampleRate())
+    local samples = T.format("UI_pzreplay_panel_hz", "%.0f Hz", PZReplay.getSampleRate())
+    local on = T.get("UI_pzreplay_common_on", "On")
+    local off = T.get("UI_pzreplay_common_off", "Off")
 
     self.rateValue = samples
-    self.countdownValue = string.format("%d s", PZReplay.getCountdownSeconds())
-    self.cameraDefaultButton:setTitle(PZReplay.isCameraFollowDefault() and "On" or "Off")
-    self.debugButton:setTitle(PZReplay.isDebugControlsEnabled() and "On" or "Off")
-    self.killButton:setTitle(killSwitch and "On" or "Off")
-    local captureTitle = "Record"
+    self.countdownValue = T.format("UI_pzreplay_panel_seconds", "%d s",
+        PZReplay.getCountdownSeconds())
+    self.cameraDefaultButton:setTitle(PZReplay.isCameraFollowDefault() and on or off)
+    self.debugButton:setTitle(PZReplay.isDebugControlsEnabled() and on or off)
+    self.killButton:setTitle(killSwitch and on or off)
+    local captureTitle = T.get("UI_pzreplay_common_record", "Record")
     if countingDown then
-        captureTitle = "Cancel start"
+        captureTitle = T.get("UI_pzreplay_panel_cancel_start", "Cancel start")
     elseif recording then
-        captureTitle = "Stop recording"
+        captureTitle = T.get("UI_pzreplay_panel_stop_recording", "Stop recording")
     end
     self.captureButton:setTitle(captureTitle)
     self.captureButton:setEnable(recording or countingDown
@@ -364,7 +389,8 @@ function PZReplayPanel:refreshControls()
     local cameraMode = playing and PZReplayPlayback.getCameraMode() or "player"
     for mode, button in pairs({ player = self.cameraPlayerButton,
         follow_ghost = self.cameraFollowButton, free = self.cameraFreeButton }) do
-        local label = CAMERA_LABELS[mode] or mode
+        local entry = CAMERA_LABELS[mode]
+        local label = entry and T.get(entry.key, entry.fallback) or mode
         button:setTitle(mode == cameraMode and ("[" .. label .. "]") or label)
         button:setEnable(not killSwitch and playing)
     end
@@ -379,9 +405,14 @@ function PZReplayPanel:refreshControls()
     self.killButton:setEnable(true)
     for action, button in pairs(self.keyButtons) do
         if self.rebindingAction == action then
-            button:setTitle("Press a key...")
+            button:setTitle(T.get("UI_pzreplay_panel_press_key", "Press a key..."))
         else
-            button:setTitle(PZReplay.getKeyBindingName(action))
+            local binding = PZReplay.getKeyBindingName(action)
+            if PZReplay.hasKeyBindingConflict
+                and PZReplay.hasKeyBindingConflict(action) then
+                binding = binding .. " !"
+            end
+            button:setTitle(binding)
         end
         button:setEnable(self.rebindingAction == nil)
     end
@@ -390,20 +421,21 @@ function PZReplayPanel:refreshControls()
     local paused = playing and PZReplayPlayback.isPaused()
     local finished = playing and PZReplayPlayback.isFinished()
     local advancing = playing and PZReplayPlayback.isPlaying()
-    local transportLabel = "Play"
+    local transportLabel = T.get("UI_pzreplay_common_play", "Play")
     if finished then
-        transportLabel = "Restart"
+        transportLabel = T.get("UI_pzreplay_panel_restart", "Restart")
     elseif paused then
-        transportLabel = "Resume"
+        transportLabel = T.get("UI_pzreplay_panel_resume", "Resume")
     elseif advancing then
-        transportLabel = "Pause"
+        transportLabel = T.get("UI_pzreplay_panel_pause", "Pause")
     end
     self.playPauseButton:setTitle(transportLabel)
     self.playPauseButton:setEnable(not killSwitch and not recording and not countingDown
         and (playing or PZReplay.getLastReplayPath() ~= ""))
     self.restartButton:setEnable(playing)
     local speed = PZReplayPlayback and PZReplayPlayback.getSpeed() or 1
-    self.speedButton:setTitle("Speed: " .. formatSpeed(speed))
+    self.speedButton:setTitle(T.format("UI_pzreplay_panel_speed", "Speed: %s",
+        formatSpeed(speed)))
     self.speedButton:setEnable(playing)
     self.transportSlider.disabled = not playing
     if not playing then
@@ -437,7 +469,8 @@ function PZReplayPanel:onCameraMode(button)
     end
     local mode = button.internal
     if not PZReplayPlayback.setCameraMode(mode) then
-        self.browser:setStatus("Camera mode unavailable.")
+        self.browser:setStatus(T.get("UI_pzreplay_message_camera_unavailable",
+            "Camera mode unavailable."))
         self:refreshControls()
         return
     end
@@ -464,8 +497,9 @@ function PZReplayPanel:onTransportPlayPause()
         local path = PZReplay.getLastReplayPath()
         if path ~= "" then
             local started = PZReplayPlayback.play(path)
-            self.browser:setStatus(started and "Playback started."
-                or PZReplayPlayback.getLastPlaybackError())
+            self.browser:setStatus(started
+                and T.get("UI_pzreplay_browser_playback_started", "Playback started.")
+                or T.message(PZReplayPlayback.getLastPlaybackError()))
         end
     end
     self:refreshControls()
@@ -483,7 +517,7 @@ function PZReplayPanel:onTransportRestart()
         end
     end
     if not restarted then
-        self.browser:setStatus(PZReplayPlayback.getLastPlaybackError())
+        self.browser:setStatus(T.message(PZReplayPlayback.getLastPlaybackError()))
     end
     self:refreshControls()
 end
@@ -518,11 +552,12 @@ end
 function PZReplayPanel:onCapture()
     if PZReplay.isCountingDown() then
         PZReplay.cancelCountdown()
-        self.browser:setStatus("Countdown cancelled.")
+        self.browser:setStatus(T.get("UI_pzreplay_panel_status_countdown_cancelled",
+            "Countdown cancelled."))
     elseif PZReplay.isRecording() then
         PZReplay.stopRecording()
         self.browser:refresh()
-        self.browser:setStatus(PZReplay.getLastRecordingResult())
+        self.browser:setStatus(T.message(PZReplay.getLastRecordingResult()))
     else
         local started = PZReplay.startRecording(self:getName())
         if started then
@@ -530,13 +565,14 @@ function PZReplayPanel:onCapture()
         end
         if started and PZReplay.isCountingDown() then
             local name = PZReplay.getRecordingName()
-            self.browser:setStatus(string.format("Starting in %.0fs as %s",
+            self.browser:setStatus(T.format("UI_pzreplay_panel_status_starting_short",
+                "Starting in %.0fs as %s",
                 PZReplay.getCountdownRemainingSeconds(), name))
         elseif started then
-            self.browser:setStatus("Recording started as "
-                .. PZReplay.getRecordingName() .. ".")
+            self.browser:setStatus(T.format("UI_pzreplay_panel_status_recording_started",
+                "Recording started as %s.", PZReplay.getRecordingName()))
         else
-            self.browser:setStatus(PZReplay.getCaptureError())
+            self.browser:setStatus(T.message(PZReplay.getCaptureError()))
         end
     end
     self:refreshControls()
@@ -589,7 +625,8 @@ end
 
 function PZReplayPanel:onResetKeys()
     PZReplay.resetKeyBindings()
-    self.rebindNotice = "Key bindings reset."
+    self.rebindNotice = T.get("UI_pzreplay_panel_status_binding_reset",
+        "Key bindings reset.")
     self:refreshControls()
 end
 
@@ -597,25 +634,30 @@ function PZReplayPanel:finishRebind(key)
     local action = self.rebindingAction
     self.rebindingAction = nil
     if key == Keyboard.KEY_ESCAPE then
-        self.rebindNotice = "Key binding unchanged."
+        self.rebindNotice = T.get("UI_pzreplay_panel_status_binding_unchanged",
+            "Key binding unchanged.")
         self:refreshControls()
         return
     end
     if key <= 0 or PZReplayPanel.isModifierKey(key) then
-        self.rebindNotice = "That key cannot be used."
+        self.rebindNotice = T.get("UI_pzreplay_panel_status_key_unusable",
+            "That key cannot be used.")
         self:refreshControls()
         return
     end
     if not PZReplay.setKeyBinding(action, key) then
-        self.rebindNotice = "That key is already used by another pz-replay action."
+        self.rebindNotice = T.get("UI_pzreplay_panel_status_key_duplicate",
+            "That key is already used by another pz-replay action.")
         self:refreshControls()
         return
     end
     local warning = PZReplay.checkKeyBinding(action, key)
     if warning ~= "" then
-        self.rebindNotice = "Bound with warning: " .. warning
+        self.rebindNotice = T.format("UI_pzreplay_panel_status_bound_warning",
+            "Bound with warning: %s", T.message(warning))
     else
-        self.rebindNotice = "Key binding updated."
+        self.rebindNotice = T.get("UI_pzreplay_panel_status_binding_updated",
+            "Key binding updated.")
     end
     self:refreshControls()
 end
@@ -643,7 +685,8 @@ function PZReplayPanel:onKeyRelease(key)
     if key == Keyboard.KEY_ESCAPE or (panelKey and key == panelKey) then
         if PZReplay.isCountingDown() then
             PZReplay.cancelCountdown()
-            self.browser:setStatus("Countdown cancelled.")
+            self.browser:setStatus(T.get("UI_pzreplay_panel_status_countdown_cancelled",
+                "Countdown cancelled."))
         end
         self:close()
         return true
@@ -695,7 +738,8 @@ function PZReplayPanel:prerender()
         self.backgroundColor.b)
     self:drawRectBorder(0, 0, self.width, self.height,
         self.borderColor.a, self.borderColor.r, self.borderColor.g, self.borderColor.b)
-    self:drawText("Replay", PAD, 7, 1, 1, 1, 1, UIFont.Medium)
+    self:drawText(T.get("UI_pzreplay_panel_title", "Replay"), PAD, 7, 1, 1, 1, 1,
+        UIFont.Medium)
 end
 
 function PZReplayPanel:render()
@@ -711,10 +755,12 @@ end
 function PZReplayPanel:renderName()
     local lineHeight = fontHeight(FONT)
     local y = self.nameY + math.floor((self.nameHeight - lineHeight) / 2)
-    self:drawText("Name", PAD, y, 0.86, 0.86, 0.86, 1.0, FONT)
+    self:drawText(T.get("UI_pzreplay_panel_name", "Name"), PAD, y,
+        0.86, 0.86, 0.86, 1.0, FONT)
     local hintX = self.nameEntry:getX() + self.nameEntry:getWidth() + 8
     if hintX < self.width - PAD then
-        self:drawText(fitText("blank = auto name", self.width - PAD - hintX, FONT),
+        self:drawText(fitText(T.get("UI_pzreplay_panel_blank_auto_name",
+            "blank = auto name"), self.width - PAD - hintX, FONT),
             hintX, y, 0.58, 0.58, 0.58, 1.0, FONT)
     end
 end
@@ -723,7 +769,7 @@ function PZReplayPanel:renderTransport()
     if not PZReplayPlayback or not PZReplayPlayback.isActive() then
         return
     end
-    local text = string.format("%s / %s",
+    local text = T.format("UI_pzreplay_panel_status_time", "%s / %s",
         formatClock(PZReplayPlayback.getCurrentTime()),
         formatClock(PZReplayPlayback.getDuration()))
     local x = PAD + 286
@@ -741,23 +787,26 @@ function PZReplayPanel:renderStatus()
 
     local captureText
     if killSwitch then
-        captureText = "pz-replay is disabled by the kill switch."
+        captureText = T.get("UI_pzreplay_panel_status_disabled",
+            "pz-replay is disabled by the kill switch.")
     elseif countingDown then
-        captureText = string.format("Starting as %s in %.1fs  (%.0f Hz)",
+        captureText = T.format("UI_pzreplay_panel_status_starting",
+            "Starting as %s in %.1fs  (%.0f Hz)",
             PZReplay.getRecordingName(), PZReplay.getCountdownRemainingSeconds(),
             PZReplay.getSampleRate())
     elseif recording then
-        captureText = string.format("Recording as %s  %s  %d frames  %.0f/%.1f Hz",
+        captureText = T.format("UI_pzreplay_panel_status_recording",
+            "Recording as %s  %s  %d frames  %.0f/%.1f Hz",
             PZReplay.getRecordingName(), formatTime(PZReplay.getRecordingSeconds()),
             PZReplay.getRecordedFrames(), PZReplay.getConfiguredSampleRate(),
             PZReplay.getActualSampleRate())
     else
         local result = PZReplay.getLastRecordingResult()
         if result ~= "" then
-            captureText = result
+            captureText = T.message(result)
         else
-            captureText = string.format("Capture idle  %.0f Hz configured",
-                PZReplay.getSampleRate())
+            captureText = T.format("UI_pzreplay_panel_status_capture_idle",
+                "Capture idle  %.0f Hz configured", PZReplay.getSampleRate())
         end
     end
     self:drawText(fitText(captureText, self.width - PAD * 2, FONT), PAD, y,
@@ -768,21 +817,23 @@ function PZReplayPanel:renderStatus()
 
     local playbackText
     if playing then
-        local state = "Ready"
+        local state = T.get("UI_pzreplay_panel_status_ready", "Ready")
         if PZReplayPlayback.isFinished() then
-            state = "Finished"
+            state = T.get("UI_pzreplay_panel_status_finished", "Finished")
         elseif PZReplayPlayback.isPaused() then
-            state = "Paused"
+            state = T.get("UI_pzreplay_panel_status_paused", "Paused")
         elseif PZReplayPlayback.isPlaying() then
-            state = "Playing"
+            state = T.get("UI_pzreplay_panel_status_playing", "Playing")
         end
-        local camera = "  camera: " .. (PZReplayPlayback.getCameraModeLabel() or "Player")
-        playbackText = string.format("%s  %s / %s  %s%s", state,
+        local camera = T.format("UI_pzreplay_panel_status_camera", "  camera: %s",
+            T.message(PZReplayPlayback.getCameraModeLabel() or "Player"))
+        playbackText = T.format("UI_pzreplay_panel_status_playback",
+            "%s  %s / %s  %s%s", state,
             formatClock(PZReplayPlayback.getCurrentTime()),
             formatClock(PZReplayPlayback.getDuration()),
             formatSpeed(PZReplayPlayback.getSpeed()), camera)
     else
-        playbackText = "Playback idle"
+        playbackText = T.get("UI_pzreplay_panel_status_playback_idle", "Playback idle")
     end
     self:drawText(fitText(playbackText, self.width - PAD * 2, FONT), PAD, y,
         playing and 0.55 or 0.86, playing and 0.9 or 0.86, playing and 0.55 or 0.86,
@@ -790,8 +841,10 @@ function PZReplayPanel:renderStatus()
     y = y + lineHeight
 
     local lastPath = PZReplay.getLastReplayPath()
-    local lastText = lastPath ~= "" and ("Last replay  " .. fileName(lastPath))
-        or "Last replay  none"
+    local lastText = lastPath ~= ""
+        and T.format("UI_pzreplay_panel_status_last_replay", "Last replay  %s",
+            fileName(lastPath))
+        or T.get("UI_pzreplay_panel_status_last_replay_none", "Last replay  none")
     self:drawText(fitText(lastText, self.width - PAD * 2, FONT), PAD, y,
         0.78, 0.78, 0.78, 1.0, FONT)
     y = y + lineHeight
@@ -804,7 +857,8 @@ function PZReplayPanel:renderStatus()
         errorText = PZReplayCatalogue.getCatalogueError()
     end
     if errorText ~= "" then
-        self:drawText(fitText("Error: " .. errorText, self.width - PAD * 2, FONT),
+        self:drawText(fitText(T.format("UI_pzreplay_common_error", "Error: %s",
+            T.message(errorText)), self.width - PAD * 2, FONT),
             PAD, y, 1.0, 0.45, 0.35, 1.0, FONT)
     end
     y = y + lineHeight
@@ -814,17 +868,20 @@ function PZReplayPanel:renderStatus()
         warnings = PZReplayPlayback.getCompatibilityWarningCount()
     end
     if warnings > 0 then
-        local warning = PZReplayPlayback.getCompatibilityWarning(0)
+        local warning = T.message(PZReplayPlayback.getCompatibilityWarning(0))
         if warnings > 1 then
-            warning = warning .. " (+" .. (warnings - 1) .. " more)"
+            warning = warning .. T.format("UI_pzreplay_common_more", " (+%d more)",
+                warnings - 1)
         end
-        self:drawText(fitText("Warning: " .. warning, self.width - PAD * 2, FONT),
+        self:drawText(fitText(T.format("UI_pzreplay_common_warning", "Warning: %s",
+            warning), self.width - PAD * 2, FONT),
             PAD, y, 1.0, 0.82, 0.4, 1.0, FONT)
     elseif self.rebindNotice and self.rebindNotice ~= "" then
         self:drawText(fitText(self.rebindNotice, self.width - PAD * 2, FONT),
             PAD, y, 0.7, 0.9, 1.0, 1.0, FONT)
     elseif killSwitch then
-        self:drawText("Open Settings to disable the kill switch.",
+        self:drawText(T.get("UI_pzreplay_panel_status_open_settings_kill_switch",
+            "Open Settings to disable the kill switch."),
             PAD, y, 0.9, 0.9, 0.9, 1.0, FONT)
     end
 end
@@ -834,19 +891,22 @@ function PZReplayPanel:renderSettings()
     local labelX = PAD
     local valueX = PAD + 188
 
-    self:drawText("Sample rate", labelX, self.rateRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
+    self:drawText(T.get("UI_pzreplay_panel_sample_rate", "Sample rate"), labelX,
+        self.rateRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
     self:drawText(self.rateValue or "", valueX, self.rateRowY + 5, 1, 1, 1, 1, FONT)
 
-    self:drawText("Countdown", labelX, self.countdownRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
+    self:drawText(T.get("UI_pzreplay_panel_countdown", "Countdown"), labelX,
+        self.countdownRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
     self:drawText(self.countdownValue or "", valueX, self.countdownRowY + 5,
         1, 1, 1, 1, FONT)
 
-    self:drawText("Camera follow default", labelX, self.cameraDefaultRowY + 5,
+    self:drawText(T.get("UI_pzreplay_panel_camera_follow_default",
+        "Camera follow default"), labelX, self.cameraDefaultRowY + 5,
         0.9, 0.9, 0.9, 1, FONT)
-    self:drawText("Debug controls", labelX, self.debugRowY + 5,
-        0.9, 0.9, 0.9, 1, FONT)
-    self:drawText("Kill switch", labelX, self.killRowY + 5,
-        0.9, 0.9, 0.9, 1, FONT)
+    self:drawText(T.get("UI_pzreplay_panel_debug_controls", "Debug controls"), labelX,
+        self.debugRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
+    self:drawText(T.get("UI_pzreplay_panel_kill_switch", "Kill switch"), labelX,
+        self.killRowY + 5, 0.9, 0.9, 0.9, 1, FONT)
 
     for _, action in ipairs({ "record", "play", "camera", "panel" }) do
         self:drawText(actionLabel(action), labelX, self.keyRows[action] + 5,
@@ -855,9 +915,16 @@ function PZReplayPanel:renderSettings()
 
     local warnings = PZReplay.getKeyBindingWarningCount()
     local warningY = self.resetRowY + lineHeight + 12
-    for index = 0, math.min(warnings, 2) - 1 do
-        self:drawText(fitText("Warning: " .. PZReplay.getKeyBindingWarning(index),
-            self.width - PAD * 2, FONT), PAD, warningY + index * lineHeight,
+    local shown = math.min(warnings, 3)
+    for index = 0, shown - 1 do
+        local warning = T.message(PZReplay.getKeyBindingWarning(index))
+        self:drawText(fitText(T.format("UI_pzreplay_common_warning", "Warning: %s",
+            warning), self.width - PAD * 2, FONT), PAD, warningY + index * lineHeight,
+            1.0, 0.82, 0.4, 1.0, FONT)
+    end
+    if warnings > shown then
+        self:drawText(T.format("UI_pzreplay_panel_warning_more", "%d more warnings",
+            warnings - shown), PAD, warningY + shown * lineHeight,
             1.0, 0.82, 0.4, 1.0, FONT)
     end
 end

@@ -3,8 +3,11 @@ require "ISUI/ISButton"
 require "ISUI/ISLabel"
 require "PZReplayBrowser"
 require "PZReplayLoad"
+require "PZReplayText"
 
 if PZReplayLibrary then return end
+
+local T = PZReplayText
 
 PZReplayLibrary = ISPanel:derive("PZReplayLibrary")
 
@@ -12,6 +15,7 @@ local FONT = UIFont.Small
 local PAD = 10
 local TITLE_HEIGHT = 28
 local ENTRY_ID = "PZREPLAY_LIBRARY"
+local MENU_LABEL = T.get("UI_pzreplay_library_menu_entry", "REPLAYS")
 
 local function fontHeight(font)
     return getTextManager():getFontHeight(font)
@@ -62,7 +66,7 @@ local function attachEntry()
 
     local labelHeight = getTextManager():getFontHeight(UIFont.Large) + 8 * 2
     local insertionY = anchor:getBottom()
-    local label = ISLabel:new(0, insertionY, labelHeight, "REPLAYS",
+    local label = ISLabel:new(0, insertionY, labelHeight, MENU_LABEL,
         1, 1, 1, 1, UIFont.Large, true)
     label.internal = ENTRY_ID
     label:initialise()
@@ -81,7 +85,7 @@ local function attachEntry()
     end
     panel:setHeight(panel:getHeight() + labelHeight)
     screen.maxMenuItemWidth = math.max(screen.maxMenuItemWidth or 0,
-        getTextManager():MeasureStringX(UIFont.Large, "REPLAYS"))
+        getTextManager():MeasureStringX(UIFont.Large, MENU_LABEL))
     screen.pzReplayLibraryEntry = label
 end
 
@@ -144,14 +148,15 @@ function PZReplayLibrary:createChildren()
     self:setHeight(self.height)
 
     self.closeButton = ISButton:new(self.width - PAD - 54, 4, 50, TITLE_HEIGHT - 8,
-        "Close", self, PZReplayLibrary.onClose)
+        T.get("UI_pzreplay_common_close", "Close"), self, PZReplayLibrary.onClose)
     self.closeButton:initialise()
     self.closeButton:instantiate()
     self:addChild(self.closeButton)
 
-    local playWidth = getTextManager():MeasureStringX(FONT, "Play") + 24
+    local playLabel = T.get("UI_pzreplay_common_play", "Play")
+    local playWidth = getTextManager():MeasureStringX(FONT, playLabel) + 24
     self.playButton = ISButton:new(self.closeButton:getX() - 6 - playWidth, 4, playWidth,
-        TITLE_HEIGHT - 8, "Play", self, PZReplayLibrary.onPlay)
+        TITLE_HEIGHT - 8, playLabel, self, PZReplayLibrary.onPlay)
     self.playButton:initialise()
     self.playButton:instantiate()
     self:addChild(self.playButton)
@@ -219,7 +224,9 @@ function PZReplayLibrary:restoreAfterLoadFailure(message)
     self:setWantKeyEvents(true)
     self:setWantMouseEvents(true)
     self:bringToTop()
-    self.browser:setStatus(message or "The replay could not be loaded.", true)
+    self.browser:setStatus(message
+        or T.get("UI_pzreplay_library_load_failed", "The replay could not be loaded."),
+        true)
     self:updatePlayButton()
 end
 
@@ -233,22 +240,28 @@ end
 function PZReplayLibrary:playSelected()
     local entry = self.browser and self.browser:getSelected()
     if not entry then
-        self.browser:setStatus("Select a replay first.", true)
-        return false, "Select a replay first."
+        local message = T.get("UI_pzreplay_common_select_first",
+            "Select a replay first.")
+        self.browser:setStatus(message, true)
+        return false, message
     end
     if not entry.valid then
-        local message = "Cannot play: " .. entry.error
+        local message = T.format("UI_pzreplay_browser_cannot_play", "Cannot play: %s",
+            T.message(entry.error))
         self.browser:setStatus(message, true)
         return false, message
     end
     if PZReplayLoad.isPending() then
-        local message = "A replay load is already in progress."
+        local message = T.get("UI_pzreplay_library_load_in_progress",
+            "A replay load is already in progress.")
         self.browser:setStatus(message, true)
         return false, message
     end
     local started, message = PZReplayLoad.load(entry.path, self)
     if not started then
-        self.browser:setStatus(message or "The replay could not be loaded.", true)
+        self.browser:setStatus(message
+            or T.get("UI_pzreplay_library_load_failed",
+                "The replay could not be loaded."), true)
     end
     self:updatePlayButton()
     return started, message
@@ -323,11 +336,13 @@ function PZReplayLibrary:prerender()
         self.backgroundColor.b)
     self:drawRectBorder(0, 0, self.width, self.height,
         self.borderColor.a, self.borderColor.r, self.borderColor.g, self.borderColor.b)
-    self:drawText("Replay Library", PAD, 7, 1, 1, 1, 1, UIFont.Medium)
+    self:drawText(T.get("UI_pzreplay_library_title", "Replay Library"),
+        PAD, 7, 1, 1, 1, 1, UIFont.Medium)
 end
 
 function PZReplayLibrary:render()
-    local text = "Select a replay and choose Play to load its recorded save."
+    local text = T.get("UI_pzreplay_library_hint",
+        "Select a replay and choose Play to load its recorded save.")
     self:drawText(fitText(text, self.width - PAD * 2, FONT), PAD,
         self.height - PAD - fontHeight(FONT), 0.82, 0.82, 0.82, 1.0, FONT)
 end
