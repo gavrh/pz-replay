@@ -23,7 +23,7 @@ public final class ReplayControlState {
     private double playbackSpeed = 1.0;
     private double playbackTime;
     private double playbackDuration;
-    private boolean cameraFollow;
+    private ReplayCameraMode cameraMode = ReplayCameraMode.PLAYER;
     private String playbackError = "";
     private List<String> compatibilityWarnings = List.of();
 
@@ -116,17 +116,17 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = Math.max(0.0, duration);
-        cameraFollow = false;
+        cameraMode = ReplayCameraMode.PLAYER;
         playbackError = "";
         compatibilityWarnings = List.of();
         return true;
     }
 
     public synchronized void playbackProgress(double time, double duration,
-        boolean followCamera) {
+        ReplayCameraMode mode) {
         playbackTime = Math.max(0.0, time);
         playbackDuration = Math.max(0.0, duration);
-        cameraFollow = followCamera;
+        cameraMode = mode == null ? ReplayCameraMode.PLAYER : mode;
     }
 
     public synchronized void setPlaybackPaused(boolean paused) {
@@ -145,7 +145,7 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
-        cameraFollow = false;
+        cameraMode = ReplayCameraMode.PLAYER;
     }
 
     public synchronized void playbackFailed(String error) {
@@ -154,7 +154,7 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
-        cameraFollow = false;
+        cameraMode = ReplayCameraMode.PLAYER;
         playbackError = safe(error);
         compatibilityWarnings = List.of();
     }
@@ -163,8 +163,16 @@ public final class ReplayControlState {
         compatibilityWarnings = warnings == null ? List.of() : List.copyOf(warnings);
     }
 
-    public synchronized void setCameraFollow(boolean enabled) {
-        cameraFollow = enabled;
+    public synchronized boolean setCameraMode(ReplayCameraMode mode) {
+        if (mode == null) {
+            return false;
+        }
+        cameraMode = mode;
+        return true;
+    }
+
+    public synchronized boolean setCameraMode(String modeId) {
+        return setCameraMode(ReplayCameraMode.fromId(modeId));
     }
 
     public synchronized void clearErrors() {
@@ -248,8 +256,20 @@ public final class ReplayControlState {
         return playbackDuration;
     }
 
+    public synchronized ReplayCameraMode getCameraMode() {
+        return cameraMode;
+    }
+
+    public synchronized String getCameraModeId() {
+        return cameraMode.id();
+    }
+
+    public synchronized String getCameraModeLabel() {
+        return cameraMode.label();
+    }
+
     public synchronized boolean isCameraFollow() {
-        return cameraFollow;
+        return cameraMode == ReplayCameraMode.FOLLOW_GHOST;
     }
 
     public synchronized String getPlaybackError() {

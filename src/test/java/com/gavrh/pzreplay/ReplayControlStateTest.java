@@ -160,17 +160,19 @@ class ReplayControlStateTest {
     void playbackProgressStopAndFailureAreDeterministic() {
         ReplayControlState state = new ReplayControlState();
         assertTrue(state.playbackStarted(20.0));
-        state.playbackProgress(5.5, 20.0, true);
+        state.playbackProgress(5.5, 20.0, ReplayCameraMode.FOLLOW_GHOST);
 
         assertTrue(state.isPlaying());
         assertEquals(5.5, state.getPlaybackTime());
         assertEquals(20.0, state.getPlaybackDuration());
+        assertEquals(ReplayCameraMode.FOLLOW_GHOST, state.getCameraMode());
         assertTrue(state.isCameraFollow());
 
         state.playbackFailed("missing replay");
         assertFalse(state.isPlaying());
         assertEquals("missing replay", state.getPlaybackError());
         assertFalse(state.isCameraFollow());
+        assertEquals(ReplayCameraMode.PLAYER, state.getCameraMode());
 
         assertTrue(state.playbackStarted(30.0));
         assertEquals("", state.getPlaybackError());
@@ -207,11 +209,11 @@ class ReplayControlStateTest {
         ReplayControlState state = new ReplayControlState();
         assertTrue(state.playbackStarted(30.0));
 
-        state.playbackProgress(12.5, 30.0, true);
+        state.playbackProgress(12.5, 30.0, ReplayCameraMode.FOLLOW_GHOST);
         assertEquals(12.5, state.getPlaybackTime());
         assertEquals(30.0, state.getPlaybackDuration());
 
-        state.playbackProgress(0.0, 30.0, true);
+        state.playbackProgress(0.0, 30.0, ReplayCameraMode.FOLLOW_GHOST);
         assertEquals(0.0, state.getPlaybackTime());
     }
 
@@ -226,6 +228,81 @@ class ReplayControlStateTest {
         state.setPlaybackSpeed(-1.0);
 
         assertEquals(2.0, state.getPlaybackSpeed());
+    }
+
+    @Test
+    void cameraModeTransitionsAreExplicitAndValidated() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(10.0));
+        assertEquals(ReplayCameraMode.PLAYER, state.getCameraMode());
+        assertEquals("player", state.getCameraModeId());
+        assertEquals("Player", state.getCameraModeLabel());
+
+        assertTrue(state.setCameraMode("follow_ghost"));
+        assertEquals(ReplayCameraMode.FOLLOW_GHOST, state.getCameraMode());
+        assertTrue(state.isCameraFollow());
+
+        assertTrue(state.setCameraMode("free"));
+        assertEquals(ReplayCameraMode.FREE, state.getCameraMode());
+        assertFalse(state.isCameraFollow());
+
+        assertFalse(state.setCameraMode("orbit"));
+        assertEquals(ReplayCameraMode.FREE, state.getCameraMode());
+        assertFalse(state.setCameraMode((String) null));
+        assertEquals(ReplayCameraMode.FREE, state.getCameraMode());
+
+        assertTrue(state.setCameraMode("player"));
+        assertEquals(ReplayCameraMode.PLAYER, state.getCameraMode());
+    }
+
+    @Test
+    void cameraModeIsClearedOnStopAndFailure() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(10.0));
+        assertTrue(state.setCameraMode("follow_ghost"));
+        state.playbackStopped();
+        assertEquals(ReplayCameraMode.PLAYER, state.getCameraMode());
+
+        assertTrue(state.playbackStarted(10.0));
+        assertTrue(state.setCameraMode("free"));
+        state.playbackFailed("missing replay");
+        assertEquals(ReplayCameraMode.PLAYER, state.getCameraMode());
+    }
+
+    @Test
+    void cameraModeSurvivesTransportStateChanges() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(30.0));
+        assertTrue(state.setCameraMode("follow_ghost"));
+
+        state.setPlaybackPaused(true);
+        state.setPlaybackSpeed(2.0);
+        state.playbackProgress(12.5, 30.0, ReplayCameraMode.FOLLOW_GHOST);
+        state.setPlaybackPaused(false);
+        state.setPlaybackSpeed(0.5);
+        state.playbackProgress(0.0, 30.0, ReplayCameraMode.FOLLOW_GHOST);
+
+        assertEquals(ReplayCameraMode.FOLLOW_GHOST, state.getCameraMode());
+        assertEquals(0.0, state.getPlaybackTime());
+        assertEquals(0.5, state.getPlaybackSpeed());
+    }
+
+    @Test
+    void cameraModeChangesDoNotAlterPlaybackProgress() {
+        ReplayControlState state = new ReplayControlState();
+        assertTrue(state.playbackStarted(20.0));
+        state.playbackProgress(7.5, 20.0, ReplayCameraMode.PLAYER);
+        state.setPlaybackSpeed(2.0);
+        state.setPlaybackPaused(true);
+
+        assertTrue(state.setCameraMode("follow_ghost"));
+        assertTrue(state.setCameraMode("free"));
+        assertTrue(state.setCameraMode("player"));
+
+        assertEquals(7.5, state.getPlaybackTime());
+        assertEquals(20.0, state.getPlaybackDuration());
+        assertEquals(2.0, state.getPlaybackSpeed());
+        assertTrue(state.isPlaybackPaused());
     }
 
     @Test
