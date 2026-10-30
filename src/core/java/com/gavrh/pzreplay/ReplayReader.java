@@ -12,11 +12,16 @@ public final class ReplayReader {
     }
 
     public static String summary(ReplayData data) {
+        return summary(data, false);
+    }
+
+    public static String summary(ReplayData data, boolean actionEventsDropped) {
         ReplayMetadata metadata = data.metadata();
         long durationMs = Math.max(0, metadata.endTimeMillis() - metadata.startTimeMillis());
         return "format=" + metadata.formatVersion()
             + " frames=" + data.frames().size()
             + " events=" + eventCount(metadata)
+            + (actionEventsDropped ? " action_events=dropped" : "")
             + " duration_ms=" + durationMs
             + " rate_hz=" + metadata.sampleRateHz()
             + " map=" + metadata.mapName()

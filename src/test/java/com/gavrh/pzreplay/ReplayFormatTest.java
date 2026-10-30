@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -315,6 +316,8 @@ class ReplayFormatTest {
 
         assertEquals(3, data.frames().size());
         assertTrue(ReplayReader.summary(data).contains("frames=3"));
+        assertTrue(ReplayReader.summary(data, true).contains("action_events=dropped"));
+        assertFalse(ReplayReader.summary(data).contains("action_events=dropped"));
     }
 
     @Test

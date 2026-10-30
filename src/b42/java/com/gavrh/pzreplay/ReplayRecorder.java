@@ -29,6 +29,7 @@ final class ReplayRecorder {
     private String lastError;
     private String lastReplayPath;
     private String lastReplaySummary;
+    private boolean eventsDropped;
     private String captureResultPath;
     private String captureResultSummary;
 
@@ -77,6 +78,7 @@ final class ReplayRecorder {
         captureInVehicle = false;
         captureSitting = false;
         lastError = null;
+        eventsDropped = false;
         captureResultPath = null;
         captureResultSummary = null;
 
@@ -322,10 +324,12 @@ final class ReplayRecorder {
     private ReplayEvents encodeEvents() {
         try {
             ReplayEvents events = ReplayEvents.encode(session.events());
+            eventsDropped = false;
             System.out.println("[pz-replay] capture actions events=" + session.events().size()
                 + " bytes=" + events.data().length());
             return events;
         } catch (ReplayFormatException exception) {
+            eventsDropped = true;
             lastError = "action events could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] action events could not be written: " + exception);
             return ReplayEvents.none();
@@ -358,10 +362,12 @@ final class ReplayRecorder {
             written = true;
             ReplayData data = ReplayReader.read(path);
             lastReplayPath = path.toString();
-            lastReplaySummary = ReplayReader.summary(data);
+            lastReplaySummary = ReplayReader.summary(data, eventsDropped);
             captureResultPath = lastReplayPath;
             captureResultSummary = lastReplaySummary;
-            System.out.println("[pz-replay] recording saved name=" + captureName
+            System.out.println("[pz-replay] recording saved"
+                + (eventsDropped ? " without action events" : "")
+                + " name=" + captureName
                 + " path=" + lastReplayPath + " bytes=" + Files.size(path)
                 + " " + lastReplaySummary);
         } catch (IOException | ReplayFormatException exception) {
