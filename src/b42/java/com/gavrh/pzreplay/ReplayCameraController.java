@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.util.Locale;
 import org.lwjglx.input.Keyboard;
 import zombie.characters.IsoPlayer;
+import zombie.core.skinnedmodel.ModelManager;
 import zombie.input.GameKeyboard;
 import zombie.iso.IsoCamera;
 import zombie.iso.IsoGridSquare;
@@ -15,8 +16,10 @@ public final class ReplayCameraController {
     private static final float MAX_STEP_SECONDS = 0.1f;
 
     private final FreeCamera freeCamera = new FreeCamera();
+    private final CameraSmoothing smoothing = new CameraSmoothing();
     private ReplayCameraMode mode = ReplayCameraMode.PLAYER;
     private ReplayCameraMode modeBeforeFree = ReplayCameraMode.PLAYER;
+    private boolean returningToPlayer;
 
     public boolean setMode(ReplayCameraMode requested, ReplayGhost ghost) {
         if (requested == null) {
@@ -33,23 +36,12 @@ public final class ReplayCameraController {
 
         ReplayCameraMode previous = mode;
         ReplayCameraMode previousBeforeFree = modeBeforeFree;
+        boolean previousReturning = returningToPlayer;
         try {
-            if (requested == ReplayCameraMode.FREE) {
-                if (mode != ReplayCameraMode.FREE) {
-                    modeBeforeFree = mode;
-                    if (!freeCamera.moveTo(player.getX() + camera.deferedX,
-                        player.getY() + camera.deferedY)) {
-                        modeBeforeFree = previousBeforeFree;
-                        return false;
-                    }
-                    freeCamera.clampTo(player.getX(), player.getY());
-                    camera.deferedX = freeCamera.offsetX(player.getX());
-                    camera.deferedY = freeCamera.offsetY(player.getY());
-                }
-            } else if (requested == ReplayCameraMode.FOLLOW_GHOST) {
-                applyFollowOffset(ghost, player, camera);
-            } else {
-                clearCameraOffsets();
+            switch (requested) {
+                case FREE -> enterFree(player, camera);
+                case FOLLOW_GHOST -> beginFollow(ghost, player, camera);
+                case PLAYER -> beginPlayer(camera);
             }
             mode = requested;
             IsoCamera.setCameraCharacter(player);
@@ -59,12 +51,14 @@ public final class ReplayCameraController {
         } catch (Throwable failure) {
             mode = previous;
             modeBeforeFree = previousBeforeFree;
+            returningToPlayer = previousReturning;
             if (previous != ReplayCameraMode.FREE) {
                 freeCamera.reset();
             }
+            smoothing.clear();
             restorePlayerCamera();
             if (mode == ReplayCameraMode.FOLLOW_GHOST && ghost != null) {
-                applyFollowOffset(ghost, player, camera);
+                snapFollow(ghost, player, camera);
                 camera.center();
             }
             System.out.println("[pz-replay] replay camera mode failed mode="
@@ -96,20 +90,70 @@ public final class ReplayCameraController {
         }
         if (mode == ReplayCameraMode.FOLLOW_GHOST) {
             if (ghost != null) {
-                applyFollowOffset(ghost, player, camera);
+                smoothing.setTarget(ghost.getX() - player.getX(),
+                    ghost.getY() - player.getY());
+                smoothing.update(clampDelta(deltaSeconds));
+                applySmoothing(camera);
             }
-        } else if (mode == ReplayCameraMode.FREE) {
-            updateFreeCamera(player, camera, deltaSeconds);
-        } else {
-            camera.deferedX = 0.0f;
-            camera.deferedY = 0.0f;
+            return;
         }
+        if (mode == ReplayCameraMode.FREE) {
+            updateFreeCamera(player, camera, deltaSeconds);
+            return;
+        }
+        if (returningToPlayer) {
+            updateReturnToPlayer(camera, deltaSeconds);
+            return;
+        }
+        clearCameraOffsets();
+    }
+
+    public void refresh(ReplayGhost ghost) {
+        IsoPlayer player = localPlayer();
+        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
+        if (player == null || camera == null) {
+            return;
+        }
+        if (mode == ReplayCameraMode.FOLLOW_GHOST) {
+            if (ghost != null) {
+                if (!smoothing.isActive()) {
+                    snapFollow(ghost, player, camera);
+                } else {
+                    applySmoothing(camera);
+                }
+            }
+            return;
+        }
+        if (mode == ReplayCameraMode.FREE) {
+            applyFreeCamera(player, camera);
+            return;
+        }
+        if (returningToPlayer) {
+            applySmoothing(camera);
+            return;
+        }
+        clearCameraOffsets();
+    }
+
+    public void resetSmoothing(ReplayGhost ghost) {
+        if (mode != ReplayCameraMode.FOLLOW_GHOST || ghost == null) {
+            return;
+        }
+        IsoPlayer player = localPlayer();
+        PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
+        if (player == null || camera == null) {
+            return;
+        }
+        snapFollow(ghost, player, camera);
+        camera.center();
     }
 
     public void restore() {
         mode = ReplayCameraMode.PLAYER;
         modeBeforeFree = ReplayCameraMode.PLAYER;
+        returningToPlayer = false;
         freeCamera.reset();
+        smoothing.clear();
         restorePlayerCamera();
         System.out.println("[pz-replay] replay camera restored mode=player");
     }
@@ -134,6 +178,7 @@ public final class ReplayCameraController {
         }
         String screen = "unknown";
         String loaded = "unknown";
+        String model = "unknown";
         String visible = "unknown";
         if (ghost != null) {
             try {
@@ -149,19 +194,21 @@ public final class ReplayCameraController {
                     : IsoWorld.instance.currentCell.getGridSquare(
                         (int) Math.floor(ghost.getX()), (int) Math.floor(ghost.getY()),
                         (int) Math.floor(ghost.getZ()));
+                model = modelState(ghost);
                 screen = onScreen ? "true" : "false";
                 loaded = square == null ? "false" : "true";
-                visible = onScreen && square != null ? "true" : "false";
+                visible = onScreen && square != null && "true".equals(model)
+                    ? "true" : "false";
             } catch (Throwable ignored) {
             }
         }
         return String.format(Locale.ROOT,
             "camera=%s offset=%.3f,%.3f player=%.3f,%.3f ghost=%s on_screen=%s"
-                + " loaded=%s visible=%s",
+                + " loaded=%s model=%s visible=%s",
             mode.id(), camera.deferedX, camera.deferedY, player.getX(), player.getY(),
             ghost == null ? "none" : String.format(Locale.ROOT, "%.3f,%.3f",
                 ghost.getX(), ghost.getY()),
-            screen, loaded, visible);
+            screen, loaded, model, visible);
     }
 
     public static void restorePlayerCamera() {
@@ -176,6 +223,54 @@ public final class ReplayCameraController {
         if (camera != null) {
             camera.center();
         }
+    }
+
+    private void enterFree(IsoPlayer player, PlayerCamera camera) {
+        if (mode == ReplayCameraMode.FREE) {
+            return;
+        }
+        modeBeforeFree = mode;
+        if (!freeCamera.moveTo(player.getX() + camera.deferedX,
+            player.getY() + camera.deferedY)) {
+            modeBeforeFree = ReplayCameraMode.PLAYER;
+            throw new IllegalStateException("free camera position is invalid");
+        }
+        freeCamera.clampTo(player.getX(), player.getY());
+        returningToPlayer = false;
+        smoothing.clear();
+        applyFreeCamera(player, camera);
+    }
+
+    private void beginFollow(ReplayGhost ghost, IsoPlayer player, PlayerCamera camera) {
+        returningToPlayer = false;
+        smoothing.resetTo(camera.deferedX, camera.deferedY);
+        smoothing.setTarget(ghost.getX() - player.getX(), ghost.getY() - player.getY());
+        applySmoothing(camera);
+    }
+
+    private void beginPlayer(PlayerCamera camera) {
+        returningToPlayer = true;
+        smoothing.resetTo(camera.deferedX, camera.deferedY);
+        smoothing.setTarget(0.0f, 0.0f);
+        if (smoothing.isAtTarget()) {
+            returningToPlayer = false;
+            smoothing.clear();
+            clearCameraOffsets();
+            return;
+        }
+        applySmoothing(camera);
+    }
+
+    private void updateReturnToPlayer(PlayerCamera camera, double deltaSeconds) {
+        smoothing.setTarget(0.0f, 0.0f);
+        smoothing.update(clampDelta(deltaSeconds));
+        if (smoothing.isAtTarget()) {
+            returningToPlayer = false;
+            smoothing.clear();
+            clearCameraOffsets();
+            return;
+        }
+        applySmoothing(camera);
     }
 
     private void updateFreeCamera(IsoPlayer player, PlayerCamera camera, double deltaSeconds) {
@@ -203,19 +298,36 @@ public final class ReplayCameraController {
                 inputY * PAN_SPEED_TILES_PER_SECOND * delta, player.getX(), player.getY());
         }
         freeCamera.clampTo(player.getX(), player.getY());
+        applyFreeCamera(player, camera);
+    }
+
+    private void applyFreeCamera(IsoPlayer player, PlayerCamera camera) {
         camera.deferedX = freeCamera.offsetX(player.getX());
         camera.deferedY = freeCamera.offsetY(player.getY());
     }
 
-    private static void applyFollowOffset(ReplayGhost ghost, IsoPlayer player,
-        PlayerCamera camera) {
-        camera.deferedX = ghost.getX() - player.getX();
-        camera.deferedY = ghost.getY() - player.getY();
+    private void applySmoothing(PlayerCamera camera) {
+        camera.deferedX = smoothing.getX();
+        camera.deferedY = smoothing.getY();
+    }
+
+    private void snapFollow(ReplayGhost ghost, IsoPlayer player, PlayerCamera camera) {
+        smoothing.resetTo(ghost.getX() - player.getX(), ghost.getY() - player.getY());
+        applySmoothing(camera);
     }
 
     private void logMode(String action, ReplayGhost ghost) {
         System.out.println("[pz-replay] replay camera " + action + " "
             + status(ghost));
+    }
+
+    private static String modelState(ReplayGhost ghost) {
+        try {
+            return ModelManager.instance != null && ModelManager.instance.ContainsChar(ghost)
+                ? "true" : "false";
+        } catch (Throwable failure) {
+            return "unknown";
+        }
     }
 
     private static float clampDelta(double deltaSeconds) {

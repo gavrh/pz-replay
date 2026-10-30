@@ -132,6 +132,7 @@ public final class GhostMotionController {
         if (!replay.isPlaying()) {
             applyPausedPose(ghost);
         }
+        camera.resetSmoothing(ghost);
         actions.seek(ghost, replay.getCurrentTime());
         camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion seeked to="
@@ -160,6 +161,7 @@ public final class GhostMotionController {
         if (replay.isPaused()) {
             applyPausedPose(ghost);
         }
+        camera.resetSmoothing(ghost);
         actions.restart(ghost);
         camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion restarted "
@@ -443,6 +445,6 @@ public final class GhostMotionController {
     }
 
     void refreshCamera(ReplayGhost ghost) {
-        camera.update(ghost, 0.0);
+        camera.refresh(ghost);
     }
 }
