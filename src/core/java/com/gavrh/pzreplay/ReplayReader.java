@@ -16,11 +16,23 @@ public final class ReplayReader {
         long durationMs = Math.max(0, metadata.endTimeMillis() - metadata.startTimeMillis());
         return "format=" + metadata.formatVersion()
             + " frames=" + data.frames().size()
+            + " events=" + eventCount(metadata)
             + " duration_ms=" + durationMs
             + " rate_hz=" + metadata.sampleRateHz()
             + " map=" + metadata.mapName()
             + " save=" + metadata.saveName()
             + " mode=" + metadata.gameMode()
             + " player=" + metadata.playerName();
+    }
+
+    private static String eventCount(ReplayMetadata metadata) {
+        if (!metadata.events().isPresent()) {
+            return "0";
+        }
+        try {
+            return Integer.toString(metadata.events().decode().events().size());
+        } catch (ReplayFormatException exception) {
+            return "unknown";
+        }
     }
 }
