@@ -126,6 +126,11 @@ public final class PZReplayLua {
         return ReplayRecorder.INSTANCE.isRecording();
     }
 
+    public static boolean recordAction(String kind, String detail, float direction,
+        float duration) {
+        return ReplayRecorder.INSTANCE.recordAction(kind, detail, direction, duration);
+    }
+
     public static boolean isDebugEnabled() {
         return Boolean.getBoolean("pzreplay.debug")
             || ReplaySettingsStore.get().isDebugControls();

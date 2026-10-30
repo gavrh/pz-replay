@@ -6,6 +6,9 @@ import java.nio.file.Path;
 import java.util.Locale;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
+import zombie.inventory.InventoryItem;
+import zombie.inventory.types.HandWeapon;
+import zombie.inventory.types.WeaponType;
 
 final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
@@ -22,6 +25,7 @@ final class ReplayRecorder {
     private boolean stopReported;
     private boolean capturePaused;
     private boolean captureInVehicle;
+    private boolean captureSitting;
     private String lastError;
     private String lastReplayPath;
     private String lastReplaySummary;
@@ -71,6 +75,7 @@ final class ReplayRecorder {
         stopReported = false;
         capturePaused = false;
         captureInVehicle = false;
+        captureSitting = false;
         lastError = null;
         captureResultPath = null;
         captureResultSummary = null;
@@ -126,6 +131,9 @@ final class ReplayRecorder {
             captureInVehicle = inVehicle;
             System.out.println("[pz-replay] capture vehicle "
                 + (inVehicle ? "entered" : "exited"));
+        }
+        if (!paused) {
+            captureStateEvents(player);
         }
         CaptureSession.PlayerSnapshot snapshot = paused ? null : snapshot(player);
         session.tick(tickCounter, nowMillis, snapshot, paused);
@@ -189,6 +197,88 @@ final class ReplayRecorder {
         return lastError == null ? "" : lastError;
     }
 
+    boolean recordAction(String kindId, String detail, float direction, float duration) {
+        if (!session.isRecording()) {
+            return false;
+        }
+        ReplayEvent.Kind kind = ReplayEvent.Kind.fromId(kindId);
+        if (kind == null) {
+            return false;
+        }
+        IsoPlayer player = IsoPlayer.getInstance();
+        if (player == null || player instanceof ReplayGhost) {
+            return false;
+        }
+        String resolvedDetail = detailFor(kind, detail, player);
+        boolean recorded = session.recordEvent(kind, false, resolvedDetail, direction, duration);
+        if (recorded) {
+            logEvent(kind, false, resolvedDetail);
+        }
+        return recorded;
+    }
+
+    private void captureStateEvents(IsoPlayer player) {
+        boolean sitting = player.isSitting();
+        if (sitting != captureSitting) {
+            String detail = sitting
+                ? (player.isSitOnGround() ? "ground" : "furniture") : "";
+            boolean recorded = session.recordEvent(ReplayEvent.Kind.SIT, !sitting, detail,
+                player.getDirectionAngle(), 0f);
+            if (recorded) {
+                logEvent(ReplayEvent.Kind.SIT, !sitting, detail);
+            }
+            captureSitting = sitting;
+        }
+    }
+
+    private static String detailFor(ReplayEvent.Kind kind, String detail, IsoPlayer player) {
+        if (kind == ReplayEvent.Kind.MELEE_ATTACK
+            || kind == ReplayEvent.Kind.RANGED_ATTACK) {
+            return weaponStyle(player);
+        }
+        if (kind == ReplayEvent.Kind.RELOAD) {
+            String type = reloadType(player);
+            return detail != null && detail.startsWith("rack")
+                ? "rack:" + type : type;
+        }
+        return detail == null ? "" : detail;
+    }
+
+    private static String weaponStyle(IsoPlayer player) {
+        try {
+            WeaponType type = WeaponType.getWeaponType(player);
+            String value = type == null ? "" : type.getType();
+            if (value == null || value.isBlank() || "unarmed".equals(value)) {
+                return "";
+            }
+            return value;
+        } catch (RuntimeException exception) {
+            return "";
+        }
+    }
+
+    private static String reloadType(IsoPlayer player) {
+        InventoryItem item = player.getPrimaryHandItem();
+        if (item instanceof HandWeapon weapon) {
+            try {
+                if (weapon.getWeaponReloadType() != null) {
+                    return weapon.getWeaponReloadType().toString();
+                }
+            } catch (RuntimeException exception) {
+                return "handgun";
+            }
+        }
+        return "handgun";
+    }
+
+    private void logEvent(ReplayEvent.Kind kind, boolean end, String detail) {
+        System.out.println("[pz-replay] capture action kind=" + kind.id()
+            + " phase=" + (end ? "end" : "start")
+            + " time=" + String.format(Locale.ROOT, "%.3f", session.currentTimeSeconds())
+            + " detail=" + detail
+            + " events=" + session.events().size());
+    }
+
     private void stopWithReason(CaptureSession.StopReason reason) {
         session.stop(reason);
         logStopped();
@@ -229,13 +319,26 @@ final class ReplayRecorder {
         persist(summary);
     }
 
+    private ReplayEvents encodeEvents() {
+        try {
+            ReplayEvents events = ReplayEvents.encode(session.events());
+            System.out.println("[pz-replay] capture actions events=" + session.events().size()
+                + " bytes=" + events.data().length());
+            return events;
+        } catch (ReplayFormatException exception) {
+            lastError = "action events could not be written: " + exception.getMessage();
+            System.out.println("[pz-replay] action events could not be written: " + exception);
+            return ReplayEvents.none();
+        }
+    }
+
     private void persist(CaptureSession.Summary summary) {
         if (summary.frameCount() == 0 || metadata == null) {
             return;
         }
         long durationMillis = Math.round(summary.durationSeconds() * 1000.0);
         ReplayMetadata finalMetadata = metadata.withEnd(
-            metadata.startTimeMillis() + durationMillis);
+            metadata.startTimeMillis() + durationMillis).withEvents(encodeEvents());
         String resolvedName = RecordingNames.unique(ReplayStorage.directory(), captureName);
         if (resolvedName.isEmpty()) {
             lastError = "recording name is unavailable";
