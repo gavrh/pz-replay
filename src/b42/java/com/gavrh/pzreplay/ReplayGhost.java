@@ -13,6 +13,7 @@ public final class ReplayGhost extends IsoPlayer {
         super(cell, desc, x, y, z);
         identity = UUID.randomUUID().toString();
         setCollidable(false);
+        setSolid(false);
         setZombiesDontAttack(true);
         setBlockMovement(true);
         setDoRender(true);
@@ -96,6 +97,11 @@ public final class ReplayGhost extends IsoPlayer {
     public void preupdate() {
         super.preupdate();
         setCollidable(false);
+    }
+
+    @Override
+    public boolean isSolidForSeparate() {
+        return false;
     }
 
     @Override

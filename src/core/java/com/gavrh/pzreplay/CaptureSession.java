@@ -11,7 +11,9 @@ public final class CaptureSession {
     public static final int MAX_FRAMES = 54_000;
     public static final double MAX_DURATION_SECONDS = 30.0 * 60.0;
     public static final int ESTIMATED_BYTES_PER_FRAME = BinaryReplayCodec.RECORD_BYTES;
+    public static final int MAX_EVENTS = ReplayEventCodec.MAX_EVENTS;
     static final long MAX_ACTIVE_WALL_DELTA_MILLIS = 250L;
+    static final double EVENT_DEDUPE_SECONDS = 0.08;
 
     public enum StopReason {
         NONE,
@@ -70,6 +72,7 @@ public final class CaptureSession {
     private final int maxFrames;
     private final double maxDurationSeconds;
     private final List<ReplaySample> frames;
+    private final List<ReplayEvent> events;
 
     private boolean recording;
     private long lastTickWallMillis;
@@ -111,6 +114,7 @@ public final class CaptureSession {
         this.maxFrames = maxFrames;
         this.maxDurationSeconds = maxDurationSeconds;
         this.frames = new ArrayList<>(Math.min(maxFrames, 4096));
+        this.events = new ArrayList<>();
         this.lastSummary = summary(false);
     }
 
@@ -119,6 +123,7 @@ public final class CaptureSession {
             return false;
         }
         frames.clear();
+        events.clear();
         recording = true;
         lastTickWallMillis = wallMillis;
         activeSeconds = 0.0;
@@ -224,6 +229,40 @@ public final class CaptureSession {
 
     public List<ReplaySample> frames() {
         return List.copyOf(frames);
+    }
+
+    public List<ReplayEvent> events() {
+        return List.copyOf(events);
+    }
+
+    public float currentTimeSeconds() {
+        return (float) activeSeconds;
+    }
+
+    public boolean recordEvent(ReplayEvent.Kind kind, boolean end, String detail,
+        float direction, float durationSeconds) {
+        if (!recording || kind == null) {
+            return false;
+        }
+        if (events.size() >= MAX_EVENTS) {
+            return false;
+        }
+        String safeDetail = detail == null ? "" : detail;
+        if (safeDetail.length() > ReplayEvent.MAX_DETAIL_LENGTH) {
+            safeDetail = safeDetail.substring(0, ReplayEvent.MAX_DETAIL_LENGTH);
+        }
+        if (!events.isEmpty()) {
+            ReplayEvent previous = events.get(events.size() - 1);
+            if (previous.kind() == kind
+                && previous.end() == end
+                && previous.detail().equals(safeDetail)
+                && activeSeconds - previous.timeSeconds() <= EVENT_DEDUPE_SECONDS) {
+                return false;
+            }
+        }
+        events.add(new ReplayEvent(events.size() + 1L, (float) activeSeconds, kind, end,
+            safeDetail, direction, durationSeconds));
+        return true;
     }
 
     private float speed(PlayerSnapshot player) {

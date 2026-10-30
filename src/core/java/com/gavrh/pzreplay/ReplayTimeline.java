@@ -33,6 +33,8 @@ public final class ReplayTimeline {
     private final double[] relativeTimes;
     private final double duration;
     private final ReplayEquipment equipment;
+    private final ReplayEventTimeline eventTimeline;
+    private final List<String> eventWarnings;
 
     private State state = State.STOPPED;
     private double elapsed;
@@ -41,15 +43,17 @@ public final class ReplayTimeline {
     public ReplayTimeline(ReplayData data) throws ReplayFormatException {
         this(data == null ? null : data.frames(),
             data == null || data.metadata() == null
-                ? ReplayEquipment.none() : data.metadata().equipment());
+                ? ReplayEquipment.none() : data.metadata().equipment(),
+            data == null || data.metadata() == null
+                ? ReplayEvents.none() : data.metadata().events());
     }
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
-        this(frames, ReplayEquipment.none());
+        this(frames, ReplayEquipment.none(), ReplayEvents.none());
     }
 
-    private ReplayTimeline(List<ReplaySample> frames, ReplayEquipment equipment)
-        throws ReplayFormatException {
+    private ReplayTimeline(List<ReplaySample> frames, ReplayEquipment equipment,
+        ReplayEvents events) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
@@ -59,6 +63,9 @@ public final class ReplayTimeline {
             this.frames = List.of();
             this.relativeTimes = new double[0];
             duration = 0.0;
+            EventDecode decoded = decodeEvents(events, duration);
+            this.eventTimeline = decoded.timeline();
+            this.eventWarnings = decoded.warnings();
             return;
         }
 
@@ -84,6 +91,9 @@ public final class ReplayTimeline {
         this.frames = List.copyOf(validated);
         this.relativeTimes = times;
         duration = times[times.length - 1];
+        EventDecode decoded = decodeEvents(events, duration);
+        this.eventTimeline = decoded.timeline();
+        this.eventWarnings = decoded.warnings();
     }
 
     public boolean start() {
@@ -257,6 +267,52 @@ public final class ReplayTimeline {
 
     public ReplayEquipment getEquipment() {
         return equipment;
+    }
+
+    public ReplayEventTimeline getEventTimeline() {
+        return eventTimeline;
+    }
+
+    public List<ReplayEvent> getEvents() {
+        return eventTimeline.events();
+    }
+
+    public int getEventCount() {
+        return eventTimeline.getEventCount();
+    }
+
+    public List<String> getEventWarnings() {
+        return eventWarnings;
+    }
+
+    private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
+    }
+
+    private static EventDecode decodeEvents(ReplayEvents events, double duration) {
+        List<ReplayEvent> decoded = List.of();
+        List<String> warnings = new ArrayList<>();
+        if (events != null && events.isPresent()) {
+            try {
+                ReplayEventCodec.Result result = events.decode();
+                decoded = result.events();
+                warnings.addAll(result.warnings());
+            } catch (ReplayFormatException exception) {
+                warnings.add(exception.getMessage());
+            }
+        }
+        try {
+            ReplayEventTimeline timeline = new ReplayEventTimeline(decoded, duration);
+            warnings.addAll(timeline.warnings());
+            return new EventDecode(timeline, List.copyOf(warnings));
+        } catch (ReplayFormatException exception) {
+            warnings.add("action event data is corrupt or incomplete");
+            try {
+                return new EventDecode(new ReplayEventTimeline(List.of(), duration),
+                    List.copyOf(warnings));
+            } catch (ReplayFormatException ignored) {
+                return new EventDecode(null, List.copyOf(warnings));
+            }
+        }
     }
 
     private int lastFrameAtOrBefore(double target) {

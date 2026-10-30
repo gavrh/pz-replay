@@ -3,6 +3,7 @@ require "PZReplayPanel"
 require "PZReplayLibrary"
 require "PZReplayOptions"
 require "PZReplayText"
+require "PZReplayActions"
 
 local T = PZReplayText
 

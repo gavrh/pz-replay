@@ -74,6 +74,9 @@ public final class ReplayPlaybackApi {
         ReplayCompatibility.Result compatibility =
             ReplayCompatibility.check(data.metadata(), context());
         List<String> warnings = new ArrayList<>(compatibility.warnings());
+        for (String eventWarning : loaded.getEventWarnings()) {
+            addWarning(warnings, eventWarning);
+        }
         AppearanceSnapshot appearance = null;
         if (data.metadata().appearance().isCurrent()) {
             try {
@@ -123,6 +126,7 @@ public final class ReplayPlaybackApi {
         System.out.println("[pz-replay] replay playback started path=" + requested
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
+            + " events=" + loaded.getEventCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
