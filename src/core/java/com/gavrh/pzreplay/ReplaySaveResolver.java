@@ -141,6 +141,7 @@ public final class ReplaySaveResolver {
         warnings.add("active mods could not be verified");
         warnings.add("start position could not be verified");
         warnings.addAll(metadata.appearance().warnings());
+        warnings.addAll(metadata.appearanceChanges().warnings());
         warnings.addAll(metadata.equipment().warnings());
 
         return new Result(true, "", "", save.folder(), save.saveName(), save.gameMode(),
