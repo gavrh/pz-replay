@@ -3,6 +3,7 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
@@ -13,12 +14,15 @@ import zombie.inventory.types.WeaponType;
 final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
     private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
+    private static final long APPEARANCE_CHECK_INTERVAL_MILLIS = 1000L;
 
+    private final ReplayAppearanceCapture appearanceCapture = new ReplayAppearanceCapture();
     private CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
     private String captureName;
     private long tickCounter;
     private long nextStatusLogMillis;
+    private long nextAppearanceCheckMillis;
     private long captureCostNanos;
     private long captureCostMaxNanos;
     private long captureCostTicks;
@@ -26,6 +30,8 @@ final class ReplayRecorder {
     private boolean capturePaused;
     private boolean captureInVehicle;
     private boolean captureSitting;
+    private boolean appearanceCaptureFailed;
+    private boolean appearanceDropReported;
     private String lastError;
     private String lastReplayPath;
     private String lastReplaySummary;
@@ -77,6 +83,9 @@ final class ReplayRecorder {
         capturePaused = false;
         captureInVehicle = false;
         captureSitting = false;
+        appearanceCapture.reset();
+        appearanceCaptureFailed = false;
+        appearanceDropReported = false;
         lastError = null;
         eventsDropped = false;
         captureResultPath = null;
@@ -84,6 +93,16 @@ final class ReplayRecorder {
 
         long nowMillis = System.currentTimeMillis();
         session.start(nowMillis);
+        try {
+            if (metadata.appearance().isCurrent()) {
+                appearanceCapture.markBaseline(metadata.appearance().decode());
+            }
+        } catch (ReplayFormatException exception) {
+            appearanceCaptureFailed = true;
+            System.out.println("[pz-replay] appearance change baseline unavailable: "
+                + exception);
+        }
+        nextAppearanceCheckMillis = nowMillis + APPEARANCE_CHECK_INTERVAL_MILLIS;
         nextStatusLogMillis = nowMillis + STATUS_LOG_INTERVAL_MILLIS;
         System.out.println("[pz-replay] capture started name=" + captureName
             + " rate=" + sampleRateHz + "Hz"
@@ -139,6 +158,9 @@ final class ReplayRecorder {
         }
         CaptureSession.PlayerSnapshot snapshot = paused ? null : snapshot(player);
         session.tick(tickCounter, nowMillis, snapshot, paused);
+        if (!paused && session.isRecording()) {
+            captureAppearance(player, false);
+        }
         recordCost(tickStartNanos);
         afterTick(nowMillis);
     }
@@ -217,6 +239,57 @@ final class ReplayRecorder {
             logEvent(kind, false, resolvedDetail);
         }
         return recorded;
+    }
+
+    boolean recordAppearanceChange() {
+        if (!session.isRecording()) {
+            return false;
+        }
+        IsoPlayer player = IsoPlayer.getInstance();
+        if (player == null || player instanceof ReplayGhost || player.isDead()) {
+            return false;
+        }
+        if (GameTime.isGamePaused()) {
+            return false;
+        }
+        return captureAppearance(player, true);
+    }
+
+    private boolean captureAppearance(IsoPlayer player, boolean force) {
+        if (!session.isRecording() || appearanceCapture.isDropped()) {
+            return false;
+        }
+        long nowMillis = System.currentTimeMillis();
+        if (!force && nowMillis < nextAppearanceCheckMillis) {
+            return false;
+        }
+        nextAppearanceCheckMillis = nowMillis + APPEARANCE_CHECK_INTERVAL_MILLIS;
+        try {
+            AppearanceSnapshot.Captured captured = AppearanceSnapshot.captureWithPayload(player);
+            boolean accepted = appearanceCapture.accept(session.currentTimeSeconds(),
+                captured.payload(), captured.appearance());
+            appearanceCaptureFailed = false;
+            if (accepted) {
+                System.out.println("[pz-replay] capture appearance change time="
+                    + String.format(Locale.ROOT, "%.3f", session.currentTimeSeconds())
+                    + " sequence=" + appearanceCapture.size()
+                    + " bytes=" + captured.payload().length
+                    + " changes=" + appearanceCapture.size());
+            }
+            if (appearanceCapture.isDropped() && !appearanceDropReported) {
+                appearanceDropReported = true;
+                System.out.println("[pz-replay] capture appearance changes dropped"
+                    + " reason=limit changes=" + appearanceCapture.size());
+            }
+            return accepted;
+        } catch (IOException | RuntimeException exception) {
+            if (!appearanceCaptureFailed) {
+                appearanceCaptureFailed = true;
+                System.out.println("[pz-replay] appearance change capture failed: "
+                    + exception);
+            }
+            return false;
+        }
     }
 
     private void captureStateEvents(IsoPlayer player) {
@@ -321,6 +394,29 @@ final class ReplayRecorder {
         persist(summary);
     }
 
+    private ReplayAppearanceChanges encodeAppearanceChanges() {
+        List<ReplayAppearanceChange> changes = appearanceCapture.changes();
+        if (changes.isEmpty()) {
+            if (appearanceCapture.isDropped() && !appearanceDropReported) {
+                appearanceDropReported = true;
+                System.out.println("[pz-replay] capture appearance changes dropped"
+                    + " reason=limit changes=0");
+            }
+            return ReplayAppearanceChanges.none();
+        }
+        try {
+            ReplayAppearanceChanges encoded = ReplayAppearanceChanges.encode(changes);
+            System.out.println("[pz-replay] capture appearance changes count="
+                + changes.size() + " bytes=" + encoded.data().length()
+                + (appearanceCapture.isDropped() ? " dropped=true" : ""));
+            return encoded;
+        } catch (ReplayFormatException exception) {
+            System.out.println("[pz-replay] appearance changes could not be written: "
+                + exception);
+            return ReplayAppearanceChanges.none();
+        }
+    }
+
     private ReplayEvents encodeEvents() {
         try {
             ReplayEvents events = ReplayEvents.encode(session.events());
@@ -342,7 +438,9 @@ final class ReplayRecorder {
         }
         long durationMillis = Math.round(summary.durationSeconds() * 1000.0);
         ReplayMetadata finalMetadata = metadata.withEnd(
-            metadata.startTimeMillis() + durationMillis).withEvents(encodeEvents());
+            metadata.startTimeMillis() + durationMillis)
+            .withAppearanceChanges(encodeAppearanceChanges())
+            .withEvents(encodeEvents());
         String resolvedName = RecordingNames.unique(ReplayStorage.directory(), captureName);
         if (resolvedName.isEmpty()) {
             lastError = "recording name is unavailable";
