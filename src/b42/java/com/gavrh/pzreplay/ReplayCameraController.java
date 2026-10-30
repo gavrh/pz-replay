@@ -52,7 +52,9 @@ public final class ReplayCameraController {
             mode = previous;
             modeBeforeFree = previousBeforeFree;
             returningToPlayer = previousReturning;
-            freeCamera.reset();
+            if (previous != ReplayCameraMode.FREE) {
+                freeCamera.reset();
+            }
             smoothing.clear();
             restorePlayerCamera();
             if (mode == ReplayCameraMode.FOLLOW_GHOST && ghost != null) {
