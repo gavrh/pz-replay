@@ -19,6 +19,7 @@ public final class GhostMotionController {
     private final ReplayTimeline replay;
     private final Consumer<String> warning;
     private final ReplayCameraController camera = new ReplayCameraController();
+    private final GhostActionController actions;
     private State state = State.STOPPED;
     private double elapsed;
     private long lastReplayUpdateNanos;
@@ -35,6 +36,7 @@ public final class GhostMotionController {
         this.path = path;
         this.replay = null;
         this.warning = warning;
+        this.actions = null;
     }
 
     public GhostMotionController(ReplayTimeline replay) {
@@ -48,6 +50,7 @@ public final class GhostMotionController {
         this.path = null;
         this.replay = replay;
         this.warning = warning;
+        this.actions = new GhostActionController(replay.getEventTimeline());
     }
 
     public void start(ReplayGhost ghost) {
@@ -57,6 +60,7 @@ public final class GhostMotionController {
             }
             lastReplayUpdateNanos = System.nanoTime();
             apply(ghost, replay.sample());
+            actions.start(ghost);
             System.out.println("[pz-replay] replay ghost motion started duration="
                 + String.format("%.2f", replay.getDuration()));
             return;
@@ -129,6 +133,7 @@ public final class GhostMotionController {
             applyPausedPose(ghost);
         }
         camera.resetSmoothing(ghost);
+        actions.seek(ghost, replay.getCurrentTime());
         camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion seeked to="
             + String.format("%.2f", replay.getCurrentTime()) + " "
@@ -157,6 +162,7 @@ public final class GhostMotionController {
             applyPausedPose(ghost);
         }
         camera.resetSmoothing(ghost);
+        actions.restart(ghost);
         camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion restarted "
             + camera.status(ghost));
@@ -172,6 +178,9 @@ public final class GhostMotionController {
             elapsed = 0.0;
         }
         camera.restore();
+        if (actions != null) {
+            actions.stop(ghost);
+        }
         resetLocomotion(ghost);
         clearReplayState(ghost);
         appliedEquipment = null;
@@ -183,6 +192,9 @@ public final class GhostMotionController {
     public void reset(ReplayGhost ghost) {
         camera.restore();
         appliedEquipment = null;
+        if (actions != null) {
+            actions.reset(ghost);
+        }
         if (replay != null) {
             replay.reset();
             if (!replay.isEmpty()) {
@@ -208,6 +220,7 @@ public final class GhostMotionController {
             if (replay.isPlaying()) {
                 boolean advancing = replay.advance(Math.min(delta, MAX_STEP_SECONDS));
                 apply(ghost, replay.sample());
+                actions.advance(ghost, replay.getCurrentTime());
                 if (!advancing) {
                     applyPausedPose(ghost);
                 }

@@ -43,6 +43,7 @@ public final class ReplayCompatibility {
         checkGameMode(metadata.gameMode(), current.gameMode(), warnings);
         warnings.addAll(metadata.appearance().warnings());
         warnings.addAll(metadata.equipment().warnings());
+        warnings.addAll(metadata.events().warnings());
         return new Result(warnings);
     }
 
