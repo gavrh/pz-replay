@@ -77,6 +77,9 @@ public final class ReplayPlaybackApi {
         for (String eventWarning : loaded.getEventWarnings()) {
             addWarning(warnings, eventWarning);
         }
+        for (String appearanceWarning : loaded.getAppearanceWarnings()) {
+            addWarning(warnings, appearanceWarning);
+        }
         AppearanceSnapshot appearance = null;
         if (data.metadata().appearance().isCurrent()) {
             try {
@@ -128,6 +131,7 @@ public final class ReplayPlaybackApi {
             + " frames=" + loaded.getFrameCount()
             + " events=" + loaded.getEventCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
+            + " appearance_changes=" + loaded.getAppearanceChangeCount()
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
         return true;

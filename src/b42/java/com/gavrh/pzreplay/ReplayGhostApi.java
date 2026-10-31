@@ -69,6 +69,9 @@ public final class ReplayGhostApi {
             created.setMovingSquare(created.getCurrentSquare());
             created.setDirectionAngle(facing);
             created.installMotion(motion);
+            if (appearanceApplied) {
+                motion.markSpawnAppearanceApplied();
+            }
             System.out.println("[pz-replay] replay ghost spawned identity=" + created.getIdentity()
                 + " appearance=" + (appearanceApplied ? "recorded" : "current"));
             return created;

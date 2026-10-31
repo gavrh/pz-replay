@@ -156,6 +156,34 @@ class ReplayCompatibilityTest {
     }
 
     @Test
+    void warnsOnUnsupportedAppearanceChangeTimeline() {
+        ReplayAppearanceChanges unsupported = new ReplayAppearanceChanges(
+            ReplayAppearanceChanges.CURRENT_VERSION + 1, "AQ==");
+        ReplayCompatibility.Result result = ReplayCompatibility.check(
+            metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY")
+                .withAppearanceChanges(unsupported), CURRENT);
+
+        assertFalse(result.isCompatible());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0)
+            .contains("appearance change data version is unsupported"));
+    }
+
+    @Test
+    void warnsOnCorruptAppearanceChangeTimeline() {
+        ReplayAppearanceChanges corrupt = new ReplayAppearanceChanges(
+            ReplayAppearanceChanges.CURRENT_VERSION, "not base64!");
+        ReplayCompatibility.Result result = ReplayCompatibility.check(
+            metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY")
+                .withAppearanceChanges(corrupt), CURRENT);
+
+        assertFalse(result.isCompatible());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0)
+            .contains("appearance change data is corrupt or incomplete"));
+    }
+
+    @Test
     void warnsWhenHeldItemDataIsMissing() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",

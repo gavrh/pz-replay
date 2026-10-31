@@ -26,7 +26,14 @@ final class AppearanceSnapshot {
         this.wornVisuals = wornVisuals;
     }
 
+    record Captured(byte[] payload, ReplayAppearance appearance) {
+    }
+
     static ReplayAppearance capture(IsoPlayer player) throws IOException {
+        return captureWithPayload(player).appearance();
+    }
+
+    static Captured captureWithPayload(IsoPlayer player) throws IOException {
         SurvivorDesc desc = player.getDescriptor();
         if (desc == null) {
             throw new IOException("no character descriptor");
@@ -52,8 +59,9 @@ final class AppearanceSnapshot {
         payload.flip();
         byte[] bytes = new byte[payload.remaining()];
         payload.get(bytes);
-        return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+        ReplayAppearance appearance = new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
+        return new Captured(bytes, appearance);
     }
 
     static AppearanceSnapshot decode(ReplayAppearance appearance) throws ReplayFormatException {
@@ -90,6 +98,21 @@ final class AppearanceSnapshot {
             throw new IOException("appearance data is corrupt or incomplete");
         }
         desc.getWornItems().setFromItemVisuals(visuals);
+    }
+
+    void applyTo(ReplayGhost ghost) throws IOException {
+        SurvivorDesc desc = ghost.getDescriptor();
+        if (desc == null) {
+            throw new IOException("no character descriptor");
+        }
+        if (ghost.getHumanVisual() == null) {
+            throw new IOException("no character visual");
+        }
+        applyTo(desc);
+        ghost.getHumanVisual().copyFrom(desc.getHumanVisual());
+        ghost.setWornItems(desc.getWornItems());
+        ghost.onWornItemsChanged();
+        ghost.resetModelNextFrame();
     }
 
     private static byte[] readChunk(ByteBuffer buffer, int length) throws ReplayFormatException {

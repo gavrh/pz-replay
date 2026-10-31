@@ -131,6 +131,10 @@ public final class PZReplayLua {
         return ReplayRecorder.INSTANCE.recordAction(kind, detail, direction, duration);
     }
 
+    public static boolean recordAppearanceChange() {
+        return ReplayRecorder.INSTANCE.recordAppearanceChange();
+    }
+
     public static boolean isDebugEnabled() {
         return Boolean.getBoolean("pzreplay.debug")
             || ReplaySettingsStore.get().isDebugControls();

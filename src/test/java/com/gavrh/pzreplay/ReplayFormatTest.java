@@ -148,6 +148,8 @@ class ReplayFormatTest {
         values.remove("game_mode");
         values.remove("appearance_version");
         values.remove("appearance_data");
+        values.remove("appearance_changes_version");
+        values.remove("appearance_changes_data");
         values.remove("equipment_version");
         values.remove("equipment_data");
         Path file = tempDir.resolve("legacy.pzrp");
@@ -157,6 +159,7 @@ class ReplayFormatTest {
 
         assertEquals("", data.metadata().gameMode());
         assertEquals(ReplayAppearance.none(), data.metadata().appearance());
+        assertEquals(ReplayAppearanceChanges.none(), data.metadata().appearanceChanges());
         assertEquals(ReplayEquipment.none(), data.metadata().equipment());
         assertEquals(metadata().saveName(), data.metadata().saveName());
         assertEquals(metadata().mapName(), data.metadata().mapName());
@@ -224,6 +227,40 @@ class ReplayFormatTest {
         assertEquals(ReplayEquipment.CURRENT_VERSION, metadataOnly.equipment().version());
         assertEquals("items",
             new String(metadataOnly.equipment().decode(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void binaryRoundTripsAppearanceChangeMetadataOnly() throws Exception {
+        ReplayAppearanceChanges changes = ReplayAppearanceChanges.encode(List.of(
+            new ReplayAppearanceChange(1L, 1.25f, metadata().appearance()),
+            new ReplayAppearanceChange(2L, 4.5f, metadata().appearance())));
+        ReplayMetadata withChanges = metadata().withAppearanceChanges(changes);
+        Path file = tempDir.resolve("appearance-changes.pzrp.gz");
+        BinaryReplayCodec.write(file, withChanges, frames(), true);
+
+        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
+
+        assertEquals(withChanges, metadataOnly);
+        assertEquals(changes, metadataOnly.appearanceChanges());
+        assertEquals(2, metadataOnly.appearanceChanges().decode().changes().size());
+        assertEquals(1.25f,
+            metadataOnly.appearanceChanges().decode().changes().get(0).timeSeconds());
+    }
+
+    @Test
+    void corruptAppearanceChangesDoNotBlockReadingTheReplay() throws Exception {
+        Map<String, String> values = metadata().toValues();
+        values.put("appearance_changes_version",
+            Integer.toString(ReplayAppearanceChanges.CURRENT_VERSION));
+        values.put("appearance_changes_data", "not base64!");
+        Path file = tempDir.resolve("corrupt-appearance-changes.pzrp");
+        Files.write(file, rawPayload(values));
+
+        ReplayData data = BinaryReplayCodec.read(file);
+
+        assertEquals(1, data.metadata().appearanceChanges().warnings().size());
+        assertTrue(data.metadata().appearanceChanges().warnings().get(0)
+            .contains("corrupt or incomplete"));
     }
 
     @Test

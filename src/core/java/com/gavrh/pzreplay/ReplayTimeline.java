@@ -35,6 +35,7 @@ public final class ReplayTimeline {
     private final ReplayEquipment equipment;
     private final ReplayEventTimeline eventTimeline;
     private final List<String> eventWarnings;
+    private final ReplayAppearanceTimeline appearanceTimeline;
 
     private State state = State.STOPPED;
     private double elapsed;
@@ -43,16 +44,22 @@ public final class ReplayTimeline {
     public ReplayTimeline(ReplayData data) throws ReplayFormatException {
         this(data == null ? null : data.frames(),
             data == null || data.metadata() == null
+                ? ReplayAppearance.none() : data.metadata().appearance(),
+            data == null || data.metadata() == null
+                ? ReplayAppearanceChanges.none() : data.metadata().appearanceChanges(),
+            data == null || data.metadata() == null
                 ? ReplayEquipment.none() : data.metadata().equipment(),
             data == null || data.metadata() == null
                 ? ReplayEvents.none() : data.metadata().events());
     }
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
-        this(frames, ReplayEquipment.none(), ReplayEvents.none());
+        this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
+            ReplayEquipment.none(), ReplayEvents.none());
     }
 
-    private ReplayTimeline(List<ReplaySample> frames, ReplayEquipment equipment,
+    private ReplayTimeline(List<ReplaySample> frames, ReplayAppearance appearance,
+        ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
         ReplayEvents events) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
@@ -66,6 +73,8 @@ public final class ReplayTimeline {
             EventDecode decoded = decodeEvents(events, duration);
             this.eventTimeline = decoded.timeline();
             this.eventWarnings = decoded.warnings();
+            this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges,
+                duration);
             return;
         }
 
@@ -94,6 +103,7 @@ public final class ReplayTimeline {
         EventDecode decoded = decodeEvents(events, duration);
         this.eventTimeline = decoded.timeline();
         this.eventWarnings = decoded.warnings();
+        this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges, duration);
     }
 
     public boolean start() {
@@ -269,6 +279,26 @@ public final class ReplayTimeline {
         return equipment;
     }
 
+    public ReplayAppearanceTimeline getAppearanceTimeline() {
+        return appearanceTimeline;
+    }
+
+    public ReplayAppearance getInitialAppearance() {
+        return appearanceTimeline.initialAppearance();
+    }
+
+    public ReplayAppearance appearanceAt(double seconds) {
+        return appearanceTimeline.appearanceAt(seconds);
+    }
+
+    public int getAppearanceChangeCount() {
+        return appearanceTimeline.getChangeCount();
+    }
+
+    public List<String> getAppearanceWarnings() {
+        return appearanceTimeline.warnings();
+    }
+
     public ReplayEventTimeline getEventTimeline() {
         return eventTimeline;
     }
@@ -286,6 +316,36 @@ public final class ReplayTimeline {
     }
 
     private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
+    }
+
+    private static ReplayAppearanceTimeline decodeAppearances(ReplayAppearance appearance,
+        ReplayAppearanceChanges changes, double duration) {
+        List<ReplayAppearanceChange> decoded = List.of();
+        List<String> warnings = new ArrayList<>();
+        if (changes != null && changes.isPresent()) {
+            try {
+                ReplayAppearanceChangeCodec.Result result = changes.decode();
+                decoded = result.changes();
+                warnings.addAll(result.warnings());
+            } catch (ReplayFormatException exception) {
+                List<String> changeWarnings = changes.warnings();
+                if (changeWarnings.isEmpty()) {
+                    warnings.add("appearance change data is corrupt or incomplete");
+                } else {
+                    warnings.addAll(changeWarnings);
+                }
+            }
+        }
+        try {
+            return new ReplayAppearanceTimeline(appearance, decoded, duration, warnings);
+        } catch (ReplayFormatException exception) {
+            warnings.add("appearance change data is corrupt or incomplete");
+            try {
+                return new ReplayAppearanceTimeline(appearance, List.of(), duration, warnings);
+            } catch (ReplayFormatException ignored) {
+                return null;
+            }
+        }
     }
 
     private static EventDecode decodeEvents(ReplayEvents events, double duration) {

@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.io.IOException;
 import java.util.function.Consumer;
 import zombie.GameTime;
 
@@ -24,6 +25,7 @@ public final class GhostMotionController {
     private double elapsed;
     private long lastReplayUpdateNanos;
     private ReplayEquipment appliedEquipment;
+    private ReplayAppearance appliedAppearance;
 
     public GhostMotionController(ScriptedGhostPath path) {
         this(path, null);
@@ -184,6 +186,7 @@ public final class GhostMotionController {
         resetLocomotion(ghost);
         clearReplayState(ghost);
         appliedEquipment = null;
+        appliedAppearance = null;
         if (wasActive) {
             System.out.println("[pz-replay] replay ghost motion stopped");
         }
@@ -192,6 +195,7 @@ public final class GhostMotionController {
     public void reset(ReplayGhost ghost) {
         camera.restore();
         appliedEquipment = null;
+        appliedAppearance = null;
         if (actions != null) {
             actions.reset(ghost);
         }
@@ -270,6 +274,11 @@ public final class GhostMotionController {
         return camera.isFollowing();
     }
 
+    void markSpawnAppearanceApplied() {
+        appliedAppearance = replay == null
+            ? ReplayAppearance.none() : replay.getInitialAppearance();
+    }
+
     public boolean isCameraFree() {
         return camera.isFree();
     }
@@ -315,17 +324,19 @@ public final class GhostMotionController {
 
     private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            ReplaySample.Stance.STAND, false, ReplayEquipment.none());
+            ReplaySample.Stance.STAND, false, ReplayEquipment.none(),
+            ReplayAppearance.none());
     }
 
     private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            sample.stance(), sample.aiming(), sample.equipment());
+            sample.stance(), sample.aiming(), sample.equipment(),
+            replay.appearanceAt(sample.time()));
     }
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
         ReplaySample.Locomotion locomotion, ReplaySample.Stance stance, boolean aiming,
-        ReplayEquipment equipment) {
+        ReplayEquipment equipment, ReplayAppearance appearance) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);
@@ -335,6 +346,7 @@ public final class GhostMotionController {
         applyLocomotion(ghost, locomotion, stance);
         ghost.setIsAiming(aiming);
         applyEquipment(ghost, equipment);
+        applyAppearance(ghost, appearance);
     }
 
     private static void applyLocomotion(ReplayGhost ghost, ReplaySample.Locomotion locomotion,
@@ -401,6 +413,29 @@ public final class GhostMotionController {
         } catch (ReplayFormatException | RuntimeException exception) {
             warn("held-item data is corrupt or incomplete");
             System.out.println("[pz-replay] held-item data could not be applied: "
+                + exception);
+        }
+    }
+
+    private void applyAppearance(ReplayGhost ghost, ReplayAppearance appearance) {
+        ReplayAppearance next = appearance == null ? ReplayAppearance.none() : appearance;
+        if (next.equals(appliedAppearance)) {
+            return;
+        }
+        appliedAppearance = next;
+        if (!next.isCurrent()) {
+            return;
+        }
+        try {
+            AppearanceSnapshot.decode(next).applyTo(ghost);
+            if (replay != null) {
+                System.out.println("[pz-replay] replay appearance applied time="
+                    + String.format("%.3f", replay.getCurrentTime())
+                    + " bytes=" + next.data().length());
+            }
+        } catch (ReplayFormatException | IOException | RuntimeException exception) {
+            warn("appearance data is corrupt or incomplete");
+            System.out.println("[pz-replay] appearance data could not be applied: "
                 + exception);
         }
     }
