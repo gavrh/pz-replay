@@ -35,7 +35,8 @@ public final class ReplayAppearanceCapture {
         if (dropped) {
             return false;
         }
-        if (changes.size() >= ReplayAppearanceChangeCodec.MAX_CHANGES
+        if (payload.length > ReplayAppearanceChangeCodec.MAX_SNAPSHOT_BYTES
+            || changes.size() >= ReplayAppearanceChangeCodec.MAX_CHANGES
             || totalSnapshotBytes + payload.length
                 > ReplayAppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES) {
             dropped = true;
