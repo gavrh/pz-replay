@@ -234,9 +234,11 @@ final class ReplayRecorder {
             return false;
         }
         String resolvedDetail = detailFor(kind, detail, player);
-        boolean recorded = session.recordEvent(kind, false, resolvedDetail, direction, duration);
+        ReplayActionContext context = actionContext(kind, player, resolvedDetail);
+        boolean recorded = session.recordEvent(kind, false, resolvedDetail, direction,
+            duration, context);
         if (recorded) {
-            logEvent(kind, false, resolvedDetail);
+            logEvent(kind, false, resolvedDetail, context);
         }
         return recorded;
     }
@@ -306,6 +308,31 @@ final class ReplayRecorder {
         }
     }
 
+    private static ReplayActionContext actionContext(ReplayEvent.Kind kind, IsoPlayer player,
+        String detail) {
+        if (kind != ReplayEvent.Kind.MELEE_ATTACK
+            && kind != ReplayEvent.Kind.RANGED_ATTACK) {
+            return ReplayActionContext.none();
+        }
+        try {
+            return new ReplayActionContext(
+                detail,
+                player.getAttackType() == null ? "" : player.getAttackType().toString(),
+                player.getFireMode(),
+                player.isAiming(),
+                player.isDoShove(),
+                player.isAimAtFloor(),
+                player.isRangedWeaponEquipped(),
+                player.isRangedWeaponEmpty(),
+                player.isCriticalHit(),
+                player.isAttackFromBehind()
+            );
+        } catch (RuntimeException exception) {
+            System.out.println("[pz-replay] action context capture failed: " + exception);
+            return ReplayActionContext.none();
+        }
+    }
+
     private static String detailFor(ReplayEvent.Kind kind, String detail, IsoPlayer player) {
         if (kind == ReplayEvent.Kind.MELEE_ATTACK
             || kind == ReplayEvent.Kind.RANGED_ATTACK) {
@@ -347,10 +374,23 @@ final class ReplayRecorder {
     }
 
     private void logEvent(ReplayEvent.Kind kind, boolean end, String detail) {
+        logEvent(kind, end, detail, ReplayActionContext.none());
+    }
+
+    private void logEvent(ReplayEvent.Kind kind, boolean end, String detail,
+        ReplayActionContext context) {
         System.out.println("[pz-replay] capture action kind=" + kind.id()
             + " phase=" + (end ? "end" : "start")
             + " time=" + String.format(Locale.ROOT, "%.3f", session.currentTimeSeconds())
             + " detail=" + detail
+            + " attack=" + context.attackType()
+            + " weapon=" + context.weaponStyle()
+            + " aiming=" + context.aiming()
+            + " shove=" + context.shove()
+            + " stomp=" + context.stomp()
+            + " ranged=" + context.ranged()
+            + " critical=" + context.critical()
+            + " behind=" + context.attackFromBehind()
             + " events=" + session.events().size());
     }
 
