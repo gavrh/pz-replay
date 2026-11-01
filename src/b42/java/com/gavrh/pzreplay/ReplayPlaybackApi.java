@@ -80,6 +80,9 @@ public final class ReplayPlaybackApi {
         for (String appearanceWarning : loaded.getAppearanceWarnings()) {
             addWarning(warnings, appearanceWarning);
         }
+        for (String vehicleWarning : loaded.getVehicleWarnings()) {
+            addWarning(warnings, vehicleWarning);
+        }
         AppearanceSnapshot appearance = null;
         if (data.metadata().appearance().isCurrent()) {
             try {
@@ -132,6 +135,7 @@ public final class ReplayPlaybackApi {
             + " events=" + loaded.getEventCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
             + " appearance_changes=" + loaded.getAppearanceChangeCount()
+            + " vehicles=" + loaded.getVehicleCount()
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
         return true;

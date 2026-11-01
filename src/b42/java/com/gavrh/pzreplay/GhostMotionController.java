@@ -25,6 +25,8 @@ public final class GhostMotionController {
     private long lastReplayUpdateNanos;
     private ReplayEquipment appliedEquipment;
     private ReplayAppearance appliedAppearance;
+    private ReplayVehicleVisual vehicleVisual;
+    private String vehicleFailureKey = "";
 
     public GhostMotionController(ScriptedGhostPath path) {
         this(path, null);
@@ -182,6 +184,9 @@ public final class GhostMotionController {
         if (actions != null) {
             actions.stop(ghost);
         }
+        despawnVehicle();
+        setVehiclePose(ghost, false);
+        vehicleFailureKey = "";
         resetLocomotion(ghost);
         clearReplayState(ghost);
         appliedEquipment = null;
@@ -193,6 +198,9 @@ public final class GhostMotionController {
 
     public void reset(ReplayGhost ghost) {
         camera.restore();
+        despawnVehicle();
+        setVehiclePose(ghost, false);
+        vehicleFailureKey = "";
         appliedEquipment = null;
         appliedAppearance = null;
         if (actions != null) {
@@ -334,6 +342,55 @@ public final class GhostMotionController {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             sample.stance(), sample.moving(), sample.aiming(), sample.equipment(),
             replay.appearanceAt(sample.time()), movement);
+        ReplayVehicleTimeline.State vehicleState = replay.vehicleAt(sample.time());
+        applyVehicle(ghost, vehicleState, sample.inVehicle() || vehicleState != null);
+    }
+
+    private void applyVehicle(ReplayGhost ghost, ReplayVehicleTimeline.State state,
+        boolean inVehicle) {
+        if (ghost == null) {
+            return;
+        }
+        if (state == null) {
+            despawnVehicle();
+            setVehiclePose(ghost, inVehicle);
+            return;
+        }
+        if (vehicleVisual == null || !vehicleVisual.matches(state.segment())) {
+            despawnVehicle();
+            String key = state.segment().key();
+            if (!key.equals(vehicleFailureKey)) {
+                vehicleVisual = ReplayVehicleVisual.spawn(state.segment(), this::warn);
+                if (vehicleVisual == null) {
+                    vehicleFailureKey = key;
+                } else {
+                    vehicleFailureKey = "";
+                    System.out.println("[pz-replay] replay vehicle spawned script="
+                        + state.segment().scriptName() + " seat=" + state.segment().seat()
+                        + " skin=" + state.segment().skinIndex());
+                }
+            }
+        }
+        if (vehicleVisual != null) {
+            vehicleVisual.apply(state);
+        }
+        setVehiclePose(ghost, true);
+    }
+
+    private void despawnVehicle() {
+        if (vehicleVisual == null) {
+            return;
+        }
+        String script = vehicleVisual.getScriptName();
+        vehicleVisual.despawn();
+        vehicleVisual = null;
+        System.out.println("[pz-replay] replay vehicle despawned script=" + script);
+    }
+
+    private void setVehiclePose(ReplayGhost ghost, boolean inVehicle) {
+        if (ghost != null) {
+            ghost.setVehiclePose(inVehicle);
+        }
     }
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
