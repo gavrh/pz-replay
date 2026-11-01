@@ -2,6 +2,7 @@ require "ISUI/ISPanel"
 require "ISUI/ISButton"
 require "ISUI/ISScrollingListBox"
 require "ISUI/ISTextEntryBox"
+require "PZReplaySurfaces"
 require "PZReplayText"
 
 if PZReplayBrowser then return end
@@ -656,6 +657,18 @@ function PZReplayBrowser:isSearchFocused()
     return self.searchEntry ~= nil and self.searchEntry:isFocused()
 end
 
+function PZReplayBrowser:isEditingDialogText()
+    return self:isDialogOpen() and self.dialog:isEditingText()
+end
+
+function PZReplayBrowser:handleKeyRelease(key)
+    if not self:isDialogOpen() then
+        return false
+    end
+    self.dialog:onKeyRelease(key)
+    return true
+end
+
 function PZReplayBrowser:onFavoritesFilter()
     if self:isDialogOpen() then return end
     self.favoritesOnly = not self.favoritesOnly
@@ -854,9 +867,11 @@ function PZReplayBrowser:openDialog(mode, entry)
     self.dialog:setY(0)
     self.dialog:setWidth(self.width)
     self.dialog:setHeight(self.height)
-    self.dialog:open(mode, entry)
-    self.dialog:bringToTop()
+    if not self.dialog:open(mode, entry) then
+        return false
+    end
     self:updateButtons()
+    return true
 end
 
 function PZReplayBrowser:closeDialog()
@@ -907,7 +922,7 @@ function PZReplayBrowser:updateButtons()
     end
 end
 
-function PZReplayBrowser:render()
+function PZReplayBrowser:prerender()
     if self.list then
         self:drawDetails()
         local statusY = self.list.y + self.list.height + 2
@@ -1008,25 +1023,26 @@ function PZReplayManageDialog:open(mode, entry)
     else
         self.textEntry:unfocus()
     end
-    self:setVisible(true)
-    self:setCapture(true)
-    self:setAlwaysOnTop(true)
-    self:setWantKeyEvents(true)
-    self:setWantMouseEvents(true)
-    self:bringToTop()
+    local surface = self.owner.options and self.owner.options.surface
+    if not PZReplaySurfaces.openDialog(surface, self) then
+        return false
+    end
     if renaming then
         self.textEntry:focus()
     end
+    return true
 end
 
 function PZReplayManageDialog:close()
     if self.textEntry then
         self.textEntry:unfocus()
     end
-    self:setCapture(false)
-    self:setWantKeyEvents(false)
-    self:setWantMouseEvents(false)
-    self:setVisible(false)
+    PZReplaySurfaces.closeDialog(self)
+end
+
+function PZReplayManageDialog:isEditingText()
+    return self.textEntry ~= nil and self.textEntry:getIsVisible()
+        and self.textEntry:isFocused()
 end
 
 function PZReplayManageDialog:onConfirm()
