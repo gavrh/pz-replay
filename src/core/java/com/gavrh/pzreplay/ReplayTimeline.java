@@ -18,6 +18,7 @@ public final class ReplayTimeline {
         float facing,
         ReplaySample.Locomotion locomotion,
         ReplaySample.Stance stance,
+        boolean moving,
         boolean aiming,
         ReplayEquipment equipment
     ) {
@@ -26,6 +27,20 @@ public final class ReplayTimeline {
         }
     }
 
+    public record Movement(float x, float y) {
+        public Movement {
+            if (!Float.isFinite(x) || !Float.isFinite(y)) {
+                x = 0.0f;
+                y = 0.0f;
+            }
+        }
+
+        public boolean isMoving() {
+            return x != 0.0f || y != 0.0f;
+        }
+    }
+
+    private static final double MOVEMENT_WINDOW_SECONDS = 0.1;
     public static final double MIN_SPEED = 0.25;
     public static final double MAX_SPEED = 4.0;
 
@@ -234,9 +249,27 @@ public final class ReplayTimeline {
             MotionMath.interpolateFacing(start.angle(), end.angle(), alpha),
             start.locomotion(),
             start.stance(),
+            start.moving(),
             start.aiming(),
             equipment
         );
+    }
+
+    public Movement movementAt(double seconds) {
+        if (isEmpty() || !Double.isFinite(seconds) || duration <= 0.0) {
+            return new Movement(0.0f, 0.0f);
+        }
+        double target = Math.max(0.0, Math.min(seconds, duration));
+        double window = Math.min(MOVEMENT_WINDOW_SECONDS, duration);
+        Sample before = sampleAt(Math.max(0.0, target - window));
+        Sample after = sampleAt(Math.min(duration, target + window));
+        float dx = after.x() - before.x();
+        float dy = after.y() - before.y();
+        double length = Math.sqrt(dx * dx + dy * dy);
+        if (length < 1.0e-5) {
+            return new Movement(0.0f, 0.0f);
+        }
+        return new Movement((float) (dx / length), (float) (dy / length));
     }
 
     public boolean isEmpty() {
@@ -399,6 +432,7 @@ public final class ReplayTimeline {
             MotionMath.normalizeFacing(frame.angle()),
             frame.locomotion(),
             frame.stance(),
+            frame.moving(),
             frame.aiming(),
             equipment
         );
