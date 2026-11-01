@@ -40,6 +40,56 @@ class ReplayTimelineTest {
     }
 
     @Test
+    void derivesTheRecordedMovementDirectionForAnimationBlending() throws Exception {
+        ReplayTimeline timeline = new ReplayTimeline(List.of(
+            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.WALK,
+                ReplaySample.Stance.STAND),
+            frame(1f, 3f, 4f, 0f, 0f, ReplaySample.Locomotion.WALK,
+                ReplaySample.Stance.STAND)
+        ));
+
+        ReplayTimeline.Movement movement = timeline.movementAt(0.5);
+
+        assertTrue(movement.isMoving());
+        assertEquals(0.6f, movement.x(), 0.0001f);
+        assertEquals(0.8f, movement.y(), 0.0001f);
+        assertFalse(timeline.movementAt(0.5).equals(
+            new ReplayTimeline.Movement(0f, 0f)));
+    }
+
+    @Test
+    void stationaryReplaysHaveNoMovementDirection() throws Exception {
+        ReplayTimeline timeline = new ReplayTimeline(List.of(
+            frame(0f, 5f, 5f, 0f, 0f, ReplaySample.Locomotion.IDLE,
+                ReplaySample.Stance.STAND),
+            frame(1f, 5f, 5f, 0f, 0f, ReplaySample.Locomotion.IDLE,
+                ReplaySample.Stance.STAND)
+        ));
+
+        ReplayTimeline.Movement movement = timeline.movementAt(0.5);
+
+        assertFalse(movement.isMoving());
+        assertEquals(0.0f, movement.x(), 0.0001f);
+        assertEquals(0.0f, movement.y(), 0.0001f);
+    }
+
+    @Test
+    void exposesTheRecordedMovingFlagFromTheActiveFrame() throws Exception {
+        ReplayTimeline timeline = new ReplayTimeline(List.of(
+            new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH,
+                ReplaySample.flags(false, true, false, false, false, false)),
+            new ReplaySample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
+                ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH,
+                ReplaySample.flags(false, true, false, false, false, true))
+        ));
+
+        assertFalse(timeline.sampleAt(0.0).moving());
+        assertFalse(timeline.sampleAt(0.5).moving());
+        assertTrue(timeline.sampleAt(1.0).moving());
+    }
+
+    @Test
     void exposesAimingFromTheActiveFrame() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
             new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,

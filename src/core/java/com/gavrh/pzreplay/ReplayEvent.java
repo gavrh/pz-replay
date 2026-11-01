@@ -9,7 +9,8 @@ public record ReplayEvent(
     boolean end,
     String detail,
     float direction,
-    float durationSeconds
+    float durationSeconds,
+    ReplayActionContext context
 ) {
     public static final int MAX_DETAIL_LENGTH = 64;
     public static final float MAX_DURATION_SECONDS = 10.0f;
@@ -72,9 +73,16 @@ public record ReplayEvent(
         }
     }
 
+    public ReplayEvent(long sequence, float timeSeconds, Kind kind, boolean end,
+        String detail, float direction, float durationSeconds) {
+        this(sequence, timeSeconds, kind, end, detail, direction, durationSeconds,
+            ReplayActionContext.none());
+    }
+
     public ReplayEvent {
         kind = kind == null ? Kind.MELEE_ATTACK : kind;
         detail = safeDetail(detail);
+        context = context == null ? ReplayActionContext.none() : context;
         if (!Float.isFinite(timeSeconds) || timeSeconds < 0.0f) {
             timeSeconds = 0.0f;
         }

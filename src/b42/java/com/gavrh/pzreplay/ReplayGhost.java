@@ -8,6 +8,7 @@ import zombie.iso.IsoCell;
 public final class ReplayGhost extends IsoPlayer {
     private final String identity;
     private GhostMotionController motion;
+    private boolean scriptedStrafing;
 
     public ReplayGhost(IsoCell cell, SurvivorDesc desc, int x, int y, int z) {
         super(cell, desc, x, y, z);
@@ -79,6 +80,15 @@ public final class ReplayGhost extends IsoPlayer {
     void setScriptedMovement(boolean moving) {
         isPlayerMoving = moving;
         setJustMoved(moving);
+    }
+
+    void setScriptedStrafing(boolean strafing) {
+        scriptedStrafing = strafing;
+    }
+
+    @Override
+    public boolean isStrafing() {
+        return scriptedStrafing;
     }
 
     @Override

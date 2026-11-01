@@ -4,15 +4,20 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import zombie.AttackType;
 import zombie.characters.action.ActionContext;
 import zombie.characters.action.ActionGroup;
 import zombie.characters.action.ActionState;
+import zombie.inventory.InventoryItem;
+import zombie.inventory.types.HandWeapon;
 
 final class GhostActionController {
     private static final double ATTACK_TRIGGER_SECONDS = 0.1;
-    private static final Set<String> ATTACK_STATES = Set.of("melee", "ranged");
+    private static final Set<String> ATTACK_STATES = Set.of("melee", "ranged", "shove",
+        "shoveAim", "shoveWithFirearm", "shoveWithHandgun", "stomp");
     private static final Set<String> CLIMB_STATES = Set.of("climbFence", "climbwindow",
         "climbwall", "climbrope", "climbdownrope");
     private static final Set<String> FALL_STATES = Set.of("falling", "falldown");
@@ -34,9 +39,37 @@ final class GhostActionController {
     private boolean weaponSuppressed;
     private String savedWeapon;
     private boolean injected;
+    private boolean attackActive;
+    private boolean attackAiming;
+    private ReplayActionContext activeAttackContext;
 
     GhostActionController(ReplayEventTimeline timeline) {
         scheduler = new ReplayEventScheduler(timeline);
+    }
+
+    Boolean aimOverride() {
+        return attackActive ? Boolean.valueOf(attackAiming) : null;
+    }
+
+    boolean hasActiveAttack() {
+        return attackActive;
+    }
+
+    void applyActiveAttack(ReplayGhost ghost) {
+        if (ghost == null || !attackActive || activeAttackContext == null) {
+            return;
+        }
+        ReplayActionContext context = activeAttackContext;
+        ghost.setIsAiming(context.aiming() || context.ranged());
+        ghost.setDoShove(context.shove());
+        ghost.setAimAtFloor(context.aimAtFloor());
+        ghost.setCriticalHit(context.critical());
+        ghost.setAttackFromBehind(context.attackFromBehind());
+        ghost.setRangedWeaponEmpty(context.rangedWeaponEmpty());
+        ghost.setVariable("Weapon", context.weaponStyle());
+        ghost.setVariable("rangedWeapon", context.ranged());
+        AttackType attackType = resolvedAttackType(context);
+        ghost.setAttackType(attackType == null ? AttackType.NONE : attackType);
     }
 
     void start(ReplayGhost ghost) {
@@ -65,6 +98,26 @@ final class GhostActionController {
             startPersistent(ghost, event);
         }
         expire(ghost, timeSeconds);
+    }
+
+    void complete(ReplayGhost ghost) {
+        if (pending.isEmpty() && !attackActive && !directionOverride && !fallOffset) {
+            return;
+        }
+        for (Pending entry : pending) {
+            if (!entry.releaseOnly()) {
+                finish(ghost, entry.kind());
+            }
+        }
+        pending.clear();
+        directionOverride = false;
+        fallOffset = false;
+        if (attackActive) {
+            clearAttackState(ghost);
+            if (ATTACK_STATES.contains(stateName(ghost))) {
+                forceIdle(ghost);
+            }
+        }
     }
 
     void stop(ReplayGhost ghost) {
@@ -175,14 +228,37 @@ final class GhostActionController {
     }
 
     private void triggerAttack(ReplayGhost ghost, ReplayEvent event, boolean ranged) {
-        String style = event.detail().isEmpty()
-            ? (ranged ? "firearm" : "1handed") : event.detail();
-        ghost.setVariable("Weapon", style);
-        ghost.setVariable("rangedWeapon", ranged);
-        if (ranged) {
-            ghost.setVariable("RangedWeaponEmpty", false);
+        ReplayActionContext context = event.context();
+        boolean hasContext = context != null && context.isPresent();
+        boolean rangedAttack = hasContext ? context.ranged() : ranged;
+        String style = hasContext ? context.weaponStyle() : event.detail();
+        if (!hasContext && style.isEmpty()) {
+            style = rangedAttack ? "firearm" : "1handed";
         }
+        ghost.setVariable("Weapon", style);
+        ghost.setVariable("rangedWeapon", rangedAttack);
         ghost.setInitiateAttack(true);
+        if (hasContext) {
+            boolean aiming = context.aiming() || context.ranged();
+            ghost.setIsAiming(aiming);
+            ghost.setDoShove(context.shove());
+            ghost.setAimAtFloor(context.aimAtFloor());
+            ghost.setCriticalHit(context.critical());
+            ghost.setAttackFromBehind(context.attackFromBehind());
+            ghost.setRangedWeaponEmpty(context.rangedWeaponEmpty());
+            AttackType attackType = resolvedAttackType(context);
+            ghost.setAttackType(attackType == null ? AttackType.NONE : attackType);
+            applyFireMode(ghost, context.fireMode());
+            attackAiming = aiming;
+            activeAttackContext = context;
+        } else {
+            if (rangedAttack) {
+                ghost.setVariable("RangedWeaponEmpty", false);
+            }
+            attackAiming = ghost.isAiming();
+            activeAttackContext = null;
+        }
+        attackActive = true;
     }
 
     private void triggerReload(ReplayGhost ghost, ReplayEvent event) {
@@ -195,6 +271,53 @@ final class GhostActionController {
         ghost.setVariable("WeaponReloadType", reloadType);
         ghost.setVariable("isLoading", !rack);
         ghost.setVariable("isRacking", rack);
+    }
+
+    private static void applyFireMode(ReplayGhost ghost, String fireMode) {
+        if (fireMode == null || fireMode.isEmpty()) {
+            return;
+        }
+        InventoryItem item = ghost.getPrimaryHandItem();
+        if (item instanceof HandWeapon weapon) {
+            try {
+                weapon.setFireMode(fireMode);
+            } catch (RuntimeException exception) {
+                System.out.println("[pz-replay] fire mode could not be applied: " + exception);
+            }
+        }
+    }
+
+    private static AttackType resolvedAttackType(ReplayActionContext context) {
+        AttackType resolved = attackType(context.attackType());
+        if (resolved == null && context.ranged()) {
+            return AttackType.SHOT;
+        }
+        return resolved;
+    }
+
+    private static AttackType attackType(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return switch (value.toLowerCase(Locale.ROOT)) {
+            case "bite" -> AttackType.BITE;
+            case "charge" -> AttackType.CHARGE;
+            case "default" -> AttackType.DEFAULT;
+            case "grapplegrab" -> AttackType.GRAPPLE_GRAB;
+            case "meleestab" -> AttackType.MELEE_STAB;
+            case "meleestabtofloor" -> AttackType.MELEE_STAB_TO_FLOOR;
+            case "meleeswing" -> AttackType.MELEE_SWING;
+            case "meleetofloor" -> AttackType.MELEE_TO_FLOOR;
+            case "miss" -> AttackType.MISS;
+            case "none" -> AttackType.NONE;
+            case "overhead" -> AttackType.OVERHEAD;
+            case "shot" -> AttackType.SHOT;
+            case "shove" -> AttackType.SHOVE;
+            case "spearstab" -> AttackType.SPEAR_STAB;
+            case "stomp" -> AttackType.STOMP;
+            case "uppercut" -> AttackType.UPPERCUT;
+            default -> null;
+        };
     }
 
     private void expire(ReplayGhost ghost, double timeSeconds) {
@@ -223,7 +346,10 @@ final class GhostActionController {
         switch (kind) {
             case MELEE_ATTACK, RANGED_ATTACK -> {
                 ghost.setInitiateAttack(false);
-                ghost.clearVariable("rangedWeapon");
+                clearAttackState(ghost);
+                attackActive = false;
+                attackAiming = false;
+                activeAttackContext = null;
                 if (ATTACK_STATES.contains(stateName(ghost))) {
                     forceIdle(ghost);
                 }
@@ -269,6 +395,16 @@ final class GhostActionController {
         }
     }
 
+    private static void clearAttackState(ReplayGhost ghost) {
+        ghost.setAttackType(AttackType.NONE);
+        ghost.setDoShove(false);
+        ghost.setAimAtFloor(false);
+        ghost.setCriticalHit(false);
+        ghost.setAttackFromBehind(false);
+        ghost.setRangedWeaponEmpty(false);
+        ghost.clearVariable("rangedWeapon");
+    }
+
     private void restoreWeapon(ReplayGhost ghost) {
         if (!weaponSuppressed) {
             return;
@@ -294,6 +430,9 @@ final class GhostActionController {
         persistent.clear();
         directionOverride = false;
         fallOffset = false;
+        attackActive = false;
+        attackAiming = false;
+        activeAttackContext = null;
         if (ghost == null) {
             return;
         }
@@ -304,6 +443,7 @@ final class GhostActionController {
         ghost.setSitOnGround(false);
         ghost.setSittingOnFurniture(false);
         ghost.setIsResting(false);
+        clearAttackState(ghost);
         restoreWeapon(ghost);
         ghost.clearVariable("rangedWeapon");
         ghost.clearVariable("PerformingAction");

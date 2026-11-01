@@ -38,6 +38,23 @@ public record ReplaySample(
             }
             throw new IllegalArgumentException("unknown locomotion id " + id);
         }
+
+        public static Locomotion fromState(boolean sprinting, boolean running,
+            boolean sneaking, boolean moving) {
+            if (sprinting) {
+                return SPRINT;
+            }
+            if (running) {
+                return RUN;
+            }
+            if (sneaking && moving) {
+                return SNEAK;
+            }
+            if (moving) {
+                return WALK;
+            }
+            return IDLE;
+        }
     }
 
     public enum Stance {
@@ -75,6 +92,10 @@ public record ReplaySample(
 
     public boolean aiming() {
         return (flags & FLAG_AIMING) != 0;
+    }
+
+    public boolean moving() {
+        return (flags & FLAG_MOVING) != 0;
     }
 
     public boolean inVehicle() {

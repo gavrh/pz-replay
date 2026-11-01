@@ -43,7 +43,7 @@ public final class ReplayEventTimeline {
                 if (event.timeSeconds() > duration) {
                     valid.add(new ReplayEvent(event.sequence(), (float) duration,
                         event.kind(), event.end(), event.detail(), event.direction(),
-                        event.durationSeconds()));
+                        event.durationSeconds(), event.context()));
                     continue;
                 }
                 valid.add(event);

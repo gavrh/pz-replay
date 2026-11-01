@@ -241,6 +241,12 @@ public final class CaptureSession {
 
     public boolean recordEvent(ReplayEvent.Kind kind, boolean end, String detail,
         float direction, float durationSeconds) {
+        return recordEvent(kind, end, detail, direction, durationSeconds,
+            ReplayActionContext.none());
+    }
+
+    public boolean recordEvent(ReplayEvent.Kind kind, boolean end, String detail,
+        float direction, float durationSeconds, ReplayActionContext context) {
         if (!recording || kind == null) {
             return false;
         }
@@ -251,17 +257,20 @@ public final class CaptureSession {
         if (safeDetail.length() > ReplayEvent.MAX_DETAIL_LENGTH) {
             safeDetail = safeDetail.substring(0, ReplayEvent.MAX_DETAIL_LENGTH);
         }
+        ReplayActionContext safeContext =
+            context == null ? ReplayActionContext.none() : context;
         if (!events.isEmpty()) {
             ReplayEvent previous = events.get(events.size() - 1);
             if (previous.kind() == kind
                 && previous.end() == end
                 && previous.detail().equals(safeDetail)
+                && previous.context().equals(safeContext)
                 && activeSeconds - previous.timeSeconds() <= EVENT_DEDUPE_SECONDS) {
                 return false;
             }
         }
         events.add(new ReplayEvent(events.size() + 1L, (float) activeSeconds, kind, end,
-            safeDetail, direction, durationSeconds));
+            safeDetail, direction, durationSeconds, safeContext));
         return true;
     }
 

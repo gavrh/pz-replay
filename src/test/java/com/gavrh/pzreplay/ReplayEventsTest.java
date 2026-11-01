@@ -1,6 +1,10 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -83,6 +87,21 @@ class ReplayEventsTest {
     }
 
     @Test
+    void versionOneEventsRemainReadable() throws Exception {
+        ReplayEvents events = new ReplayEvents(1,
+            Base64.getEncoder().encodeToString(versionOneEvent()));
+
+        assertTrue(events.isCurrent());
+        assertTrue(events.warnings().isEmpty());
+        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata(events),
+            List.of(frame(0f), frame(1f))));
+        assertEquals(1, timeline.getEventCount());
+        assertEquals(ReplayActionContext.none(),
+            timeline.getEvents().get(0).context());
+        assertTrue(timeline.getEventWarnings().isEmpty());
+    }
+
+    @Test
     void corruptOrUnsupportedEventDataWarnsWithoutBreakingFrames() throws Exception {
         ReplayEvents corrupt = new ReplayEvents(ReplayEvents.CURRENT_VERSION, "not base64!");
         ReplayEvents unsupported = new ReplayEvents(ReplayEvents.CURRENT_VERSION + 1, "AQ==");
@@ -107,6 +126,24 @@ class ReplayEventsTest {
         assertTrue(events.isPresent());
         assertEquals(-1, events.version());
         assertTrue(events.warnings().get(0).contains("corrupt or incomplete"));
+    }
+
+    private static byte[] versionOneEvent() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            byte[] detail = "1handed".getBytes(StandardCharsets.UTF_8);
+            out.writeShort(1);
+            out.writeInt(1);
+            out.writeInt(1);
+            out.writeFloat(0.5f);
+            out.writeByte(ReplayEvent.Kind.MELEE_ATTACK.code());
+            out.writeByte(0);
+            out.writeFloat(0f);
+            out.writeFloat(1f);
+            out.writeShort(detail.length);
+            out.write(detail);
+        }
+        return bytes.toByteArray();
     }
 
     @Test

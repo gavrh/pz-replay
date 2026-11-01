@@ -313,6 +313,43 @@ class CaptureSessionTest {
     }
 
     @Test
+    void recordsAttackAnimationContextWithTheEvent() {
+        CaptureSession session = new CaptureSession(30.0);
+        session.start(0L);
+        session.tick(1, 100L, player(0f, 0f, 0f), false);
+        ReplayActionContext context = new ReplayActionContext("1handed", "miss", "",
+            false, false, false, false, false, false, false);
+
+        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+            45f, 0f, context));
+        assertFalse(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+            45f, 0f, context));
+
+        ReplayEvent event = session.events().get(0);
+        assertEquals(context, event.context());
+        assertEquals("miss", event.context().attackType());
+    }
+
+    @Test
+    void differentAnimationContextsAreNotDeduplicated() {
+        CaptureSession session = new CaptureSession(30.0);
+        session.start(0L);
+        session.tick(1, 100L, player(0f, 0f, 0f), false);
+        ReplayActionContext miss = new ReplayActionContext("1handed", "miss", "",
+            false, false, false, false, false, false, false);
+        ReplayActionContext overhead = new ReplayActionContext("2handed", "overhead", "",
+            false, false, false, false, false, false, false);
+
+        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+            45f, 0f, miss));
+        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "2handed",
+            45f, 0f, overhead));
+
+        assertEquals(2, session.events().size());
+        assertEquals(overhead, session.events().get(1).context());
+    }
+
+    @Test
     void actionEventsAreClearedOnANewCaptureAndBounded() {
         CaptureSession session = new CaptureSession(30.0);
         session.start(0L);

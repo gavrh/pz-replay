@@ -32,11 +32,12 @@ public record ReplayEvents(int version, String data) {
     }
 
     public boolean isCurrent() {
-        return version == CURRENT_VERSION;
+        return version >= ReplayEventCodec.MIN_SUPPORTED_VERSION
+            && version <= CURRENT_VERSION;
     }
 
     public ReplayEventCodec.Result decode() throws ReplayFormatException {
-        if (version != CURRENT_VERSION) {
+        if (!isCurrent()) {
             throw new ReplayFormatException(
                 "action event data version is unsupported: " + version);
         }
@@ -59,7 +60,7 @@ public record ReplayEvents(int version, String data) {
         if (version <= NONE_VERSION) {
             return List.of(CORRUPT_WARNING);
         }
-        if (version != CURRENT_VERSION) {
+        if (!isCurrent()) {
             return List.of("action event data version is unsupported: " + version);
         }
         try {

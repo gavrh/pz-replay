@@ -1,5 +1,8 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +18,15 @@ class ReplayEventCodecTest {
 
     @Test
     void roundTripsEveryFieldAndPreservesOrder() throws Exception {
+        ReplayActionContext melee = new ReplayActionContext("1handed", "overhead", "",
+            true, false, false, false, false, false, false);
+        ReplayActionContext ranged = new ReplayActionContext("handgun", "shot", "Single",
+            true, false, false, true, false, false, false);
         List<ReplayEvent> events = List.of(
-            event(2, 0.25f, ReplayEvent.Kind.MELEE_ATTACK, false, "1handed", 45f, 1.2f),
-            event(3, 0.5f, ReplayEvent.Kind.RANGED_ATTACK, false, "handgun", -10f, 0.9f),
+            new ReplayEvent(2, 0.25f, ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+                45f, 1.2f, melee),
+            new ReplayEvent(3, 0.5f, ReplayEvent.Kind.RANGED_ATTACK, false, "handgun",
+                -10f, 0.9f, ranged),
             event(4, 0.75f, ReplayEvent.Kind.RELOAD, false, "handgun", 0f, 2.2f),
             event(5, 0.9f, ReplayEvent.Kind.DOOR, false, "door", 180f, 0.6f),
             event(6, 1.0f, ReplayEvent.Kind.SIT, false, "ground", 90f, 0f),
@@ -31,6 +40,55 @@ class ReplayEventCodecTest {
 
         assertEquals(events, result.events());
         assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void decodesVersionOneEventsWithoutAnimationContext() throws Exception {
+        byte[] encoded = versionOneEvent(1L, 0.5f, 1, false, "1handed", 45f, 1.2f);
+
+        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+
+        assertEquals(1, result.events().size());
+        assertEquals(ReplayActionContext.none(), result.events().get(0).context());
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void unknownContextFlagsKeepKnownStateAndWarn() throws Exception {
+        ReplayActionContext context = new ReplayActionContext("knife", "miss", "",
+            false, false, false, false, false, false, false);
+        byte[] encoded = ReplayEventCodec.encode(List.of(
+            new ReplayEvent(1, 0.5f, ReplayEvent.Kind.MELEE_ATTACK, false, "knife",
+                0f, 1f, context)));
+        int flagsOffset = 2 + 4 + 4 + 4 + 1 + 1 + 4 + 4 + 2
+            + "knife".getBytes(StandardCharsets.UTF_8).length;
+        encoded[flagsOffset] = (byte) 0x80;
+
+        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+
+        assertEquals(1, result.events().size());
+        assertEquals(context, result.events().get(0).context());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0).contains("unknown animation context flags"));
+    }
+
+    @Test
+    void invalidContextDataDegradesTheEventWithAWarning() throws Exception {
+        ReplayActionContext context = new ReplayActionContext("axe", "overhead", "",
+            true, false, false, false, false, false, false);
+        byte[] encoded = ReplayEventCodec.encode(List.of(
+            new ReplayEvent(1, 0.5f, ReplayEvent.Kind.MELEE_ATTACK, false, "axe",
+                0f, 1f, context)));
+        int weaponOffset = 2 + 4 + 4 + 4 + 1 + 1 + 4 + 4 + 2
+            + "axe".getBytes(StandardCharsets.UTF_8).length + 4;
+        encoded[weaponOffset] = (byte) 0x7F;
+
+        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+
+        assertEquals(1, result.events().size());
+        assertEquals(ReplayActionContext.none(), result.events().get(0).context());
+        assertEquals(1, result.warnings().size());
+        assertTrue(result.warnings().get(0).contains("invalid animation context"));
     }
 
     @Test
@@ -87,6 +145,25 @@ class ReplayEventCodecTest {
 
         assertEquals(ReplayEvent.MAX_DETAIL_LENGTH, decoded.detail().length());
         assertEquals(event, decoded);
+    }
+
+    private static byte[] versionOneEvent(long sequence, float time, int kind, boolean end,
+        String detail, float direction, float duration) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (DataOutputStream out = new DataOutputStream(bytes)) {
+            byte[] detailBytes = detail.getBytes(StandardCharsets.UTF_8);
+            out.writeShort(1);
+            out.writeInt(1);
+            out.writeInt((int) sequence);
+            out.writeFloat(time);
+            out.writeByte(kind);
+            out.writeByte(end ? 1 : 0);
+            out.writeFloat(direction);
+            out.writeFloat(duration);
+            out.writeShort(detailBytes.length);
+            out.write(detailBytes);
+        }
+        return bytes.toByteArray();
     }
 
     @Test
