@@ -5,11 +5,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import org.joml.Quaternionf;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
 import zombie.inventory.InventoryItem;
 import zombie.inventory.types.HandWeapon;
 import zombie.inventory.types.WeaponType;
+import zombie.vehicles.BaseVehicle;
 
 final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
@@ -17,6 +19,8 @@ final class ReplayRecorder {
     private static final long APPEARANCE_CHECK_INTERVAL_MILLIS = 1000L;
 
     private final ReplayAppearanceCapture appearanceCapture = new ReplayAppearanceCapture();
+    private final ReplayVehicleCapture vehicleCapture = new ReplayVehicleCapture();
+    private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
     private String captureName;
@@ -84,6 +88,7 @@ final class ReplayRecorder {
         captureInVehicle = false;
         captureSitting = false;
         appearanceCapture.reset();
+        vehicleCapture.reset();
         appearanceCaptureFailed = false;
         appearanceDropReported = false;
         lastError = null;
@@ -155,6 +160,7 @@ final class ReplayRecorder {
         }
         if (!paused) {
             captureStateEvents(player);
+            captureVehicle(player);
         }
         CaptureSession.PlayerSnapshot snapshot = paused ? null : snapshot(player);
         session.tick(tickCounter, nowMillis, snapshot, paused);
@@ -294,6 +300,45 @@ final class ReplayRecorder {
         }
     }
 
+    private void captureVehicle(IsoPlayer player) {
+        BaseVehicle vehicle = player.getVehicle();
+        if (vehicle == null) {
+            vehicleCapture.exit(session.currentTimeSeconds());
+            return;
+        }
+        String scriptName;
+        String modelFile = "";
+        try {
+            scriptName = vehicle.getScriptName();
+            if (vehicle.getScript() != null && vehicle.getScript().getModel() != null) {
+                modelFile = vehicle.getScript().getModel().file;
+            }
+        } catch (RuntimeException exception) {
+            vehicleCapture.exit(session.currentTimeSeconds());
+            System.out.println("[pz-replay] vehicle capture skipped: " + exception);
+            return;
+        }
+        if (scriptName == null || scriptName.isBlank()) {
+            vehicleCapture.exit(session.currentTimeSeconds());
+            return;
+        }
+        vehicle.jniTransform.getRotation(vehicleRotation);
+        vehicleCapture.record(session.currentTimeSeconds(),
+            new ReplayVehicleCapture.VehicleSnapshot(
+                vehicle.getX(),
+                vehicle.getY(),
+                vehicle.getZ(),
+                vehicleRotation.x,
+                vehicleRotation.y,
+                vehicleRotation.z,
+                vehicleRotation.w,
+                scriptName,
+                modelFile,
+                vehicle.getSkinIndex(),
+                vehicle.getSeat(player)
+            ));
+    }
+
     private void captureStateEvents(IsoPlayer player) {
         boolean sitting = player.isSitting();
         if (sitting != captureSitting) {
@@ -416,6 +461,7 @@ final class ReplayRecorder {
             return;
         }
         stopReported = true;
+        vehicleCapture.finish(session.currentTimeSeconds());
         CaptureSession.Summary summary = session.getLastSummary();
         if (summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
             lastError = "no frames";
@@ -472,6 +518,20 @@ final class ReplayRecorder {
         }
     }
 
+    private ReplayVehicles encodeVehicles() {
+        ReplayVehicles vehicles = vehicleCapture.encode();
+        int segments = vehicleCapture.getSegmentCount();
+        int samples = vehicleCapture.getSampleCount();
+        if (!vehicleCapture.getWarning().isBlank()) {
+            System.out.println("[pz-replay] vehicle data warning: "
+                + vehicleCapture.getWarning());
+        }
+        System.out.println("[pz-replay] capture vehicles segments=" + segments
+            + " samples=" + samples + " bytes=" + vehicles.data().length()
+            + (vehicleCapture.isDropped() ? " dropped=true" : ""));
+        return vehicles;
+    }
+
     private void persist(CaptureSession.Summary summary) {
         if (summary.frameCount() == 0 || metadata == null) {
             return;
@@ -480,7 +540,8 @@ final class ReplayRecorder {
         ReplayMetadata finalMetadata = metadata.withEnd(
             metadata.startTimeMillis() + durationMillis)
             .withAppearanceChanges(encodeAppearanceChanges())
-            .withEvents(encodeEvents());
+            .withEvents(encodeEvents())
+            .withVehicles(encodeVehicles());
         String resolvedName = RecordingNames.unique(ReplayStorage.directory(), captureName);
         if (resolvedName.isEmpty()) {
             lastError = "recording name is unavailable";
