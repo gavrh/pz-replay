@@ -2,6 +2,7 @@ require "PZReplayHud"
 require "PZReplayPanel"
 require "PZReplayLibrary"
 require "PZReplayOptions"
+require "PZReplaySurfaces"
 require "PZReplayText"
 require "PZReplayActions"
 require "PZReplayAppearance"
@@ -76,6 +77,7 @@ function ui.ensure()
     local hud = PZReplayHud:new()
     hud:initialise()
     hud:instantiate()
+    PZReplaySurfaces.configureHud(hud)
     hud:addToUIManager()
     hud:setVisible(false)
     ui.hud = hud
@@ -88,14 +90,21 @@ end
 function ui.openPanel(onClosed)
     ui.ensure()
     if not ui.panel then
-        return
+        return false
     end
     if PZReplayPlayback and PZReplayPlayback.isCameraFree
         and PZReplayPlayback.isCameraFree() then
         PZReplayPlayback.exitFreeCamera()
     end
     ui.panel.onPanelClosed = onClosed
-    ui.panel:open()
+    if not ui.panel:open() then
+        ui.panel.onPanelClosed = nil
+        if onClosed then
+            onClosed()
+        end
+        return false
+    end
+    return true
 end
 
 function ui.closePanel()
@@ -196,12 +205,18 @@ local function cleanupAll()
     if ui.panel then
         ui.closePanel()
     end
-    if PZReplayLibrary and PZReplayLibrary.isOpen() then
-        PZReplayLibrary.instance:close()
+    if PZReplayLibrary and PZReplayLibrary.instance then
+        local library = PZReplayLibrary.instance
+        if library:isHiddenForLoad() then
+            library:closeCancelledLoad()
+        elseif PZReplayLibrary.isOpen() then
+            library:close()
+        end
     end
     if ui.hud then
         ui.hud:setVisible(false)
     end
+    PZReplaySurfaces.reset()
 end
 
 local function toggleCapture()
@@ -283,33 +298,45 @@ local function exitFreeCamera()
     return false
 end
 
-function ui.handleKey(key)
+function ui.isTextEntryFocused()
+    if ui.panel and ui.panel:getIsVisible() then
+        return ui.panel:isEditingText()
+    end
     if PZReplayLibrary and PZReplayLibrary.isOpen() then
+        local library = PZReplayLibrary.instance
+        return library ~= nil and library:isEditingText()
+    end
+    return false
+end
+
+function ui.handleKey(key)
+    local action = PZReplaySurfaces.escapeAction()
+    local cameraKey = PZReplay and PZReplay.getKeyBinding("camera")
+    if action == "dialog" or action == "panel" or action == "library" then
         return false
     end
-    local cameraKey = PZReplay and PZReplay.getKeyBinding("camera")
-    if (key == Keyboard.KEY_ESCAPE or (cameraKey and key == cameraKey))
-        and exitFreeCamera() then
+    if action == "free_camera"
+        and (key == Keyboard.KEY_ESCAPE or (cameraKey and key == cameraKey)) then
+        exitFreeCamera()
         return true
     end
-    local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
+    if not PZReplaySurfaces.allowsGlobalShortcut(ui.isTextEntryFocused()) then
+        return false
+    end
+    if PZReplayLoad and PZReplayLoad.isPending() then
+        return false
+    end
     if ui.panel and ui.panel:getIsVisible() then
-        if ui.panel.rebindingAction then
-            return false
-        end
-        if ui.panel.isEditingText and ui.panel:isEditingText() then
-            return false
-        end
-        if panelKey and key == panelKey then
-            ui.closePanel()
-            return true
-        end
+        return false
+    end
+    if PZReplayLibrary and PZReplayLibrary.isOpen() then
         return false
     end
     if not luaKeyInputAvailable() then
         return false
     end
 
+    local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if panelKey and key == panelKey then
         ui.togglePanel()
         return true

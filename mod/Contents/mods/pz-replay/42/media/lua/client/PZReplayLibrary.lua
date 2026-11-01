@@ -3,6 +3,7 @@ require "ISUI/ISButton"
 require "ISUI/ISLabel"
 require "PZReplayBrowser"
 require "PZReplayLoad"
+require "PZReplaySurfaces"
 require "PZReplayText"
 
 if PZReplayLibrary then return end
@@ -120,10 +121,9 @@ function PZReplayLibrary.openFromMenu()
         if PZReplayUi.panel then
             PZReplayUi.panel:setView("replays")
         end
-        PZReplayUi.openPanel(function()
+        return PZReplayUi.openPanel(function()
             screen.bottomPanel:setVisible(true)
         end)
-        return true
     end
 
     screen.bottomPanel:setVisible(false)
@@ -131,7 +131,11 @@ function PZReplayLibrary.openFromMenu()
     library.onClosed = function()
         screen.bottomPanel:setVisible(true)
     end
-    library:open()
+    if not library:open() then
+        library.onClosed = nil
+        screen.bottomPanel:setVisible(true)
+        return false
+    end
     return true
 end
 
@@ -165,7 +169,8 @@ function PZReplayLibrary:createChildren()
     local browserY = TITLE_HEIGHT + PAD
     local browserHeight = self.height - browserY - hintHeight - PAD
     self.browser = PZReplayBrowser:new(PAD, browserY, self.width - PAD * 2, browserHeight, {
-        allowPlayback = false
+        allowPlayback = false,
+        surface = "library"
     })
     self.browser:initialise()
     self.browser:instantiate()
@@ -173,25 +178,23 @@ function PZReplayLibrary:createChildren()
 end
 
 function PZReplayLibrary:open()
+    if not PZReplaySurfaces.open("library", self) then
+        return false
+    end
     self.loadHidden = false
     self.browser:refresh()
-    self:setVisible(true)
-    self:setCapture(true)
-    self:setAlwaysOnTop(true)
-    self:setWantKeyEvents(true)
-    self:setWantMouseEvents(true)
-    self:bringToTop()
     self:updatePlayButton()
+    return true
 end
 
 function PZReplayLibrary:close()
     local callback = self.onClosed
     self.onClosed = nil
     self.loadHidden = false
-    self:setCapture(false)
-    self:setWantKeyEvents(false)
-    self:setWantMouseEvents(false)
-    self:setVisible(false)
+    if self.browser then
+        self.browser:closeDialog()
+    end
+    PZReplaySurfaces.close("library", self)
     if callback then
         callback()
     end
@@ -209,25 +212,27 @@ function PZReplayLibrary:isHiddenForLoad()
 end
 
 function PZReplayLibrary:hideForLoad()
+    self:closeDialog()
     self.loadHidden = true
-    self:setCapture(false)
-    self:setWantKeyEvents(false)
-    self:setWantMouseEvents(false)
-    self:setVisible(false)
+    PZReplaySurfaces.close("library", self)
 end
 
 function PZReplayLibrary:restoreAfterLoadFailure(message)
+    if not PZReplaySurfaces.open("library", self) then
+        return false
+    end
     self.loadHidden = false
-    self:setVisible(true)
-    self:setCapture(true)
-    self:setAlwaysOnTop(true)
-    self:setWantKeyEvents(true)
-    self:setWantMouseEvents(true)
-    self:bringToTop()
     self.browser:setStatus(message
         or T.get("UI_pzreplay_library_load_failed", "The replay could not be loaded."),
         true)
     self:updatePlayButton()
+    return true
+end
+
+function PZReplayLibrary:closeDialog()
+    if self.browser then
+        self.browser:closeDialog()
+    end
 end
 
 function PZReplayLibrary:closeCancelledLoad()
@@ -320,6 +325,11 @@ function PZReplayLibrary:onKeyRelease(key)
         self:close()
     end
     return true
+end
+
+function PZReplayLibrary:isEditingText()
+    return self.browser ~= nil
+        and (self.browser:isSearchFocused() or self.browser:isEditingDialogText())
 end
 
 function PZReplayLibrary:isKeyConsumed(key)

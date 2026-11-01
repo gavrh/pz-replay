@@ -53,9 +53,6 @@ function PZReplayHud:createChildren()
     self:setY(24)
     self.backgroundColor = { r = 0.03, g = 0.03, b = 0.03, a = 0.62 }
     self.borderColor = { r = 0.7, g = 0.7, b = 0.7, a = 0.8 }
-    self:setWantKeyEvents(false)
-    self:setWantMouseEvents(false)
-    self:setAlwaysOnTop(true)
 end
 
 function PZReplayHud:update()
@@ -165,7 +162,5 @@ function PZReplayHud:new()
     o.resultVersion = -1
     o.resultText = ""
     o.resultUntil = 0
-    o:setWantKeyEvents(false)
-    o:setWantMouseEvents(false)
     return o
 end

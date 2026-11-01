@@ -3,6 +3,7 @@ require "ISUI/ISButton"
 require "ISUI/ISTextEntryBox"
 require "RadioCom/ISUIRadio/ISSliderPanel"
 require "PZReplayBrowser"
+require "PZReplaySurfaces"
 require "PZReplayText"
 
 if PZReplayPanel then return end
@@ -148,6 +149,7 @@ function PZReplayPanel:createChildren()
     self.browser = PZReplayBrowser:new(self.contentX, browserY,
         self.contentWidth, browserHeight, {
             allowPlayback = true,
+            surface = "panel",
             isPlaying = function()
                 return PZReplayPlayback and PZReplayPlayback.isActive()
             end,
@@ -325,15 +327,13 @@ function PZReplayPanel:setView(view)
 end
 
 function PZReplayPanel:open()
+    if not PZReplaySurfaces.open("panel", self) then
+        return false
+    end
     self:refreshControls()
     self:setView(self.view or "replays")
     self.browser:refresh()
-    self:setVisible(true)
-    self:setCapture(true)
-    self:setAlwaysOnTop(true)
-    self:setWantKeyEvents(true)
-    self:setWantMouseEvents(true)
-    self:bringToTop()
+    return true
 end
 
 function PZReplayPanel:close()
@@ -343,10 +343,10 @@ function PZReplayPanel:close()
     if self.nameEntry then
         self.nameEntry:unfocus()
     end
-    self:setCapture(false)
-    self:setWantKeyEvents(false)
-    self:setWantMouseEvents(false)
-    self:setVisible(false)
+    if self.browser then
+        self.browser:closeDialog()
+    end
+    PZReplaySurfaces.close("panel", self)
     if callback then
         callback()
     end
@@ -695,8 +695,14 @@ function PZReplayPanel:onKeyRelease(key)
 end
 
 function PZReplayPanel:isEditingText()
-    return self.nameEntry ~= nil and self.nameEntry:getIsVisible()
-        and self.nameEntry:isFocused()
+    if self.nameEntry ~= nil and self.nameEntry:getIsVisible()
+        and self.nameEntry:isFocused() then
+        return true
+    end
+    if self.browser and self.browser:isSearchFocused() then
+        return true
+    end
+    return self.browser ~= nil and self.browser:isEditingDialogText()
 end
 
 function PZReplayPanel:onKeyPress(key)
@@ -949,6 +955,7 @@ function PZReplayPanel:new()
     o.borderColor = { r = 0.7, g = 0.7, b = 0.7, a = 1.0 }
     o.view = "replays"
     o.rebindNotice = ""
-    o:setWantKeyEvents(true)
+    o:setWantKeyEvents(false)
+    o:setWantMouseEvents(false)
     return o
 end
