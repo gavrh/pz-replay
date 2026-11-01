@@ -683,7 +683,7 @@ function PZReplayPanel:onKeyRelease(key)
     end
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if key == Keyboard.KEY_ESCAPE or (panelKey and key == panelKey) then
-        if PZReplay.isCountingDown() then
+        if key == Keyboard.KEY_ESCAPE and PZReplay.isCountingDown() then
             PZReplay.cancelCountdown()
             self.browser:setStatus(T.get("UI_pzreplay_panel_status_countdown_cancelled",
                 "Countdown cancelled."))
