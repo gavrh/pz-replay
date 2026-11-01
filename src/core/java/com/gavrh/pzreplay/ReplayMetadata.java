@@ -20,7 +20,8 @@ public record ReplayMetadata(
     ReplayAppearance appearance,
     ReplayAppearanceChanges appearanceChanges,
     ReplayEquipment equipment,
-    ReplayEvents events
+    ReplayEvents events,
+    ReplayVehicles vehicles
 ) {
     public static final int CURRENT_FORMAT_VERSION = 1;
 
@@ -36,6 +37,17 @@ public record ReplayMetadata(
             appearanceChanges == null ? ReplayAppearanceChanges.none() : appearanceChanges;
         equipment = equipment == null ? ReplayEquipment.none() : equipment;
         events = events == null ? ReplayEvents.none() : events;
+        vehicles = vehicles == null ? ReplayVehicles.none() : vehicles;
+    }
+
+    public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
+        String saveName, String gameMode, String mapName, String playerName, float startX,
+        float startY, float startZ, double sampleRateHz, long startTimeMillis,
+        long endTimeMillis, ReplayAppearance appearance, ReplayAppearanceChanges appearanceChanges,
+        ReplayEquipment equipment, ReplayEvents events) {
+        this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
+            startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
+            appearanceChanges, equipment, events, ReplayVehicles.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -79,19 +91,29 @@ public record ReplayMetadata(
     public ReplayMetadata withEnd(long endTimeMillis) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
+            vehicles);
     }
 
     public ReplayMetadata withEvents(ReplayEvents events) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
+            vehicles);
     }
 
     public ReplayMetadata withAppearanceChanges(ReplayAppearanceChanges appearanceChanges) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
+            vehicles);
+    }
+
+    public ReplayMetadata withVehicles(ReplayVehicles vehicles) {
+        return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
+            gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
+            vehicles);
     }
 
     public Map<String, String> toValues() {
@@ -125,6 +147,10 @@ public record ReplayMetadata(
         if (events.isPresent()) {
             values.put("events_version", Integer.toString(events.version()));
             values.put("events_data", events.data());
+        }
+        if (vehicles.isPresent()) {
+            values.put("vehicles_version", Integer.toString(vehicles.version()));
+            values.put("vehicles_data", vehicles.data());
         }
         return values;
     }
@@ -161,7 +187,8 @@ public record ReplayMetadata(
             ReplayAppearance.fromValues(values),
             ReplayAppearanceChanges.fromValues(values),
             ReplayEquipment.fromValues(values),
-            ReplayEvents.fromValues(values)
+            ReplayEvents.fromValues(values),
+            ReplayVehicles.fromValues(values)
         );
     }
 
