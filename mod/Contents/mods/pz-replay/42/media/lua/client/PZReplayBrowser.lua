@@ -907,7 +907,7 @@ function PZReplayBrowser:updateButtons()
     end
 end
 
-function PZReplayBrowser:render()
+function PZReplayBrowser:prerender()
     if self.list then
         self:drawDetails()
         local statusY = self.list.y + self.list.height + 2
