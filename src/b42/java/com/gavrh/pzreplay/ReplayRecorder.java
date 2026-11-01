@@ -530,19 +530,7 @@ final class ReplayRecorder {
 
     private static ReplaySample.Locomotion locomotion(boolean sprinting, boolean running,
         boolean sneaking, boolean moving) {
-        if (sprinting) {
-            return ReplaySample.Locomotion.SPRINT;
-        }
-        if (running) {
-            return ReplaySample.Locomotion.RUN;
-        }
-        if (sneaking) {
-            return ReplaySample.Locomotion.SNEAK;
-        }
-        if (moving) {
-            return ReplaySample.Locomotion.WALK;
-        }
-        return ReplaySample.Locomotion.IDLE;
+        return ReplaySample.Locomotion.fromState(sprinting, running, sneaking, moving);
     }
 
     private static ReplaySample.Stance stance(boolean prone, boolean sneaking) {
