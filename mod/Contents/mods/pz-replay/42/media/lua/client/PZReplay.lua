@@ -315,7 +315,7 @@ function ui.handleKey(key)
     if action == "dialog" or action == "panel" or action == "library" then
         return false
     end
-    if action == "free_camera"
+    if action == "free_camera" and PZReplaySurfaces.active() == ""
         and (key == Keyboard.KEY_ESCAPE or (cameraKey and key == cameraKey)) then
         exitFreeCamera()
         return true
