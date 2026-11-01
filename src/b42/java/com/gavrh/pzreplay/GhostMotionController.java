@@ -3,12 +3,11 @@ package com.gavrh.pzreplay;
 import java.io.IOException;
 import java.util.function.Consumer;
 import zombie.GameTime;
+import zombie.inventory.types.WeaponType;
 
 public final class GhostMotionController {
     private static final float MAX_STEP_SECONDS = 0.1f;
-    private static final float WALK_SPEED = 0.8f;
-    private static final float RUN_SPEED = 0.65f;
-    private static final float SNEAK_SPEED = 0.8f;
+    private static final float STRAFE_SPEED = 0.8f;
 
     public enum State {
         STOPPED,
@@ -226,6 +225,7 @@ public final class GhostMotionController {
                 apply(ghost, replay.sample());
                 actions.advance(ghost, replay.getCurrentTime());
                 if (!advancing) {
+                    actions.complete(ghost);
                     applyPausedPose(ghost);
                 }
             }
@@ -324,78 +324,56 @@ public final class GhostMotionController {
 
     private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            ReplaySample.Stance.STAND, false, ReplayEquipment.none(),
-            ReplayAppearance.none());
+            ReplaySample.Stance.STAND, sample.locomotion() != ReplaySample.Locomotion.IDLE,
+            false, ReplayEquipment.none(), ReplayAppearance.none(),
+            new ReplayTimeline.Movement(0.0f, 0.0f));
     }
 
     private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
+        ReplayTimeline.Movement movement = replay.movementAt(sample.time());
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            sample.stance(), sample.aiming(), sample.equipment(),
-            replay.appearanceAt(sample.time()));
+            sample.stance(), sample.moving(), sample.aiming(), sample.equipment(),
+            replay.appearanceAt(sample.time()), movement);
     }
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
-        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance, boolean aiming,
-        ReplayEquipment equipment, ReplayAppearance appearance) {
+        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance,
+        boolean recordedMoving, boolean aiming, ReplayEquipment equipment,
+        ReplayAppearance appearance, ReplayTimeline.Movement movement) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);
         ghost.setCurrentSquareFromPosition();
         ghost.setMovingSquare(ghost.getCurrentSquare());
         ghost.setDirectionAngle(facing);
-        applyLocomotion(ghost, locomotion, stance);
-        ghost.setIsAiming(aiming);
+        Boolean aimOverride = actions == null ? null : actions.aimOverride();
+        boolean actionActive = aimOverride != null;
+        boolean animationAiming = actionActive ? aimOverride.booleanValue() : aiming;
+        float forwardX = ghost.getForwardDirectionX();
+        float forwardY = ghost.getForwardDirectionY();
+        float deltaY = movement.x() * forwardX + movement.y() * forwardY;
+        float deltaX = movement.x() * -forwardY + movement.y() * forwardX;
+        applyLocomotion(ghost, ReplayAnimationState.compose(locomotion, stance,
+            recordedMoving, animationAiming, deltaX, deltaY, actionActive));
         applyEquipment(ghost, equipment);
         applyAppearance(ghost, appearance);
+        if (actions != null) {
+            actions.applyActiveAttack(ghost);
+        }
     }
 
-    private static void applyLocomotion(ReplayGhost ghost, ReplaySample.Locomotion locomotion,
-        ReplaySample.Stance stance) {
-        switch (locomotion) {
-            case WALK -> {
-                ghost.setScriptedMovement(true);
-                ghost.setRunning(false);
-                ghost.setSprinting(false);
-                ghost.setVariable("WalkSpeed", WALK_SPEED);
-            }
-            case RUN -> {
-                ghost.setScriptedMovement(true);
-                ghost.setRunning(true);
-                ghost.setSprinting(false);
-                ghost.setVariable("WalkSpeed", RUN_SPEED);
-            }
-            case SPRINT -> {
-                ghost.setScriptedMovement(true);
-                ghost.setRunning(true);
-                ghost.setSprinting(true);
-                ghost.setVariable("WalkSpeed", 1.0f);
-            }
-            case SNEAK -> {
-                ghost.setScriptedMovement(true);
-                ghost.setRunning(false);
-                ghost.setSprinting(false);
-                ghost.setVariable("WalkSpeed", SNEAK_SPEED);
-            }
-            case IDLE -> {
-                ghost.setScriptedMovement(false);
-                ghost.setRunning(false);
-                ghost.setSprinting(false);
-            }
-        }
-        switch (stance) {
-            case CROUCH -> {
-                ghost.setSneaking(true);
-                ghost.setOnFloor(false);
-            }
-            case PRONE -> {
-                ghost.setSneaking(false);
-                ghost.setOnFloor(true);
-            }
-            case STAND -> {
-                ghost.setSneaking(locomotion == ReplaySample.Locomotion.SNEAK);
-                ghost.setOnFloor(false);
-            }
-        }
+    private static void applyLocomotion(ReplayGhost ghost, ReplayAnimationState animation) {
+        ghost.setScriptedMovement(animation.moving());
+        ghost.setRunning(animation.running());
+        ghost.setSprinting(animation.sprinting());
+        ghost.setSneaking(animation.sneaking());
+        ghost.setOnFloor(animation.onFloor());
+        ghost.setVariable("WalkSpeed", animation.walkSpeed());
+        ghost.setVariable("StrafeSpeed", STRAFE_SPEED);
+        ghost.setVariable("DeltaX", animation.deltaX());
+        ghost.setVariable("DeltaY", animation.deltaY());
+        ghost.setScriptedStrafing(animation.strafing());
+        ghost.setIsAiming(animation.aiming());
     }
 
     private void applyEquipment(ReplayGhost ghost, ReplayEquipment equipment) {
@@ -405,15 +383,28 @@ public final class GhostMotionController {
         }
         appliedEquipment = next;
         clearHeldItems(ghost);
-        if (!next.isPresent() || !next.isCurrent()) {
-            return;
+        if (next.isPresent() && next.isCurrent()) {
+            try {
+                EquipmentSnapshot.decode(next).applyTo(ghost, this::warn);
+            } catch (ReplayFormatException | RuntimeException exception) {
+                warn("held-item data is corrupt or incomplete");
+                System.out.println("[pz-replay] held-item data could not be applied: "
+                    + exception);
+            }
         }
+        if (actions == null || !actions.hasActiveAttack()) {
+            applyWeaponStyle(ghost);
+        }
+    }
+
+    private static void applyWeaponStyle(ReplayGhost ghost) {
         try {
-            EquipmentSnapshot.decode(next).applyTo(ghost, this::warn);
-        } catch (ReplayFormatException | RuntimeException exception) {
-            warn("held-item data is corrupt or incomplete");
-            System.out.println("[pz-replay] held-item data could not be applied: "
-                + exception);
+            WeaponType type = WeaponType.getWeaponType(ghost);
+            String style = type == null || type == WeaponType.UNARMED
+                ? "" : type.getType();
+            ghost.setVariable("Weapon", style == null ? "" : style);
+        } catch (RuntimeException exception) {
+            ghost.setVariable("Weapon", "");
         }
     }
 
@@ -459,6 +450,11 @@ public final class GhostMotionController {
             return;
         }
         ghost.setIsAiming(false);
+        ghost.setScriptedStrafing(false);
+        ghost.setVariable("DeltaX", 0.0f);
+        ghost.setVariable("DeltaY", 0.0f);
+        ghost.setVariable("Weapon", "");
+        ghost.clearVariable("rangedWeapon");
         clearHeldItems(ghost);
     }
 
@@ -466,9 +462,8 @@ public final class GhostMotionController {
         if (ghost == null) {
             return;
         }
-        ghost.setScriptedMovement(false);
-        ghost.setRunning(false);
-        ghost.setSprinting(false);
+        ghost.setVariable("WalkSpeed", 0.0f);
+        ghost.setVariable("StrafeSpeed", 0.0f);
     }
 
     private static void resetLocomotion(ReplayGhost ghost) {
@@ -477,6 +472,11 @@ public final class GhostMotionController {
         ghost.setSprinting(false);
         ghost.setSneaking(false);
         ghost.setOnFloor(false);
+        ghost.setScriptedStrafing(false);
+        ghost.setVariable("DeltaX", 0.0f);
+        ghost.setVariable("DeltaY", 0.0f);
+        ghost.setVariable("WalkSpeed", 0.0f);
+        ghost.setVariable("StrafeSpeed", 0.0f);
     }
 
     void refreshCamera(ReplayGhost ghost) {
