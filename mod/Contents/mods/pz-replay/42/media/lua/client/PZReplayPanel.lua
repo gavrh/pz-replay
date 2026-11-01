@@ -677,12 +677,20 @@ function PZReplayPanel:onKeyRelease(key)
     if not self:getIsVisible() then
         return false
     end
+    if self.browser and self.browser:isDialogOpen() then
+        self.browser:handleKeyRelease(key)
+        return true
+    end
     if self.rebindingAction then
         self:finishRebind(key)
         return true
     end
     local panelKey = PZReplay and PZReplay.getKeyBinding("panel")
     if key == Keyboard.KEY_ESCAPE or (panelKey and key == panelKey) then
+        if key == Keyboard.KEY_ESCAPE and PZReplayUi
+            and PZReplayUi.exitFreeCamera and PZReplayUi.exitFreeCamera() then
+            return true
+        end
         if key == Keyboard.KEY_ESCAPE and PZReplay.isCountingDown() then
             PZReplay.cancelCountdown()
             self.browser:setStatus(T.get("UI_pzreplay_panel_status_countdown_cancelled",
@@ -708,6 +716,9 @@ end
 function PZReplayPanel:onKeyPress(key)
     if not self:getIsVisible() then
         return false
+    end
+    if self.browser and self.browser:isDialogOpen() then
+        return true
     end
     if not self.rebindingAction and not self:isEditingText()
         and self.view == "replays" and self.browser then

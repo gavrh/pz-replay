@@ -295,7 +295,10 @@ function PZReplayLibrary:onKeyPress(key)
     if not self:getIsVisible() then
         return false
     end
-    if self.browser then
+    if self.browser and self.browser:isDialogOpen() then
+        return true
+    end
+    if self.browser and not self.browser:isSearchFocused() then
         if key == Keyboard.KEY_UP then
             self.browser:moveSelection(-1)
         elseif key == Keyboard.KEY_DOWN then
@@ -310,7 +313,7 @@ function PZReplayLibrary:onKeyPress(key)
             self.browser:selectIndex(self.browser.list.count)
         elseif key == Keyboard.KEY_RETURN then
             self:playSelected()
-        elseif key == Keyboard.KEY_F and not self.browser:isSearchFocused() then
+        elseif key == Keyboard.KEY_F then
             self.browser:toggleFavorite()
         end
     end
@@ -320,6 +323,10 @@ end
 function PZReplayLibrary:onKeyRelease(key)
     if not self:getIsVisible() then
         return false
+    end
+    if self.browser and self.browser:isDialogOpen() then
+        self.browser:handleKeyRelease(key)
+        return true
     end
     if key == Keyboard.KEY_ESCAPE then
         self:close()
