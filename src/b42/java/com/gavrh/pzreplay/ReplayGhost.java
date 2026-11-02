@@ -97,7 +97,9 @@ public final class ReplayGhost extends IsoPlayer {
         try {
             ActionContext context = getActionContext();
             if (context == null) {
-                vehiclePose = inVehicle;
+            if (context == null) {
+                return;
+            }
                 return;
             }
             ActionGroup group = ActionGroup.getActionGroup(
