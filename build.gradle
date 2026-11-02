@@ -120,8 +120,46 @@ tasks.register('stageMod', Sync) {
     }
 }
 
+def testSummaryPrinted = false
+
 tasks.named('test') {
     useJUnitPlatform()
+    addTestListener(new org.gradle.api.tasks.testing.TestListener() {
+        @Override
+        void afterSuite(org.gradle.api.tasks.testing.TestDescriptor descriptor,
+            org.gradle.api.tasks.testing.TestResult result) {
+            if (descriptor.parent == null) {
+                testSummaryPrinted = true
+                println "tests=${result.testCount} failures=${result.failedTestCount} errors=${result.exceptions.size()} skipped=${result.skippedTestCount}"
+            }
+        }
+    })
+    finalizedBy 'testSummary'
+}
+
+tasks.register('testSummary') {
+    doLast {
+        if (testSummaryPrinted) {
+            return
+        }
+        def resultsDir = layout.buildDirectory.dir('test-results/test').get().asFile
+        def resultFiles = fileTree(resultsDir) { include '*.xml' }.files
+        if (resultFiles.isEmpty()) {
+            return
+        }
+        long tests = 0
+        long failures = 0
+        long errors = 0
+        long skipped = 0
+        resultFiles.each { resultFile ->
+            def suite = new groovy.xml.XmlSlurper().parse(resultFile)
+            tests += suite.@tests.toLong()
+            failures += suite.@failures.toLong()
+            errors += suite.@errors.toLong()
+            skipped += suite.@skipped.toLong()
+        }
+        println "tests=${tests} failures=${failures} errors=${errors} skipped=${skipped}"
+    }
 }
 
 tasks.named('jar') {
