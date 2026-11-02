@@ -53,6 +53,11 @@ public final class ReplayTimeline {
     private final List<String> eventWarnings;
     private final ReplayAppearanceTimeline appearanceTimeline;
     private final ReplayVehicleTimeline vehicleTimeline;
+    private final ReplayGapTimeline gapTimeline;
+    private final List<GapHold> gapHolds;
+
+    private record GapHold(float holdStart, float holdEnd, int frameIndex, ReplayGap gap) {
+    }
 
     private State state = State.STOPPED;
     private double elapsed;
@@ -69,17 +74,21 @@ public final class ReplayTimeline {
             data == null || data.metadata() == null
                 ? ReplayEvents.none() : data.metadata().events(),
             data == null || data.metadata() == null
-                ? ReplayVehicles.none() : data.metadata().vehicles());
+                ? ReplayVehicles.none() : data.metadata().vehicles(),
+            data == null || data.metadata() == null
+                ? ReplayGaps.none() : data.metadata().gaps());
     }
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
         this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(), ReplayEvents.none(), ReplayVehicles.none());
+            ReplayEquipment.none(), ReplayEvents.none(), ReplayVehicles.none(),
+            ReplayGaps.none());
     }
 
     private ReplayTimeline(List<ReplaySample> frames, ReplayAppearance appearance,
         ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
-        ReplayEvents events, ReplayVehicles vehicles) throws ReplayFormatException {
+        ReplayEvents events, ReplayVehicles vehicles, ReplayGaps gaps)
+        throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
@@ -95,6 +104,8 @@ public final class ReplayTimeline {
             this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges,
                 duration);
             this.vehicleTimeline = decodeVehicles(vehicles, duration);
+            this.gapTimeline = decodeGaps(gaps, duration, 0.0);
+            this.gapHolds = List.of();
             return;
         }
 
@@ -125,6 +136,8 @@ public final class ReplayTimeline {
         this.eventWarnings = decoded.warnings();
         this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges, duration);
         this.vehicleTimeline = decodeVehicles(vehicles, duration);
+        this.gapTimeline = decodeGaps(gaps, duration, firstSeconds);
+        this.gapHolds = buildGapHolds(gapTimeline);
     }
 
     public boolean start() {
@@ -239,6 +252,10 @@ public final class ReplayTimeline {
         if (index >= frames.size() - 1 || target == relativeTimes[index]) {
             return sampleOf(index);
         }
+        GapHold hold = gapHoldAt(target);
+        if (hold != null) {
+            return sampleOf(hold.frameIndex());
+        }
 
         ReplaySample start = frames.get(index);
         ReplaySample end = frames.get(index + 1);
@@ -268,6 +285,16 @@ public final class ReplayTimeline {
         }
         double target = Math.max(0.0, Math.min(seconds, duration));
         double window = Math.min(MOVEMENT_WINDOW_SECONDS, duration);
+        boolean crossesGap = false;
+        for (GapHold hold : gapHolds) {
+            if (target - window < hold.holdEnd() && target + window > hold.holdStart()) {
+                crossesGap = true;
+                break;
+            }
+        }
+        if (isGapHold(target) || crossesGap) {
+            return new Movement(0.0f, 0.0f);
+        }
         Sample before = sampleAt(Math.max(0.0, target - window));
         Sample after = sampleAt(Math.min(duration, target + window));
         float dx = after.x() - before.x();
@@ -328,7 +355,7 @@ public final class ReplayTimeline {
     }
 
     public ReplayAppearance appearanceAt(double seconds) {
-        return appearanceTimeline.appearanceAt(seconds);
+        return appearanceTimeline.appearanceAt(effectiveGapTime(seconds));
     }
 
     public int getAppearanceChangeCount() {
@@ -360,6 +387,9 @@ public final class ReplayTimeline {
     }
 
     public ReplayVehicleTimeline.State vehicleAt(double seconds) {
+        if (isGapHold(seconds)) {
+            return null;
+        }
         return vehicleTimeline == null ? null : vehicleTimeline.vehicleAt(seconds);
     }
 
@@ -369,6 +399,109 @@ public final class ReplayTimeline {
 
     public List<String> getVehicleWarnings() {
         return vehicleTimeline == null ? List.of() : vehicleTimeline.warnings();
+    }
+
+    public ReplayGapTimeline getGapTimeline() {
+        return gapTimeline;
+    }
+
+    public List<ReplayGap> getGaps() {
+        return gapTimeline == null ? List.of() : gapTimeline.gaps();
+    }
+
+    public int getGapCount() {
+        return gapTimeline == null ? 0 : gapTimeline.getGapCount();
+    }
+
+    public List<String> getGapWarnings() {
+        return gapTimeline == null ? List.of() : gapTimeline.warnings();
+    }
+
+    public boolean isGapHold(double seconds) {
+        return gapHoldAt(seconds) != null;
+    }
+
+    public ReplayGap.Reason gapReasonAt(double seconds) {
+        GapHold hold = gapHoldAt(seconds);
+        return hold == null ? null : hold.gap().reason();
+    }
+
+    private static ReplayGapTimeline decodeGaps(ReplayGaps gaps, double duration,
+        double offsetSeconds) {
+        List<ReplayGap> decoded = List.of();
+        List<String> warnings = new ArrayList<>();
+        if (gaps != null && gaps.isPresent()) {
+            try {
+                ReplayGapCodec.Result result = gaps.decode();
+                List<ReplayGap> shifted = new ArrayList<>(result.gaps().size());
+                for (ReplayGap gap : result.gaps()) {
+                    shifted.add(new ReplayGap(
+                        (float) (gap.startTimeSeconds() - offsetSeconds),
+                        (float) (gap.endTimeSeconds() - offsetSeconds),
+                        gap.reason(), gap.lastX(), gap.lastY(), gap.lastZ(), gap.nextX(),
+                        gap.nextY(), gap.nextZ()));
+                }
+                decoded = shifted;
+                warnings.addAll(result.warnings());
+            } catch (ReplayFormatException exception) {
+                List<String> gapWarnings = gaps.warnings();
+                if (gapWarnings.isEmpty()) {
+                    warnings.add("timeline gap data is corrupt or incomplete");
+                } else {
+                    warnings.addAll(gapWarnings);
+                }
+            }
+        }
+        try {
+            return new ReplayGapTimeline(decoded, duration, warnings);
+        } catch (ReplayFormatException exception) {
+            return null;
+        }
+    }
+
+    private List<GapHold> buildGapHolds(ReplayGapTimeline timeline) {
+        if (timeline == null || timeline.isEmpty()) {
+            return List.of();
+        }
+        List<GapHold> holds = new ArrayList<>();
+        for (ReplayGap gap : timeline.gaps()) {
+            double start = clampRelative(gap.startTimeSeconds());
+            double end = clampRelative(gap.endTimeSeconds());
+            int index = lastFrameAtOrBefore(start);
+            if (index < 0) {
+                index = 0;
+            }
+            int destination = firstFrameAtOrAfter(end);
+            double holdEnd = destination < relativeTimes.length
+                ? relativeTimes[destination] : duration;
+            if (holdEnd <= relativeTimes[index]) {
+                continue;
+            }
+            holds.add(new GapHold((float) relativeTimes[index], (float) holdEnd, index, gap));
+        }
+        return List.copyOf(holds);
+    }
+
+    private double clampRelative(double seconds) {
+        return Math.max(0.0, Math.min(seconds, duration));
+    }
+
+    private GapHold gapHoldAt(double seconds) {
+        if (gapHolds.isEmpty() || !Double.isFinite(seconds)) {
+            return null;
+        }
+        double target = Math.max(0.0, Math.min(seconds, duration));
+        for (GapHold hold : gapHolds) {
+            if (target > hold.holdStart() && target < hold.holdEnd()) {
+                return hold;
+            }
+        }
+        return null;
+    }
+
+    private double effectiveGapTime(double seconds) {
+        GapHold hold = gapHoldAt(seconds);
+        return hold == null ? seconds : hold.holdStart();
     }
 
     private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
@@ -454,6 +587,20 @@ public final class ReplayTimeline {
                 return new EventDecode(null, List.copyOf(warnings));
             }
         }
+    }
+
+    private int firstFrameAtOrAfter(double target) {
+        int low = 0;
+        int high = relativeTimes.length;
+        while (low < high) {
+            int middle = (low + high) >>> 1;
+            if (relativeTimes[middle] < target) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        return low;
     }
 
     private int lastFrameAtOrBefore(double target) {

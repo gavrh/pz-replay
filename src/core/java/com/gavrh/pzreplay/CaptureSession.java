@@ -14,6 +14,10 @@ public final class CaptureSession {
     public static final int MAX_EVENTS = ReplayEventCodec.MAX_EVENTS;
     static final long MAX_ACTIVE_WALL_DELTA_MILLIS = 250L;
     static final double EVENT_DEDUPE_SECONDS = 0.08;
+    static final float TELEPORT_MIN_DISTANCE = 10.0f;
+    static final float TELEPORT_MIN_SPEED = 40.0f;
+    static final float VEHICLE_TELEPORT_MIN_DISTANCE = 64.0f;
+    static final int MAX_GAP_WARNINGS = 8;
 
     public enum StopReason {
         NONE,
@@ -22,7 +26,8 @@ public final class CaptureSession {
         MAX_FRAMES,
         MAX_DURATION,
         PLAYER_DEAD,
-        PLAYER_UNAVAILABLE
+        PLAYER_UNAVAILABLE,
+        LOADING
     }
 
     public record PlayerSnapshot(
@@ -73,8 +78,12 @@ public final class CaptureSession {
     private final double maxDurationSeconds;
     private final List<ReplaySample> frames;
     private final List<ReplayEvent> events;
+    private final List<GapDraft> gaps;
+    private final List<String> warnings;
 
     private boolean recording;
+    private boolean pausedLastTick;
+    private GapDraft openGap;
     private long lastTickWallMillis;
     private double activeSeconds;
     private double pausedSeconds;
@@ -115,6 +124,8 @@ public final class CaptureSession {
         this.maxDurationSeconds = maxDurationSeconds;
         this.frames = new ArrayList<>(Math.min(maxFrames, 4096));
         this.events = new ArrayList<>();
+        this.gaps = new ArrayList<>();
+        this.warnings = new ArrayList<>();
         this.lastSummary = summary(false);
     }
 
@@ -124,7 +135,11 @@ public final class CaptureSession {
         }
         frames.clear();
         events.clear();
+        gaps.clear();
+        warnings.clear();
         recording = true;
+        pausedLastTick = false;
+        openGap = null;
         lastTickWallMillis = wallMillis;
         activeSeconds = 0.0;
         pausedSeconds = 0.0;
@@ -149,7 +164,12 @@ public final class CaptureSession {
             gapSeconds += (wallDeltaMillis - activeDeltaMillis) / 1000.0;
         }
 
+        boolean wasPaused = pausedLastTick;
+        pausedLastTick = paused;
         if (paused) {
+            if (!wasPaused) {
+                openGap(ReplayGap.Reason.RECORDING_PAUSE);
+            }
             pausedSeconds += activeDeltaMillis / 1000.0;
             return;
         }
@@ -168,6 +188,19 @@ public final class CaptureSession {
             stop(StopReason.MAX_FRAMES);
             return;
         }
+
+        boolean discontinuity = false;
+        if (hasLastPosition && openGap == null) {
+            if (wallDeltaMillis > activeDeltaMillis) {
+                openGap(ReplayGap.Reason.LONG_TICK);
+                discontinuity = true;
+            } else {
+                discontinuity = openTeleportGap(player);
+            }
+        }
+        if (discontinuity) {
+            nextSampleSeconds = activeSeconds;
+        }
         if (activeSeconds < nextSampleSeconds) {
             return;
         }
@@ -177,6 +210,7 @@ public final class CaptureSession {
         }
 
         float speed = speed(player);
+        closeOpenGap((float) activeSeconds, player.x(), player.y(), player.z());
         frames.add(new ReplaySample(
             tick,
             (float) activeSeconds,
@@ -206,6 +240,12 @@ public final class CaptureSession {
         if (!recording) {
             return lastSummary == null ? summary(false) : lastSummary;
         }
+        if (reason == StopReason.PLAYER_DEAD
+            || reason == StopReason.PLAYER_UNAVAILABLE
+            || reason == StopReason.LOADING) {
+            openGap(gapReason(reason));
+        }
+        closeOpenGap((float) activeSeconds, lastX, lastY, lastZ);
         recording = false;
         if (reason == StopReason.REQUESTED && frames.isEmpty()) {
             reason = StopReason.NO_FRAMES;
@@ -233,6 +273,21 @@ public final class CaptureSession {
 
     public List<ReplayEvent> events() {
         return List.copyOf(events);
+    }
+
+    public List<ReplayGap> gaps() {
+        List<ReplayGap> result = new ArrayList<>(gaps.size() + 1);
+        for (GapDraft draft : gaps) {
+            result.add(draft.toGap());
+        }
+        if (openGap != null) {
+            result.add(openGap.toGap());
+        }
+        return List.copyOf(result);
+    }
+
+    public List<String> warnings() {
+        return List.copyOf(warnings);
     }
 
     public float currentTimeSeconds() {
@@ -272,6 +327,111 @@ public final class CaptureSession {
         events.add(new ReplayEvent(events.size() + 1L, (float) activeSeconds, kind, end,
             safeDetail, direction, durationSeconds, safeContext));
         return true;
+    }
+
+    private boolean openTeleportGap(PlayerSnapshot player) {
+        double deltaSeconds = activeSeconds - lastSampleSeconds;
+        if (deltaSeconds <= 0.0) {
+            return false;
+        }
+        double distance = Math.sqrt(
+            square(player.x() - lastX) + square(player.y() - lastY)
+                + square(player.z() - lastZ));
+        if (distance < TELEPORT_MIN_DISTANCE) {
+            return false;
+        }
+        boolean inVehicle = (player.flags() & ReplaySample.FLAG_IN_VEHICLE) != 0;
+        double speed = distance / deltaSeconds;
+        if (inVehicle) {
+            if (distance >= VEHICLE_TELEPORT_MIN_DISTANCE) {
+                openGap(ReplayGap.Reason.TELEPORT);
+                return true;
+            }
+        } else if (speed >= TELEPORT_MIN_SPEED) {
+            openGap(ReplayGap.Reason.TELEPORT);
+            return true;
+        }
+        recordWarning("unclassified discontinuity distance="
+            + formatNumber(distance) + " speed=" + formatNumber(speed)
+            + " vehicle=" + inVehicle);
+        return false;
+    }
+
+    private void openGap(ReplayGap.Reason reason) {
+        if (openGap != null || !hasLastPosition || reason == null) {
+            return;
+        }
+        openGap = new GapDraft((float) lastSampleSeconds, reason, lastX, lastY, lastZ);
+    }
+
+    private void closeOpenGap(float endSeconds, float nextX, float nextY, float nextZ) {
+        if (openGap == null) {
+            return;
+        }
+        openGap.close(endSeconds, nextX, nextY, nextZ);
+        gaps.add(openGap);
+        openGap = null;
+    }
+
+    private void recordWarning(String warning) {
+        if (warnings.size() < MAX_GAP_WARNINGS) {
+            warnings.add(warning);
+        }
+    }
+
+    private static ReplayGap.Reason gapReason(StopReason reason) {
+        if (reason == StopReason.PLAYER_DEAD) {
+            return ReplayGap.Reason.DEATH;
+        }
+        if (reason == StopReason.LOADING) {
+            return ReplayGap.Reason.LOADING;
+        }
+        return ReplayGap.Reason.PLAYER_UNAVAILABLE;
+    }
+
+    private static double square(float value) {
+        return value * value;
+    }
+
+    private static String formatNumber(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    private static final class GapDraft {
+        private final float startTimeSeconds;
+        private final ReplayGap.Reason reason;
+        private final float lastX;
+        private final float lastY;
+        private final float lastZ;
+        private float endTimeSeconds;
+        private float nextX;
+        private float nextY;
+        private float nextZ;
+
+        private GapDraft(float startTimeSeconds, ReplayGap.Reason reason,
+            float lastX, float lastY, float lastZ) {
+            this.startTimeSeconds = startTimeSeconds;
+            this.endTimeSeconds = startTimeSeconds;
+            this.reason = reason;
+            this.lastX = lastX;
+            this.lastY = lastY;
+            this.lastZ = lastZ;
+            this.nextX = lastX;
+            this.nextY = lastY;
+            this.nextZ = lastZ;
+        }
+
+        private void close(float endSeconds, float nextX, float nextY, float nextZ) {
+            this.endTimeSeconds = Math.max(startTimeSeconds, endSeconds);
+            this.nextX = nextX;
+            this.nextY = nextY;
+            this.nextZ = nextZ;
+        }
+
+        private ReplayGap toGap() {
+            return new ReplayGap(startTimeSeconds, endTimeSeconds, reason,
+                lastX, lastY, lastZ, nextX, nextY, nextZ);
+        }
     }
 
     private float speed(PlayerSnapshot player) {

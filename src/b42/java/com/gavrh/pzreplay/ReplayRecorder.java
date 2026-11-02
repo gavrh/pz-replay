@@ -171,6 +171,18 @@ final class ReplayRecorder {
         afterTick(nowMillis);
     }
 
+    void tickPaused() {
+        if (!session.isRecording() || !GameTime.isGamePaused()) {
+            return;
+        }
+        long tickStartNanos = System.nanoTime();
+        long nowMillis = System.currentTimeMillis();
+        tickCounter++;
+        session.tick(tickCounter, nowMillis, null, true);
+        recordCost(tickStartNanos);
+        afterTick(nowMillis);
+    }
+
     boolean stop() {
         return stop(CaptureSession.StopReason.REQUESTED);
     }
@@ -475,6 +487,9 @@ final class ReplayRecorder {
             && lastError == null) {
             lastError = "player unavailable";
         }
+        for (String warning : session.warnings()) {
+            System.out.println("[pz-replay] capture gap warning: " + warning);
+        }
         System.out.println("[pz-replay] capture stopped name=" + captureName
             + " " + summary.format() + overhead());
         persist(summary);
@@ -518,6 +533,23 @@ final class ReplayRecorder {
         }
     }
 
+    private ReplayGaps encodeGaps() {
+        List<ReplayGap> gaps = session.gaps();
+        if (gaps.isEmpty()) {
+            return ReplayGaps.none();
+        }
+        try {
+            ReplayGaps encoded = ReplayGaps.encode(gaps);
+            System.out.println("[pz-replay] capture gaps count=" + gaps.size()
+                + " bytes=" + encoded.data().length());
+            return encoded;
+        } catch (ReplayFormatException exception) {
+            lastError = "timeline gaps could not be written: " + exception.getMessage();
+            System.out.println("[pz-replay] timeline gaps could not be written: " + exception);
+            return ReplayGaps.none();
+        }
+    }
+
     private ReplayVehicles encodeVehicles() {
         ReplayVehicles vehicles = vehicleCapture.encode();
         int segments = vehicleCapture.getSegmentCount();
@@ -541,7 +573,8 @@ final class ReplayRecorder {
             metadata.startTimeMillis() + durationMillis)
             .withAppearanceChanges(encodeAppearanceChanges())
             .withEvents(encodeEvents())
-            .withVehicles(encodeVehicles());
+            .withVehicles(encodeVehicles())
+            .withGaps(encodeGaps());
         String resolvedName = RecordingNames.unique(ReplayStorage.directory(), captureName);
         if (resolvedName.isEmpty()) {
             lastError = "recording name is unavailable";

@@ -27,6 +27,7 @@ public final class GhostMotionController {
     private ReplayAppearance appliedAppearance;
     private ReplayVehicleVisual vehicleVisual;
     private String vehicleFailureKey = "";
+    private boolean holdingGap;
 
     public GhostMotionController(ScriptedGhostPath path) {
         this(path, null);
@@ -61,6 +62,7 @@ public final class GhostMotionController {
             if (!replay.start()) {
                 return;
             }
+            holdingGap = false;
             lastReplayUpdateNanos = System.nanoTime();
             apply(ghost, replay.sample());
             actions.start(ghost);
@@ -135,8 +137,13 @@ public final class GhostMotionController {
         if (!replay.isPlaying()) {
             applyPausedPose(ghost);
         }
+        holdingGap = replay.isGapHold(replay.getCurrentTime());
         camera.resetSmoothing(ghost);
-        actions.seek(ghost, replay.getCurrentTime());
+        if (holdingGap) {
+            actions.reset(ghost);
+        } else {
+            actions.seek(ghost, replay.getCurrentTime());
+        }
         camera.update(ghost, 0.0);
         System.out.println("[pz-replay] replay ghost motion seeked to="
             + String.format("%.2f", replay.getCurrentTime()) + " "
@@ -160,6 +167,7 @@ public final class GhostMotionController {
             return false;
         }
         lastReplayUpdateNanos = System.nanoTime();
+        holdingGap = false;
         apply(ghost, replay.sample());
         if (replay.isPaused()) {
             applyPausedPose(ghost);
@@ -191,6 +199,7 @@ public final class GhostMotionController {
         clearReplayState(ghost);
         appliedEquipment = null;
         appliedAppearance = null;
+        holdingGap = false;
         if (wasActive) {
             System.out.println("[pz-replay] replay ghost motion stopped");
         }
@@ -203,6 +212,7 @@ public final class GhostMotionController {
         vehicleFailureKey = "";
         appliedEquipment = null;
         appliedAppearance = null;
+        holdingGap = false;
         if (actions != null) {
             actions.reset(ghost);
         }
@@ -230,8 +240,20 @@ public final class GhostMotionController {
             }
             if (replay.isPlaying()) {
                 boolean advancing = replay.advance(Math.min(delta, MAX_STEP_SECONDS));
+                boolean gapHold = replay.isGapHold(replay.getCurrentTime());
+                if (gapHold != holdingGap) {
+                    holdingGap = gapHold;
+                    if (gapHold) {
+                        actions.reset(ghost);
+                    } else {
+                        actions.seek(ghost, replay.getCurrentTime());
+                    }
+                    camera.resetSmoothing(ghost);
+                }
                 apply(ghost, replay.sample());
-                actions.advance(ghost, replay.getCurrentTime());
+                if (!holdingGap) {
+                    actions.advance(ghost, replay.getCurrentTime());
+                }
                 if (!advancing) {
                     actions.complete(ghost);
                     applyPausedPose(ghost);
@@ -338,12 +360,14 @@ public final class GhostMotionController {
     }
 
     private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
-        ReplayTimeline.Movement movement = replay.movementAt(sample.time());
+        double time = replay.getCurrentTime();
+        ReplayTimeline.Movement movement = replay.movementAt(time);
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             sample.stance(), sample.moving(), sample.aiming(), sample.equipment(),
-            replay.appearanceAt(sample.time()), movement);
-        ReplayVehicleTimeline.State vehicleState = replay.vehicleAt(sample.time());
-        applyVehicle(ghost, vehicleState, sample.inVehicle() || vehicleState != null);
+            replay.appearanceAt(time), movement);
+        ReplayVehicleTimeline.State vehicleState = replay.vehicleAt(time);
+        boolean gapHold = replay.isGapHold(time);
+        applyVehicle(ghost, vehicleState, !gapHold && (sample.inVehicle() || vehicleState != null));
     }
 
     private void applyVehicle(ReplayGhost ghost, ReplayVehicleTimeline.State state,
