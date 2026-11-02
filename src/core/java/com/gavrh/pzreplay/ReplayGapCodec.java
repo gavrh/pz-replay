@@ -45,10 +45,6 @@ public final class ReplayGapCodec {
                 if (gap == null) {
                     throw new ReplayFormatException("timeline gap " + index + " is missing");
                 }
-                if (!gap.isValidForEncoding()) {
-                    throw new ReplayFormatException("timeline gap " + index
-                        + " has invalid values");
-                }
                 if (gap.startTimeSeconds() < previousEnd - TIME_EPSILON) {
                     throw new ReplayFormatException("timeline gaps overlap at gap " + index);
                 }

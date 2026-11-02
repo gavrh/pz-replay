@@ -56,19 +56,6 @@ public record ReplayGap(
         nextZ = finiteOrZero(nextZ);
     }
 
-    public boolean isValidForEncoding() {
-        return reason != null
-            && Float.isFinite(startTimeSeconds)
-            && Float.isFinite(endTimeSeconds)
-            && endTimeSeconds >= startTimeSeconds
-            && Float.isFinite(lastX)
-            && Float.isFinite(lastY)
-            && Float.isFinite(lastZ)
-            && Float.isFinite(nextX)
-            && Float.isFinite(nextY)
-            && Float.isFinite(nextZ);
-    }
-
     private static float finiteOrZero(float value) {
         return Float.isFinite(value) ? value : 0.0f;
     }

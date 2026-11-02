@@ -295,9 +295,6 @@ public final class ReplayTimeline {
         if (isGapHold(target) || crossesGap) {
             return new Movement(0.0f, 0.0f);
         }
-            || isGapHold(target + window)) {
-            return new Movement(0.0f, 0.0f);
-        }
         Sample before = sampleAt(Math.max(0.0, target - window));
         Sample after = sampleAt(Math.min(duration, target + window));
         float dx = after.x() - before.x();

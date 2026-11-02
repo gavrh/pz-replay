@@ -44,11 +44,6 @@ public final class ReplayGapTimeline {
                         "timeline gap " + index + " is missing and was ignored");
                     continue;
                 }
-                if (gap.reason() == null) {
-                    addWarning(collectedWarnings,
-                        "timeline gap " + index + " has no reason and was ignored");
-                    continue;
-                }
                 if (gap.startTimeSeconds() > duration + MAX_GAP_TAIL_SECONDS) {
                     addWarning(collectedWarnings,
                         "timeline gap outside the replay duration was ignored");
