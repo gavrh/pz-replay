@@ -285,7 +285,16 @@ public final class ReplayTimeline {
         }
         double target = Math.max(0.0, Math.min(seconds, duration));
         double window = Math.min(MOVEMENT_WINDOW_SECONDS, duration);
-        if (isGapHold(target) || isGapHold(target - window)
+        boolean crossesGap = false;
+        for (GapHold hold : gapHolds) {
+            if (target - window < hold.holdEnd() && target + window > hold.holdStart()) {
+                crossesGap = true;
+                break;
+            }
+        }
+        if (isGapHold(target) || crossesGap) {
+            return new Movement(0.0f, 0.0f);
+        }
             || isGapHold(target + window)) {
             return new Movement(0.0f, 0.0f);
         }
