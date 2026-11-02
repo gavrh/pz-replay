@@ -170,6 +170,13 @@ local function stopCapture()
     end
 end
 
+local function stopCaptureOnLoading()
+    if not PZReplay or not PZReplay.stopRecordingOnLoading then
+        return
+    end
+    PZReplay.stopRecordingOnLoading()
+end
+
 local function stopCaptureOnDeath()
     if not PZReplay or not PZReplay.stopRecordingOnDeath then
         return
@@ -371,6 +378,9 @@ Events.OnTick.Add(function()
 end)
 
 Events.OnTickEvenPaused.Add(function()
+    if PZReplay and PZReplay.tickPaused then
+        PZReplay.tickPaused()
+    end
     if PZReplay and PZReplay.isCountingDown and PZReplay.isCountingDown()
         and PZReplay.countdownTick then
         PZReplay.countdownTick()
@@ -388,6 +398,7 @@ Events.OnGameStart.Add(function()
     end
 end)
 
+Events.OnLoad.Add(stopCaptureOnLoading)
 Events.OnPlayerDeath.Add(stopCaptureOnDeath)
 Events.OnPlayerDeath.Add(cleanupPlayback)
 Events.OnSave.Add(cancelCountdown)

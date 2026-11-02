@@ -79,6 +79,17 @@ public final class PZReplayLua {
         return stopped;
     }
 
+    public static boolean stopRecordingOnLoading() {
+        if (COUNTDOWN.isRunning()) {
+            return cancelCountdownInternal("world loading");
+        }
+        boolean stopped = ReplayRecorder.INSTANCE.stop(CaptureSession.StopReason.LOADING);
+        if (stopped) {
+            finishCapture();
+        }
+        return stopped;
+    }
+
     public static boolean cancelCountdown() {
         return cancelCountdownInternal("requested");
     }
@@ -116,6 +127,14 @@ public final class PZReplayLua {
 
     public static void countdownTick() {
         tickCountdown();
+    }
+
+    public static void tickPaused() {
+        if (!GameTime.isGamePaused()) {
+            return;
+        }
+        ReplayRecorder.INSTANCE.tickPaused();
+        syncRecordingState();
     }
 
     public static void recordTick() {
