@@ -20,6 +20,7 @@ public final class ReplayTimeline {
         ReplaySample.Stance stance,
         boolean moving,
         boolean aiming,
+        boolean inVehicle,
         ReplayEquipment equipment
     ) {
         public Sample {
@@ -51,6 +52,7 @@ public final class ReplayTimeline {
     private final ReplayEventTimeline eventTimeline;
     private final List<String> eventWarnings;
     private final ReplayAppearanceTimeline appearanceTimeline;
+    private final ReplayVehicleTimeline vehicleTimeline;
 
     private State state = State.STOPPED;
     private double elapsed;
@@ -65,17 +67,19 @@ public final class ReplayTimeline {
             data == null || data.metadata() == null
                 ? ReplayEquipment.none() : data.metadata().equipment(),
             data == null || data.metadata() == null
-                ? ReplayEvents.none() : data.metadata().events());
+                ? ReplayEvents.none() : data.metadata().events(),
+            data == null || data.metadata() == null
+                ? ReplayVehicles.none() : data.metadata().vehicles());
     }
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
         this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(), ReplayEvents.none());
+            ReplayEquipment.none(), ReplayEvents.none(), ReplayVehicles.none());
     }
 
     private ReplayTimeline(List<ReplaySample> frames, ReplayAppearance appearance,
         ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
-        ReplayEvents events) throws ReplayFormatException {
+        ReplayEvents events, ReplayVehicles vehicles) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
@@ -90,6 +94,7 @@ public final class ReplayTimeline {
             this.eventWarnings = decoded.warnings();
             this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges,
                 duration);
+            this.vehicleTimeline = decodeVehicles(vehicles, duration);
             return;
         }
 
@@ -119,6 +124,7 @@ public final class ReplayTimeline {
         this.eventTimeline = decoded.timeline();
         this.eventWarnings = decoded.warnings();
         this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges, duration);
+        this.vehicleTimeline = decodeVehicles(vehicles, duration);
     }
 
     public boolean start() {
@@ -251,6 +257,7 @@ public final class ReplayTimeline {
             start.stance(),
             start.moving(),
             start.aiming(),
+            start.inVehicle(),
             equipment
         );
     }
@@ -348,7 +355,48 @@ public final class ReplayTimeline {
         return eventWarnings;
     }
 
+    public ReplayVehicleTimeline getVehicleTimeline() {
+        return vehicleTimeline;
+    }
+
+    public ReplayVehicleTimeline.State vehicleAt(double seconds) {
+        return vehicleTimeline == null ? null : vehicleTimeline.vehicleAt(seconds);
+    }
+
+    public int getVehicleCount() {
+        return vehicleTimeline == null ? 0 : vehicleTimeline.getSegmentCount();
+    }
+
+    public List<String> getVehicleWarnings() {
+        return vehicleTimeline == null ? List.of() : vehicleTimeline.warnings();
+    }
+
     private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
+    }
+
+    private static ReplayVehicleTimeline decodeVehicles(ReplayVehicles vehicles,
+        double duration) {
+        List<ReplayVehicleSegment> decoded = List.of();
+        List<String> warnings = new ArrayList<>();
+        if (vehicles != null && vehicles.isPresent()) {
+            try {
+                ReplayVehicleCodec.Result result = vehicles.decode();
+                decoded = result.segments();
+                warnings.addAll(result.warnings());
+            } catch (ReplayFormatException exception) {
+                List<String> vehicleWarnings = vehicles.warnings();
+                if (vehicleWarnings.isEmpty()) {
+                    warnings.add("vehicle data is corrupt or incomplete");
+                } else {
+                    warnings.addAll(vehicleWarnings);
+                }
+            }
+        }
+        try {
+            return new ReplayVehicleTimeline(decoded, duration, warnings);
+        } catch (ReplayFormatException exception) {
+            return null;
+        }
     }
 
     private static ReplayAppearanceTimeline decodeAppearances(ReplayAppearance appearance,
@@ -434,6 +482,7 @@ public final class ReplayTimeline {
             frame.stance(),
             frame.moving(),
             frame.aiming(),
+            frame.inVehicle(),
             equipment
         );
     }

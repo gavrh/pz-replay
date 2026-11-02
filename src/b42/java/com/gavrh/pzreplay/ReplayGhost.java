@@ -3,12 +3,16 @@ package com.gavrh.pzreplay;
 import java.util.UUID;
 import zombie.characters.IsoPlayer;
 import zombie.characters.SurvivorDesc;
+import zombie.characters.action.ActionContext;
+import zombie.characters.action.ActionGroup;
+import zombie.characters.action.ActionState;
 import zombie.iso.IsoCell;
 
 public final class ReplayGhost extends IsoPlayer {
     private final String identity;
     private GhostMotionController motion;
     private boolean scriptedStrafing;
+    private boolean vehiclePose;
 
     public ReplayGhost(IsoCell cell, SurvivorDesc desc, int x, int y, int z) {
         super(cell, desc, x, y, z);
@@ -84,6 +88,34 @@ public final class ReplayGhost extends IsoPlayer {
 
     void setScriptedStrafing(boolean strafing) {
         scriptedStrafing = strafing;
+    }
+
+    void setVehiclePose(boolean inVehicle) {
+        if (vehiclePose == inVehicle) {
+            return;
+        }
+        try {
+            ActionContext context = getActionContext();
+            if (context == null) {
+            if (context == null) {
+                return;
+            }
+                return;
+            }
+            ActionGroup group = ActionGroup.getActionGroup(
+                inVehicle ? "player-vehicle" : "player");
+            if (group == null) {
+                return;
+            }
+            context.setGroup(group);
+            ActionState state = group.findState("idle");
+            if (state != null) {
+                context.setCurrentState(state);
+            }
+            vehiclePose = inVehicle;
+        } catch (RuntimeException exception) {
+            System.out.println("[pz-replay] replay vehicle pose failed: " + exception);
+        }
     }
 
     @Override

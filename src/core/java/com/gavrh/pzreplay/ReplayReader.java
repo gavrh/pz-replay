@@ -23,6 +23,7 @@ public final class ReplayReader {
             + " events=" + eventCount(metadata)
             + (actionEventsDropped ? " action_events=dropped" : "")
             + " appearance_changes=" + appearanceChangeCount(metadata)
+            + " vehicles=" + vehicleSegmentCount(metadata)
             + " duration_ms=" + durationMs
             + " rate_hz=" + metadata.sampleRateHz()
             + " map=" + metadata.mapName()
@@ -48,6 +49,17 @@ public final class ReplayReader {
         }
         try {
             return Integer.toString(metadata.appearanceChanges().decode().changes().size());
+        } catch (ReplayFormatException exception) {
+            return "unknown";
+        }
+    }
+
+    private static String vehicleSegmentCount(ReplayMetadata metadata) {
+        if (!metadata.vehicles().isPresent()) {
+            return "0";
+        }
+        try {
+            return Integer.toString(metadata.vehicles().decode().segments().size());
         } catch (ReplayFormatException exception) {
             return "unknown";
         }
