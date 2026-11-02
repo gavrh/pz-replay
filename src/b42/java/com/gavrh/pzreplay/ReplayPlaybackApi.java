@@ -83,6 +83,9 @@ public final class ReplayPlaybackApi {
         for (String vehicleWarning : loaded.getVehicleWarnings()) {
             addWarning(warnings, vehicleWarning);
         }
+        for (String gapWarning : loaded.getGapWarnings()) {
+            addWarning(warnings, gapWarning);
+        }
         AppearanceSnapshot appearance = null;
         if (data.metadata().appearance().isCurrent()) {
             try {
@@ -136,6 +139,7 @@ public final class ReplayPlaybackApi {
             + " appearance=" + (appearance == null ? "current" : "recorded")
             + " appearance_changes=" + loaded.getAppearanceChangeCount()
             + " vehicles=" + loaded.getVehicleCount()
+            + " gaps=" + loaded.getGapCount()
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
         return true;
