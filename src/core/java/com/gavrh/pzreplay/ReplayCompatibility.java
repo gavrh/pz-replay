@@ -46,6 +46,7 @@ public final class ReplayCompatibility {
         warnings.addAll(metadata.equipment().warnings());
         warnings.addAll(metadata.events().warnings());
         warnings.addAll(metadata.vehicles().warnings());
+        warnings.addAll(metadata.gaps().warnings());
         return new Result(warnings);
     }
 

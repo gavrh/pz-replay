@@ -21,7 +21,8 @@ public record ReplayMetadata(
     ReplayAppearanceChanges appearanceChanges,
     ReplayEquipment equipment,
     ReplayEvents events,
-    ReplayVehicles vehicles
+    ReplayVehicles vehicles,
+    ReplayGaps gaps
 ) {
     public static final int CURRENT_FORMAT_VERSION = 1;
 
@@ -38,6 +39,17 @@ public record ReplayMetadata(
         equipment = equipment == null ? ReplayEquipment.none() : equipment;
         events = events == null ? ReplayEvents.none() : events;
         vehicles = vehicles == null ? ReplayVehicles.none() : vehicles;
+        gaps = gaps == null ? ReplayGaps.none() : gaps;
+    }
+
+    public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
+        String saveName, String gameMode, String mapName, String playerName, float startX,
+        float startY, float startZ, double sampleRateHz, long startTimeMillis,
+        long endTimeMillis, ReplayAppearance appearance, ReplayAppearanceChanges appearanceChanges,
+        ReplayEquipment equipment, ReplayEvents events, ReplayVehicles vehicles) {
+        this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
+            startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
+            appearanceChanges, equipment, events, vehicles, ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -92,28 +104,35 @@ public record ReplayMetadata(
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
             startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles);
+            vehicles, gaps);
     }
 
     public ReplayMetadata withEvents(ReplayEvents events) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
             startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles);
+            vehicles, gaps);
     }
 
     public ReplayMetadata withAppearanceChanges(ReplayAppearanceChanges appearanceChanges) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
             startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles);
+            vehicles, gaps);
     }
 
     public ReplayMetadata withVehicles(ReplayVehicles vehicles) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
             startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles);
+            vehicles, gaps);
+    }
+
+    public ReplayMetadata withGaps(ReplayGaps gaps) {
+        return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
+            gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
+            vehicles, gaps);
     }
 
     public Map<String, String> toValues() {
@@ -152,6 +171,10 @@ public record ReplayMetadata(
             values.put("vehicles_version", Integer.toString(vehicles.version()));
             values.put("vehicles_data", vehicles.data());
         }
+        if (gaps.isPresent()) {
+            values.put("gaps_version", Integer.toString(gaps.version()));
+            values.put("gaps_data", gaps.data());
+        }
         return values;
     }
 
@@ -188,7 +211,8 @@ public record ReplayMetadata(
             ReplayAppearanceChanges.fromValues(values),
             ReplayEquipment.fromValues(values),
             ReplayEvents.fromValues(values),
-            ReplayVehicles.fromValues(values)
+            ReplayVehicles.fromValues(values),
+            ReplayGaps.fromValues(values)
         );
     }
 
