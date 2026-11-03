@@ -20,6 +20,7 @@ public record ReplayMetadata(
     ReplayAppearance appearance,
     ReplayAppearanceChanges appearanceChanges,
     ReplayEquipment equipment,
+    ReplayEquipmentChanges equipmentChanges,
     ReplayEvents events,
     ReplayVehicles vehicles,
     ReplayGaps gaps
@@ -37,6 +38,8 @@ public record ReplayMetadata(
         appearanceChanges =
             appearanceChanges == null ? ReplayAppearanceChanges.none() : appearanceChanges;
         equipment = equipment == null ? ReplayEquipment.none() : equipment;
+        equipmentChanges =
+            equipmentChanges == null ? ReplayEquipmentChanges.none() : equipmentChanges;
         events = events == null ? ReplayEvents.none() : events;
         vehicles = vehicles == null ? ReplayVehicles.none() : vehicles;
         gaps = gaps == null ? ReplayGaps.none() : gaps;
@@ -46,10 +49,21 @@ public record ReplayMetadata(
         String saveName, String gameMode, String mapName, String playerName, float startX,
         float startY, float startZ, double sampleRateHz, long startTimeMillis,
         long endTimeMillis, ReplayAppearance appearance, ReplayAppearanceChanges appearanceChanges,
+        ReplayEquipment equipment, ReplayEvents events, ReplayVehicles vehicles, ReplayGaps gaps) {
+        this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
+            startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
+            appearanceChanges, equipment, ReplayEquipmentChanges.none(), events, vehicles, gaps);
+    }
+
+    public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
+        String saveName, String gameMode, String mapName, String playerName, float startX,
+        float startY, float startZ, double sampleRateHz, long startTimeMillis,
+        long endTimeMillis, ReplayAppearance appearance, ReplayAppearanceChanges appearanceChanges,
         ReplayEquipment equipment, ReplayEvents events, ReplayVehicles vehicles) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
-            appearanceChanges, equipment, events, vehicles, ReplayGaps.none());
+            appearanceChanges, equipment, ReplayEquipmentChanges.none(), events, vehicles,
+            ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -59,7 +73,8 @@ public record ReplayMetadata(
         ReplayEquipment equipment, ReplayEvents events) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
-            appearanceChanges, equipment, events, ReplayVehicles.none());
+            appearanceChanges, equipment, ReplayEquipmentChanges.none(), events,
+            ReplayVehicles.none(), ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -69,7 +84,8 @@ public record ReplayMetadata(
         ReplayEvents events) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
-            ReplayAppearanceChanges.none(), equipment, events);
+            ReplayAppearanceChanges.none(), equipment, ReplayEquipmentChanges.none(), events,
+            ReplayVehicles.none(), ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -78,7 +94,8 @@ public record ReplayMetadata(
         long endTimeMillis, ReplayAppearance appearance, ReplayEquipment equipment) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
-            ReplayAppearanceChanges.none(), equipment, ReplayEvents.none());
+            ReplayAppearanceChanges.none(), equipment, ReplayEquipmentChanges.none(),
+            ReplayEvents.none(), ReplayVehicles.none(), ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -87,7 +104,9 @@ public record ReplayMetadata(
         long endTimeMillis, ReplayAppearance appearance) {
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis, appearance,
-            ReplayAppearanceChanges.none(), ReplayEquipment.none(), ReplayEvents.none());
+            ReplayAppearanceChanges.none(), ReplayEquipment.none(),
+            ReplayEquipmentChanges.none(), ReplayEvents.none(), ReplayVehicles.none(),
+            ReplayGaps.none());
     }
 
     public ReplayMetadata(int formatVersion, String modVersion, String gameVersion,
@@ -97,42 +116,50 @@ public record ReplayMetadata(
         this(formatVersion, modVersion, gameVersion, saveName, gameMode, mapName, playerName,
             startX, startY, startZ, sampleRateHz, startTimeMillis, endTimeMillis,
             ReplayAppearance.none(), ReplayAppearanceChanges.none(), ReplayEquipment.none(),
-            ReplayEvents.none());
+            ReplayEquipmentChanges.none(), ReplayEvents.none(), ReplayVehicles.none(),
+            ReplayGaps.none());
     }
 
     public ReplayMetadata withEnd(long endTimeMillis) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles, gaps);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
     }
 
     public ReplayMetadata withEvents(ReplayEvents events) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles, gaps);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
     }
 
     public ReplayMetadata withAppearanceChanges(ReplayAppearanceChanges appearanceChanges) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles, gaps);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
+    }
+
+    public ReplayMetadata withEquipmentChanges(ReplayEquipmentChanges equipmentChanges) {
+        return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
+            gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
     }
 
     public ReplayMetadata withVehicles(ReplayVehicles vehicles) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles, gaps);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
     }
 
     public ReplayMetadata withGaps(ReplayGaps gaps) {
         return new ReplayMetadata(formatVersion, modVersion, gameVersion, saveName,
             gameMode, mapName, playerName, startX, startY, startZ, sampleRateHz,
-            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment, events,
-            vehicles, gaps);
+            startTimeMillis, endTimeMillis, appearance, appearanceChanges, equipment,
+            equipmentChanges, events, vehicles, gaps);
     }
 
     public Map<String, String> toValues() {
@@ -162,6 +189,11 @@ public record ReplayMetadata(
         if (equipment.isPresent()) {
             values.put("equipment_version", Integer.toString(equipment.version()));
             values.put("equipment_data", equipment.data());
+        }
+        if (equipmentChanges.isPresent()) {
+            values.put("equipment_changes_version",
+                Integer.toString(equipmentChanges.version()));
+            values.put("equipment_changes_data", equipmentChanges.data());
         }
         if (events.isPresent()) {
             values.put("events_version", Integer.toString(events.version()));
@@ -210,6 +242,7 @@ public record ReplayMetadata(
             ReplayAppearance.fromValues(values),
             ReplayAppearanceChanges.fromValues(values),
             ReplayEquipment.fromValues(values),
+            ReplayEquipmentChanges.fromValues(values),
             ReplayEvents.fromValues(values),
             ReplayVehicles.fromValues(values),
             ReplayGaps.fromValues(values)
