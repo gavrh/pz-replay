@@ -23,6 +23,7 @@ public final class ReplayReader {
             + " events=" + eventCount(metadata)
             + (actionEventsDropped ? " action_events=dropped" : "")
             + " appearance_changes=" + appearanceChangeCount(metadata)
+            + " equipment_changes=" + equipmentChangeCount(metadata)
             + " vehicles=" + vehicleSegmentCount(metadata)
             + " gaps=" + gapCount(metadata)
             + " duration_ms=" + durationMs
@@ -50,6 +51,17 @@ public final class ReplayReader {
         }
         try {
             return Integer.toString(metadata.appearanceChanges().decode().changes().size());
+        } catch (ReplayFormatException exception) {
+            return "unknown";
+        }
+    }
+
+    private static String equipmentChangeCount(ReplayMetadata metadata) {
+        if (!metadata.equipmentChanges().isPresent()) {
+            return "0";
+        }
+        try {
+            return Integer.toString(metadata.equipmentChanges().decode().changes().size());
         } catch (ReplayFormatException exception) {
             return "unknown";
         }

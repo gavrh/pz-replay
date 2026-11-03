@@ -49,6 +49,7 @@ public final class ReplayTimeline {
     private final double[] relativeTimes;
     private final double duration;
     private final ReplayEquipment equipment;
+    private final ReplayEquipmentTimeline equipmentTimeline;
     private final ReplayEventTimeline eventTimeline;
     private final List<String> eventWarnings;
     private final ReplayAppearanceTimeline appearanceTimeline;
@@ -72,6 +73,8 @@ public final class ReplayTimeline {
             data == null || data.metadata() == null
                 ? ReplayEquipment.none() : data.metadata().equipment(),
             data == null || data.metadata() == null
+                ? ReplayEquipmentChanges.none() : data.metadata().equipmentChanges(),
+            data == null || data.metadata() == null
                 ? ReplayEvents.none() : data.metadata().events(),
             data == null || data.metadata() == null
                 ? ReplayVehicles.none() : data.metadata().vehicles(),
@@ -81,14 +84,14 @@ public final class ReplayTimeline {
 
     public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
         this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(), ReplayEvents.none(), ReplayVehicles.none(),
-            ReplayGaps.none());
+            ReplayEquipment.none(), ReplayEquipmentChanges.none(), ReplayEvents.none(),
+            ReplayVehicles.none(), ReplayGaps.none());
     }
 
     private ReplayTimeline(List<ReplaySample> frames, ReplayAppearance appearance,
         ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
-        ReplayEvents events, ReplayVehicles vehicles, ReplayGaps gaps)
-        throws ReplayFormatException {
+        ReplayEquipmentChanges equipmentChanges, ReplayEvents events, ReplayVehicles vehicles,
+        ReplayGaps gaps) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
@@ -103,6 +106,7 @@ public final class ReplayTimeline {
             this.eventWarnings = decoded.warnings();
             this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges,
                 duration);
+            this.equipmentTimeline = decodeEquipment(equipment, equipmentChanges, duration, 0.0);
             this.vehicleTimeline = decodeVehicles(vehicles, duration);
             this.gapTimeline = decodeGaps(gaps, duration, 0.0);
             this.gapHolds = List.of();
@@ -135,6 +139,8 @@ public final class ReplayTimeline {
         this.eventTimeline = decoded.timeline();
         this.eventWarnings = decoded.warnings();
         this.appearanceTimeline = decodeAppearances(appearance, appearanceChanges, duration);
+        this.equipmentTimeline = decodeEquipment(equipment, equipmentChanges, duration,
+            firstSeconds);
         this.vehicleTimeline = decodeVehicles(vehicles, duration);
         this.gapTimeline = decodeGaps(gaps, duration, firstSeconds);
         this.gapHolds = buildGapHolds(gapTimeline);
@@ -247,21 +253,21 @@ public final class ReplayTimeline {
         double target = Math.max(0.0, Math.min(seconds, duration));
         int index = lastFrameAtOrBefore(target);
         if (index < 0) {
-            return sampleOf(0);
+            return sampleOf(0, target);
         }
         if (index >= frames.size() - 1 || target == relativeTimes[index]) {
-            return sampleOf(index);
+            return sampleOf(index, target);
         }
         GapHold hold = gapHoldAt(target);
         if (hold != null) {
-            return sampleOf(hold.frameIndex());
+            return sampleOf(hold.frameIndex(), target);
         }
 
         ReplaySample start = frames.get(index);
         ReplaySample end = frames.get(index + 1);
         double span = relativeTimes[index + 1] - relativeTimes[index];
         if (span <= 0.0) {
-            return sampleOf(index);
+            return sampleOf(index, target);
         }
         double alpha = (target - relativeTimes[index]) / span;
         return new Sample(
@@ -275,7 +281,7 @@ public final class ReplayTimeline {
             start.moving(),
             start.aiming(),
             start.inVehicle(),
-            equipment
+            equipmentAt(target)
         );
     }
 
@@ -344,6 +350,26 @@ public final class ReplayTimeline {
 
     public ReplayEquipment getEquipment() {
         return equipment;
+    }
+
+    public ReplayEquipmentTimeline getEquipmentTimeline() {
+        return equipmentTimeline;
+    }
+
+    public ReplayEquipment equipmentAt(double seconds) {
+        if (isGapHold(seconds)) {
+            return ReplayEquipment.none();
+        }
+        return equipmentTimeline == null
+            ? equipment : equipmentTimeline.equipmentAt(seconds);
+    }
+
+    public int getEquipmentChangeCount() {
+        return equipmentTimeline == null ? 0 : equipmentTimeline.getChangeCount();
+    }
+
+    public List<String> getEquipmentWarnings() {
+        return equipmentTimeline == null ? List.of() : equipmentTimeline.warnings();
     }
 
     public ReplayAppearanceTimeline getAppearanceTimeline() {
@@ -562,6 +588,38 @@ public final class ReplayTimeline {
         }
     }
 
+    private static ReplayEquipmentTimeline decodeEquipment(ReplayEquipment equipment,
+        ReplayEquipmentChanges changes, double duration, double offsetSeconds) {
+        List<ReplayEquipmentChange> decoded = List.of();
+        List<String> warnings = new ArrayList<>();
+        if (changes != null && changes.isPresent()) {
+            try {
+                ReplayEquipmentChangeCodec.Result result = changes.decode();
+                decoded = result.changes();
+                warnings.addAll(result.warnings());
+            } catch (ReplayFormatException exception) {
+                List<String> changeWarnings = changes.warnings();
+                if (changeWarnings.isEmpty()) {
+                    warnings.add("equipment change data is corrupt or incomplete");
+                } else {
+                    warnings.addAll(changeWarnings);
+                }
+            }
+        }
+        try {
+            return new ReplayEquipmentTimeline(equipment, decoded, duration, offsetSeconds,
+                warnings);
+        } catch (ReplayFormatException exception) {
+            warnings.add("equipment change data is corrupt or incomplete");
+            try {
+                return new ReplayEquipmentTimeline(equipment, List.of(), duration, offsetSeconds,
+                    warnings);
+            } catch (ReplayFormatException ignored) {
+                return null;
+            }
+        }
+    }
+
     private static EventDecode decodeEvents(ReplayEvents events, double duration) {
         List<ReplayEvent> decoded = List.of();
         List<String> warnings = new ArrayList<>();
@@ -617,7 +675,7 @@ public final class ReplayTimeline {
         return low - 1;
     }
 
-    private Sample sampleOf(int index) {
+    private Sample sampleOf(int index, double equipmentTime) {
         ReplaySample frame = frames.get(index);
         return new Sample(
             relativeTimes[index],
@@ -630,7 +688,7 @@ public final class ReplayTimeline {
             frame.moving(),
             frame.aiming(),
             frame.inVehicle(),
-            equipment
+            equipmentAt(equipmentTime)
         );
     }
 

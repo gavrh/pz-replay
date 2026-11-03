@@ -80,6 +80,9 @@ public final class ReplayPlaybackApi {
         for (String appearanceWarning : loaded.getAppearanceWarnings()) {
             addWarning(warnings, appearanceWarning);
         }
+        for (String equipmentWarning : loaded.getEquipmentWarnings()) {
+            addWarning(warnings, equipmentWarning);
+        }
         for (String vehicleWarning : loaded.getVehicleWarnings()) {
             addWarning(warnings, vehicleWarning);
         }
@@ -98,10 +101,11 @@ public final class ReplayPlaybackApi {
             + ReplayReader.summary(data));
 
         GhostMotionController loadedController = new GhostMotionController(loaded,
-            warning -> addWarning(warnings, warning));
+            warning -> addPlayingWarning(warnings, warning));
         ReplayTimeline.Sample first = loaded.sampleAt(0.0);
         ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
-            first.z(), first.facing(), appearance, warning -> addWarning(warnings, warning));
+            first.z(), first.facing(), appearance,
+            warning -> addPlayingWarning(warnings, warning));
         if (ghost == null) {
             fail(requested, "ghost spawn failed");
             return false;
@@ -138,6 +142,7 @@ public final class ReplayPlaybackApi {
             + " events=" + loaded.getEventCount()
             + " appearance=" + (appearance == null ? "current" : "recorded")
             + " appearance_changes=" + loaded.getAppearanceChangeCount()
+            + " equipment_changes=" + loaded.getEquipmentChangeCount()
             + " vehicles=" + loaded.getVehicleCount()
             + " gaps=" + loaded.getGapCount()
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
@@ -410,6 +415,11 @@ public final class ReplayPlaybackApi {
         if (warning != null && !warning.isBlank() && !warnings.contains(warning)) {
             warnings.add(warning);
         }
+    }
+
+    private static void addPlayingWarning(List<String> warnings, String warning) {
+        addWarning(warnings, warning);
+        PZReplayLua.state().setCompatibilityWarnings(warnings);
     }
 
     private static ReplayCompatibility.Context context() {
