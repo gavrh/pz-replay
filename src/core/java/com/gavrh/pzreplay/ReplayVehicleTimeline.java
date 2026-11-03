@@ -8,7 +8,7 @@ import java.util.Set;
 
 public final class ReplayVehicleTimeline {
     public record State(
-        ReplayVehicleSegment segment,
+        VehicleSegment segment,
         double time,
         float x,
         float y,
@@ -24,16 +24,16 @@ public final class ReplayVehicleTimeline {
     private static final double MAX_SEGMENT_TAIL_SECONDS = 0.25;
     private static final int MAX_WARNINGS = 8;
 
-    private final List<ReplayVehicleSegment> segments;
+    private final List<VehicleSegment> segments;
     private final List<String> warnings;
     private final double duration;
 
-    public ReplayVehicleTimeline(List<ReplayVehicleSegment> segments, double duration)
+    public ReplayVehicleTimeline(List<VehicleSegment> segments, double duration)
         throws ReplayFormatException {
         this(segments, duration, List.of());
     }
 
-    public ReplayVehicleTimeline(List<ReplayVehicleSegment> segments, double duration,
+    public ReplayVehicleTimeline(List<VehicleSegment> segments, double duration,
         List<String> extraWarnings) throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {
             throw new ReplayFormatException("replay duration is invalid");
@@ -47,14 +47,14 @@ public final class ReplayVehicleTimeline {
                 }
             }
         }
-        List<ReplayVehicleSegment> valid = new ArrayList<>();
+        List<VehicleSegment> valid = new ArrayList<>();
         if (segments != null) {
-            if (segments.size() > ReplayVehicleCodec.MAX_SEGMENTS) {
+            if (segments.size() > VehicleCodec.MAX_SEGMENTS) {
                 throw new ReplayFormatException(
                     "too many vehicle segments: " + segments.size());
             }
             for (int index = 0; index < segments.size(); index++) {
-                ReplayVehicleSegment segment = segments.get(index);
+                VehicleSegment segment = segments.get(index);
                 if (segment == null) {
                     addWarning(collectedWarnings,
                         "vehicle segment " + index + " is missing and was ignored");
@@ -84,18 +84,18 @@ public final class ReplayVehicleTimeline {
                         "vehicle segment " + index + " has invalid timing and was ignored");
                     continue;
                 }
-                ReplayVehicleSegment clamped = new ReplayVehicleSegment((float) start,
+                VehicleSegment clamped = new VehicleSegment((float) start,
                     (float) end, segment.scriptName(), segment.modelFile(),
                     segment.skinIndex(), segment.seat(), segment.samples());
                 valid.add(clamped);
             }
         }
-        valid.sort(Comparator.comparingDouble(ReplayVehicleSegment::startTimeSeconds));
+        valid.sort(Comparator.comparingDouble(VehicleSegment::startTimeSeconds));
         this.segments = List.copyOf(valid);
         this.warnings = List.copyOf(collectedWarnings);
     }
 
-    public List<ReplayVehicleSegment> segments() {
+    public List<VehicleSegment> segments() {
         return segments;
     }
 
@@ -109,7 +109,7 @@ public final class ReplayVehicleTimeline {
 
     public int getSampleCount() {
         int total = 0;
-        for (ReplayVehicleSegment segment : segments) {
+        for (VehicleSegment segment : segments) {
             total += segment.samples().size();
         }
         return total;
@@ -124,20 +124,20 @@ public final class ReplayVehicleTimeline {
         if (index < 0) {
             return null;
         }
-        ReplayVehicleSegment segment = segments.get(index);
+        VehicleSegment segment = segments.get(index);
         if (target > segment.endTimeSeconds() + TIME_EPSILON) {
             return null;
         }
         return interpolate(segment, Math.min(target, segment.endTimeSeconds()));
     }
 
-    public ReplayVehicleSegment segmentAt(double time) {
+    public VehicleSegment segmentAt(double time) {
         State state = vehicleAt(time);
         return state == null ? null : state.segment();
     }
 
-    private State interpolate(ReplayVehicleSegment segment, double target) {
-        List<ReplayVehicleSample> samples = segment.samples();
+    private State interpolate(VehicleSegment segment, double target) {
+        List<VehicleSample> samples = segment.samples();
         if (samples.isEmpty()) {
             return null;
         }
@@ -145,11 +145,11 @@ public final class ReplayVehicleTimeline {
         if (index < 0) {
             index = 0;
         }
-        ReplayVehicleSample start = samples.get(index);
+        VehicleSample start = samples.get(index);
         if (index >= samples.size() - 1 || target <= start.timeSeconds()) {
             return stateOf(segment, target, start);
         }
-        ReplayVehicleSample end = samples.get(index + 1);
+        VehicleSample end = samples.get(index + 1);
         double span = end.timeSeconds() - start.timeSeconds();
         if (span <= 0.0) {
             return stateOf(segment, target, start);
@@ -164,15 +164,15 @@ public final class ReplayVehicleTimeline {
             rotation[0], rotation[1], rotation[2], rotation[3]);
     }
 
-    private static State stateOf(ReplayVehicleSegment segment, double target,
-        ReplayVehicleSample sample) {
+    private static State stateOf(VehicleSegment segment, double target,
+        VehicleSample sample) {
         return new State(segment, target, sample.x(), sample.y(), sample.z(),
             sample.rotationX(), sample.rotationY(), sample.rotationZ(),
             sample.rotationW());
     }
 
-    private static float[] interpolateRotation(ReplayVehicleSample start,
-        ReplayVehicleSample end, float alpha) {
+    private static float[] interpolateRotation(VehicleSample start,
+        VehicleSample end, float alpha) {
         float ax = start.rotationX();
         float ay = start.rotationY();
         float az = start.rotationZ();
@@ -233,7 +233,7 @@ public final class ReplayVehicleTimeline {
         return low - 1;
     }
 
-    private static int lastSampleAtOrBefore(List<ReplayVehicleSample> samples, double target) {
+    private static int lastSampleAtOrBefore(List<VehicleSample> samples, double target) {
         int low = 0;
         int high = samples.size();
         while (low < high) {
@@ -253,10 +253,10 @@ public final class ReplayVehicleTimeline {
         }
     }
 
-    private static boolean samplesAreOrdered(List<ReplayVehicleSample> samples,
+    private static boolean samplesAreOrdered(List<VehicleSample> samples,
         float start, float end) {
         float previous = Float.NEGATIVE_INFINITY;
-        for (ReplayVehicleSample sample : samples) {
+        for (VehicleSample sample : samples) {
             if (sample == null
                 || !Float.isFinite(sample.timeSeconds())
                 || sample.timeSeconds() < start - TIME_EPSILON

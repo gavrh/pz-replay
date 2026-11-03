@@ -11,23 +11,23 @@ public final class ReplayAppearanceTimeline {
     private static final double MAX_CHANGE_TAIL_SECONDS = 0.25;
     private static final int MAX_WARNINGS = 8;
 
-    private final ReplayAppearance initial;
-    private final List<ReplayAppearanceChange> changes;
+    private final Appearance initial;
+    private final List<AppearanceChange> changes;
     private final List<String> warnings;
 
-    public ReplayAppearanceTimeline(ReplayAppearance initial,
-        List<ReplayAppearanceChange> changes, double duration) throws ReplayFormatException {
+    public ReplayAppearanceTimeline(Appearance initial,
+        List<AppearanceChange> changes, double duration) throws ReplayFormatException {
         this(initial, changes, duration, List.of());
     }
 
-    public ReplayAppearanceTimeline(ReplayAppearance initial,
-        List<ReplayAppearanceChange> changes, double duration, List<String> extraWarnings)
+    public ReplayAppearanceTimeline(Appearance initial,
+        List<AppearanceChange> changes, double duration, List<String> extraWarnings)
         throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {
             throw new ReplayFormatException("replay duration is invalid");
         }
-        this.initial = initial == null ? ReplayAppearance.none() : initial;
-        List<ReplayAppearanceChange> valid = new ArrayList<>();
+        this.initial = initial == null ? Appearance.none() : initial;
+        List<AppearanceChange> valid = new ArrayList<>();
         Set<String> collectedWarnings = new LinkedHashSet<>();
         if (extraWarnings != null) {
             for (String warning : extraWarnings) {
@@ -37,12 +37,12 @@ public final class ReplayAppearanceTimeline {
             }
         }
         if (changes != null) {
-            if (changes.size() > ReplayAppearanceChangeCodec.MAX_CHANGES) {
+            if (changes.size() > AppearanceChangeCodec.MAX_CHANGES) {
                 throw new ReplayFormatException(
                     "too many appearance changes: " + changes.size());
             }
             for (int index = 0; index < changes.size(); index++) {
-                ReplayAppearanceChange change = changes.get(index);
+                AppearanceChange change = changes.get(index);
                 if (change == null) {
                     addWarning(collectedWarnings,
                         "appearance change " + index + " is missing and was ignored");
@@ -59,24 +59,24 @@ public final class ReplayAppearanceTimeline {
                     continue;
                 }
                 if (change.timeSeconds() > duration) {
-                    valid.add(new ReplayAppearanceChange(change.sequence(), (float) duration,
+                    valid.add(new AppearanceChange(change.sequence(), (float) duration,
                         change.appearance()));
                     continue;
                 }
                 valid.add(change);
             }
         }
-        valid.sort(Comparator.comparingDouble(ReplayAppearanceChange::timeSeconds)
-            .thenComparingLong(ReplayAppearanceChange::sequence));
+        valid.sort(Comparator.comparingDouble(AppearanceChange::timeSeconds)
+            .thenComparingLong(AppearanceChange::sequence));
         this.changes = List.copyOf(valid);
         this.warnings = List.copyOf(collectedWarnings);
     }
 
-    public ReplayAppearance initialAppearance() {
+    public Appearance initialAppearance() {
         return initial;
     }
 
-    public List<ReplayAppearanceChange> changes() {
+    public List<AppearanceChange> changes() {
         return changes;
     }
 
@@ -88,13 +88,13 @@ public final class ReplayAppearanceTimeline {
         return changes.size();
     }
 
-    public ReplayAppearance appearanceAt(double time) {
+    public Appearance appearanceAt(double time) {
         if (changes.isEmpty() || !Double.isFinite(time)) {
             return initial;
         }
         double target = Math.max(0.0, time);
-        ReplayAppearance result = initial;
-        for (ReplayAppearanceChange change : changes) {
+        Appearance result = initial;
+        for (AppearanceChange change : changes) {
             if (change.timeSeconds() > target + TIME_EPSILON) {
                 break;
             }

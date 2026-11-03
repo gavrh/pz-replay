@@ -32,8 +32,8 @@ public final class VehicleCapture {
         }
     }
 
-    private final List<ReplayVehicleSegment> segments = new ArrayList<>();
-    private final List<ReplayVehicleSample> currentSamples = new ArrayList<>();
+    private final List<VehicleSegment> segments = new ArrayList<>();
+    private final List<VehicleSample> currentSamples = new ArrayList<>();
     private VehicleSnapshot currentSnapshot;
     private VehicleSnapshot lastSample;
     private float currentStart;
@@ -73,7 +73,7 @@ public final class VehicleCapture {
             }
             return exit(timeSeconds);
         }
-        if (totalSamples >= ReplayVehicleCodec.MAX_SAMPLES) {
+        if (totalSamples >= VehicleCodec.MAX_SAMPLES) {
             dropped = true;
             warning = "vehicle data sample limit reached";
             return exit(timeSeconds);
@@ -85,7 +85,7 @@ public final class VehicleCapture {
             currentSnapshot = snapshot;
         }
         float minimumTime = lastSampleTime + (float) SAMPLE_INTERVAL_SECONDS;
-        ReplayVehicleSample sample = new ReplayVehicleSample(timeSeconds, snapshot.x(),
+        VehicleSample sample = new VehicleSample(timeSeconds, snapshot.x(),
             snapshot.y(), snapshot.z(), snapshot.rotationX(), snapshot.rotationY(),
             snapshot.rotationZ(), snapshot.rotationW());
         if (lastSample == null || timeSeconds >= minimumTime) {
@@ -106,7 +106,7 @@ public final class VehicleCapture {
             return false;
         }
         float safeTime = Math.max(timeSeconds, currentStart);
-        segments.add(new ReplayVehicleSegment(currentStart, safeTime,
+        segments.add(new VehicleSegment(currentStart, safeTime,
             currentSnapshot.scriptName(), currentSnapshot.modelFile(),
             currentSnapshot.skinIndex(), currentSnapshot.seat(), currentSamples));
         currentSamples.clear();
@@ -144,23 +144,23 @@ public final class VehicleCapture {
         return totalSamples;
     }
 
-    public ReplayVehicles encode() {
+    public Vehicles encode() {
         int activeSamples = currentSnapshot == null ? 0 : currentSamples.size();
         if (segments.isEmpty() && activeSamples == 0) {
-            return ReplayVehicles.none();
+            return Vehicles.none();
         }
-        List<ReplayVehicleSegment> encoded = new ArrayList<>(segments.size() + 1);
+        List<VehicleSegment> encoded = new ArrayList<>(segments.size() + 1);
         encoded.addAll(segments);
         if (currentSnapshot != null) {
-            encoded.add(new ReplayVehicleSegment(currentStart, lastSampleTime,
+            encoded.add(new VehicleSegment(currentStart, lastSampleTime,
                 currentSnapshot.scriptName(), currentSnapshot.modelFile(),
                 currentSnapshot.skinIndex(), currentSnapshot.seat(), currentSamples));
         }
         try {
-            return ReplayVehicles.encode(encoded);
+            return Vehicles.encode(encoded);
         } catch (ReplayFormatException exception) {
             warning = "vehicle data could not be written: " + exception.getMessage();
-            return ReplayVehicles.none();
+            return Vehicles.none();
         }
     }
 

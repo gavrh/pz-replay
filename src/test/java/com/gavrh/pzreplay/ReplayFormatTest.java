@@ -42,9 +42,9 @@ class ReplayFormatTest {
             30.0,
             1_700_000_000_000L,
             1_700_000_060_000L,
-            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+            new Appearance(Appearance.CURRENT_VERSION,
                 Base64.getEncoder().encodeToString("snapshot".getBytes(StandardCharsets.UTF_8))),
-            new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+            new Equipment(Equipment.CURRENT_VERSION,
                 Base64.getEncoder().encodeToString("items".getBytes(StandardCharsets.UTF_8)))
         );
     }
@@ -158,9 +158,9 @@ class ReplayFormatTest {
         ReplayData data = BinaryReplayCodec.read(file);
 
         assertEquals("", data.metadata().gameMode());
-        assertEquals(ReplayAppearance.none(), data.metadata().appearance());
-        assertEquals(ReplayAppearanceChanges.none(), data.metadata().appearanceChanges());
-        assertEquals(ReplayEquipment.none(), data.metadata().equipment());
+        assertEquals(Appearance.none(), data.metadata().appearance());
+        assertEquals(AppearanceChanges.none(), data.metadata().appearanceChanges());
+        assertEquals(Equipment.none(), data.metadata().equipment());
         assertEquals(metadata().saveName(), data.metadata().saveName());
         assertEquals(metadata().mapName(), data.metadata().mapName());
         assertEquals(metadata().playerName(), data.metadata().playerName());
@@ -194,7 +194,7 @@ class ReplayFormatTest {
             30.0,
             1L,
             2L,
-            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "A".repeat(2 * 1024 * 1024))
+            new Appearance(Appearance.CURRENT_VERSION, "A".repeat(2 * 1024 * 1024))
         );
 
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
@@ -211,7 +211,7 @@ class ReplayFormatTest {
         ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
 
         assertEquals(metadata().appearance(), metadataOnly.appearance());
-        assertEquals(ReplayAppearance.CURRENT_VERSION, metadataOnly.appearance().version());
+        assertEquals(Appearance.CURRENT_VERSION, metadataOnly.appearance().version());
         assertEquals("snapshot",
             new String(metadataOnly.appearance().decode(), StandardCharsets.UTF_8));
     }
@@ -224,16 +224,16 @@ class ReplayFormatTest {
         ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
 
         assertEquals(metadata().equipment(), metadataOnly.equipment());
-        assertEquals(ReplayEquipment.CURRENT_VERSION, metadataOnly.equipment().version());
+        assertEquals(Equipment.CURRENT_VERSION, metadataOnly.equipment().version());
         assertEquals("items",
             new String(metadataOnly.equipment().decode(), StandardCharsets.UTF_8));
     }
 
     @Test
     void binaryRoundTripsAppearanceChangeMetadataOnly() throws Exception {
-        ReplayAppearanceChanges changes = ReplayAppearanceChanges.encode(List.of(
-            new ReplayAppearanceChange(1L, 1.25f, metadata().appearance()),
-            new ReplayAppearanceChange(2L, 4.5f, metadata().appearance())));
+        AppearanceChanges changes = AppearanceChanges.encode(List.of(
+            new AppearanceChange(1L, 1.25f, metadata().appearance()),
+            new AppearanceChange(2L, 4.5f, metadata().appearance())));
         ReplayMetadata withChanges = metadata().withAppearanceChanges(changes);
         Path file = tempDir.resolve("appearance-changes.pzrp.gz");
         BinaryReplayCodec.write(file, withChanges, frames(), true);
@@ -251,7 +251,7 @@ class ReplayFormatTest {
     void corruptAppearanceChangesDoNotBlockReadingTheReplay() throws Exception {
         Map<String, String> values = metadata().toValues();
         values.put("appearance_changes_version",
-            Integer.toString(ReplayAppearanceChanges.CURRENT_VERSION));
+            Integer.toString(AppearanceChanges.CURRENT_VERSION));
         values.put("appearance_changes_data", "not base64!");
         Path file = tempDir.resolve("corrupt-appearance-changes.pzrp");
         Files.write(file, rawPayload(values));

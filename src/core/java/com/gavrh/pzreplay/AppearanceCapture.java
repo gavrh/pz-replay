@@ -5,7 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class AppearanceCapture {
-    private final List<ReplayAppearanceChange> changes = new ArrayList<>();
+    private final List<AppearanceChange> changes = new ArrayList<>();
     private byte[] baseline;
     private long nextSequence = 1L;
     private int totalSnapshotBytes;
@@ -23,7 +23,7 @@ public final class AppearanceCapture {
         baseline = payload == null ? null : payload.clone();
     }
 
-    public boolean accept(float timeSeconds, byte[] payload, ReplayAppearance appearance) {
+    public boolean accept(float timeSeconds, byte[] payload, Appearance appearance) {
         if (payload == null || payload.length == 0 || appearance == null
             || !appearance.isCurrent()) {
             return false;
@@ -35,19 +35,19 @@ public final class AppearanceCapture {
         if (dropped) {
             return false;
         }
-        if (payload.length > ReplayAppearanceChangeCodec.MAX_SNAPSHOT_BYTES
-            || changes.size() >= ReplayAppearanceChangeCodec.MAX_CHANGES
+        if (payload.length > AppearanceChangeCodec.MAX_SNAPSHOT_BYTES
+            || changes.size() >= AppearanceChangeCodec.MAX_CHANGES
             || totalSnapshotBytes + payload.length
-                > ReplayAppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES) {
+                > AppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES) {
             dropped = true;
             return false;
         }
-        changes.add(new ReplayAppearanceChange(nextSequence++, timeSeconds, appearance));
+        changes.add(new AppearanceChange(nextSequence++, timeSeconds, appearance));
         totalSnapshotBytes += payload.length;
         return true;
     }
 
-    public List<ReplayAppearanceChange> changes() {
+    public List<AppearanceChange> changes() {
         return List.copyOf(changes);
     }
 

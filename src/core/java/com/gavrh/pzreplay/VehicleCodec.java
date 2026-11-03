@@ -12,7 +12,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayVehicleCodec {
+public final class VehicleCodec {
     public static final int CURRENT_VERSION = 1;
     public static final int MAX_SEGMENTS = 64;
     public static final int MAX_SAMPLES = 54_000;
@@ -20,17 +20,17 @@ public final class ReplayVehicleCodec {
     private static final int MAX_WARNINGS = 8;
     private static final float TIME_EPSILON = 0.0001f;
 
-    public record Result(List<ReplayVehicleSegment> segments, List<String> warnings) {
+    public record Result(List<VehicleSegment> segments, List<String> warnings) {
         public Result {
             segments = List.copyOf(segments);
             warnings = List.copyOf(warnings);
         }
     }
 
-    private ReplayVehicleCodec() {
+    private VehicleCodec() {
     }
 
-    public static byte[] encode(List<ReplayVehicleSegment> segments)
+    public static byte[] encode(List<VehicleSegment> segments)
         throws ReplayFormatException {
         if (segments == null) {
             throw new ReplayFormatException("vehicle data is missing");
@@ -44,7 +44,7 @@ public final class ReplayVehicleCodec {
             out.writeShort(CURRENT_VERSION);
             out.writeInt(segments.size());
             for (int index = 0; index < segments.size(); index++) {
-                ReplayVehicleSegment segment = segments.get(index);
+                VehicleSegment segment = segments.get(index);
                 if (segment == null) {
                     throw new ReplayFormatException("vehicle segment " + index + " is missing");
                 }
@@ -64,11 +64,11 @@ public final class ReplayVehicleCodec {
                 out.writeFloat(segment.endTimeSeconds());
                 out.writeByte(segment.seat());
                 out.writeInt(segment.skinIndex());
-                writeString(out, segment.scriptName(), ReplayVehicleSegment.MAX_SCRIPT_LENGTH);
-                writeString(out, segment.modelFile(), ReplayVehicleSegment.MAX_MODEL_LENGTH);
+                writeString(out, segment.scriptName(), VehicleSegment.MAX_SCRIPT_LENGTH);
+                writeString(out, segment.modelFile(), VehicleSegment.MAX_MODEL_LENGTH);
                 out.writeInt(segment.samples().size());
                 for (int sampleIndex = 0; sampleIndex < segment.samples().size(); sampleIndex++) {
-                    ReplayVehicleSample sample = segment.samples().get(sampleIndex);
+                    VehicleSample sample = segment.samples().get(sampleIndex);
                     if (sample == null) {
                         throw new ReplayFormatException("vehicle sample " + sampleIndex
                             + " is missing");
@@ -88,8 +88,8 @@ public final class ReplayVehicleCodec {
             throw new ReplayFormatException("vehicle data could not be encoded", exception);
         }
         int maximumBytes = 6 + MAX_SEGMENTS
-            * (8 + 1 + 4 + 2 + ReplayVehicleSegment.MAX_SCRIPT_LENGTH
-                + 2 + ReplayVehicleSegment.MAX_MODEL_LENGTH + 4)
+            * (8 + 1 + 4 + 2 + VehicleSegment.MAX_SCRIPT_LENGTH
+                + 2 + VehicleSegment.MAX_MODEL_LENGTH + 4)
             + MAX_SAMPLES * MAX_SAMPLE_BYTES;
         byte[] encoded = payload.toByteArray();
         if (encoded.length > maximumBytes) {
@@ -113,7 +113,7 @@ public final class ReplayVehicleCodec {
             if (count < 0 || count > MAX_SEGMENTS) {
                 throw new ReplayFormatException("vehicle segment count is invalid: " + count);
             }
-            List<ReplayVehicleSegment> segments = new ArrayList<>(count);
+            List<VehicleSegment> segments = new ArrayList<>(count);
             int totalSamples = 0;
             for (int index = 0; index < count; index++) {
                 if (in.available() < 8 + 1 + 4 + 2 + 2 + 4) {
@@ -123,14 +123,14 @@ public final class ReplayVehicleCodec {
                 float end = in.readFloat();
                 int seat = in.readUnsignedByte();
                 int skinIndex = in.readInt();
-                String scriptName = readString(in, ReplayVehicleSegment.MAX_SCRIPT_LENGTH);
-                String modelFile = readString(in, ReplayVehicleSegment.MAX_MODEL_LENGTH);
+                String scriptName = readString(in, VehicleSegment.MAX_SCRIPT_LENGTH);
+                String modelFile = readString(in, VehicleSegment.MAX_MODEL_LENGTH);
                 int sampleCount = in.readInt();
                 if (sampleCount < 0 || sampleCount > MAX_SAMPLES
                     || in.available() < sampleCount * MAX_SAMPLE_BYTES) {
                     throw new ReplayFormatException("vehicle data is corrupt or incomplete");
                 }
-                List<ReplayVehicleSample> samples = new ArrayList<>(sampleCount);
+                List<VehicleSample> samples = new ArrayList<>(sampleCount);
                 for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
                     float time = in.readFloat();
                     float x = in.readFloat();
@@ -148,7 +148,7 @@ public final class ReplayVehicleCodec {
                             + " was ignored");
                         continue;
                     }
-                    samples.add(new ReplayVehicleSample(time, x, y, z, rotationX,
+                    samples.add(new VehicleSample(time, x, y, z, rotationX,
                         rotationY, rotationZ, rotationW));
                 }
                 totalSamples += sampleCount;
@@ -165,7 +165,7 @@ public final class ReplayVehicleCodec {
                         + " has invalid sample times and was ignored");
                     continue;
                 }
-                segments.add(new ReplayVehicleSegment(start, end, scriptName, modelFile,
+                segments.add(new VehicleSegment(start, end, scriptName, modelFile,
                     skinIndex, seat, samples));
             }
             if (in.available() > 0) {
@@ -179,10 +179,10 @@ public final class ReplayVehicleCodec {
         }
     }
 
-    private static boolean samplesAreOrdered(List<ReplayVehicleSample> samples,
+    private static boolean samplesAreOrdered(List<VehicleSample> samples,
         float start, float end) {
         float previous = Float.NEGATIVE_INFINITY;
-        for (ReplayVehicleSample sample : samples) {
+        for (VehicleSample sample : samples) {
             if (sample.timeSeconds() < start - TIME_EPSILON
                 || sample.timeSeconds() > end + TIME_EPSILON
                 || sample.timeSeconds() <= previous) {

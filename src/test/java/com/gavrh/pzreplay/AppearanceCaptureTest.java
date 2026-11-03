@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppearanceCaptureTest {
-    private static ReplayAppearance appearance(String value) {
-        return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+    private static Appearance appearance(String value) {
+        return new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
     }
 
@@ -60,20 +60,20 @@ class AppearanceCaptureTest {
     @Test
     void dropsChangesAfterTheEntryLimit() {
         AppearanceCapture capture = new AppearanceCapture();
-        for (int index = 0; index < ReplayAppearanceChangeCodec.MAX_CHANGES; index++) {
+        for (int index = 0; index < AppearanceChangeCodec.MAX_CHANGES; index++) {
             byte[] payload = new byte[] { (byte) index, (byte) (index >>> 8) };
             assertTrue(capture.accept(index, payload, appearance("entry")));
         }
 
         assertFalse(capture.accept(999.0f, payload("final"), appearance("final")));
         assertTrue(capture.isDropped());
-        assertEquals(ReplayAppearanceChangeCodec.MAX_CHANGES, capture.size());
+        assertEquals(AppearanceChangeCodec.MAX_CHANGES, capture.size());
     }
 
     @Test
     void dropsChangesAboveTheTotalSnapshotLimit() {
         AppearanceCapture capture = new AppearanceCapture();
-        byte[] large = new byte[ReplayAppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2 + 1];
+        byte[] large = new byte[AppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2 + 1];
         byte[] second = large.clone();
         second[0] = 1;
 
@@ -89,7 +89,7 @@ class AppearanceCaptureTest {
 
         assertFalse(capture.accept(1.0f, new byte[0], appearance("empty")));
         assertFalse(capture.accept(2.0f, payload("a"),
-            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION + 1, "AQ==")));
+            new Appearance(Appearance.CURRENT_VERSION + 1, "AQ==")));
         assertFalse(capture.accept(3.0f, payload("b"), null));
         assertEquals(0, capture.size());
         assertFalse(capture.isDropped());

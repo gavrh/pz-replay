@@ -44,11 +44,11 @@ class ReplayGapsTest {
             30.0,
             1L,
             2L,
-            ReplayAppearance.none(),
-            ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(),
+            Appearance.none(),
+            AppearanceChanges.none(),
+            Equipment.none(),
             ReplayEvents.none(),
-            ReplayVehicles.none(),
+            Vehicles.none(),
             gaps
         );
     }
@@ -168,7 +168,7 @@ class ReplayGapsTest {
         ReplayMetadata present = metadata(gaps);
 
         assertEquals(gaps, present.withEnd(99L).gaps());
-        assertEquals(gaps, present.withVehicles(ReplayVehicles.none()).gaps());
+        assertEquals(gaps, present.withVehicles(Vehicles.none()).gaps());
         assertEquals(gaps, ReplayMetadata.fromValues(present.toValues()).gaps());
         assertEquals(ReplayGaps.none(),
             ReplayMetadata.fromValues(metadata(ReplayGaps.none()).toValues()).gaps());

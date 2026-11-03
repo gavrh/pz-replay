@@ -4,19 +4,19 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayEquipment(int version, String data) {
+public record Equipment(int version, String data) {
     public static final int NONE_VERSION = 0;
     public static final int CURRENT_VERSION = 1;
 
     private static final String MISSING_WARNING = "replay has no held-item data";
     private static final String CORRUPT_WARNING = "held-item data is corrupt or incomplete";
 
-    public ReplayEquipment {
+    public Equipment {
         data = data == null ? "" : data;
     }
 
-    public static ReplayEquipment none() {
-        return new ReplayEquipment(NONE_VERSION, "");
+    public static Equipment none() {
+        return new Equipment(NONE_VERSION, "");
     }
 
     public boolean isPresent() {
@@ -64,16 +64,16 @@ public record ReplayEquipment(int version, String data) {
         }
     }
 
-    static ReplayEquipment fromValues(Map<String, String> values) {
+    static Equipment fromValues(Map<String, String> values) {
         String versionValue = values.get("equipment_version");
         String data = values.getOrDefault("equipment_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayEquipment(-1, data);
+            return data.isEmpty() ? none() : new Equipment(-1, data);
         }
         try {
-            return new ReplayEquipment(Integer.parseInt(versionValue), data);
+            return new Equipment(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayEquipment(-1, data);
+            return new Equipment(-1, data);
         }
     }
 }

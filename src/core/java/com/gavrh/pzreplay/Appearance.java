@@ -4,19 +4,19 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayAppearance(int version, String data) {
+public record Appearance(int version, String data) {
     public static final int NONE_VERSION = 0;
     public static final int CURRENT_VERSION = 1;
 
     private static final String MISSING_WARNING = "replay has no appearance data";
     private static final String CORRUPT_WARNING = "appearance data is corrupt or incomplete";
 
-    public ReplayAppearance {
+    public Appearance {
         data = data == null ? "" : data;
     }
 
-    public static ReplayAppearance none() {
-        return new ReplayAppearance(NONE_VERSION, "");
+    public static Appearance none() {
+        return new Appearance(NONE_VERSION, "");
     }
 
     public boolean isPresent() {
@@ -63,16 +63,16 @@ public record ReplayAppearance(int version, String data) {
         }
     }
 
-    static ReplayAppearance fromValues(Map<String, String> values) {
+    static Appearance fromValues(Map<String, String> values) {
         String versionValue = values.get("appearance_version");
         String data = values.getOrDefault("appearance_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayAppearance(-1, data);
+            return data.isEmpty() ? none() : new Appearance(-1, data);
         }
         try {
-            return new ReplayAppearance(Integer.parseInt(versionValue), data);
+            return new Appearance(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayAppearance(-1, data);
+            return new Appearance(-1, data);
         }
     }
 }

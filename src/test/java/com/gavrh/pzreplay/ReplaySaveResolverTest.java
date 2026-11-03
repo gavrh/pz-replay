@@ -14,8 +14,8 @@ class ReplaySaveResolverTest {
     private static final String MAP_NAME = "Muldraugh, KY";
     private static final String PLAYER_NAME = "Replay Tester";
     private static final long RECORDING_END_MILLIS = 1_000_000L;
-    private static final ReplayAppearance APPEARANCE = new ReplayAppearance(
-        ReplayAppearance.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 1 }));
+    private static final Appearance APPEARANCE = new Appearance(
+        Appearance.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 1 }));
 
     private static ReplayMetadata metadata(String gameMode) {
         return new ReplayMetadata(
@@ -232,7 +232,7 @@ class ReplaySaveResolverTest {
             0L,
             RECORDING_END_MILLIS,
             APPEARANCE,
-            ReplayEquipment.none());
+            Equipment.none());
         ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata,
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
 

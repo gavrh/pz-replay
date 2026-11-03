@@ -23,7 +23,7 @@ final class EquipmentSnapshot {
         byte[] visual) {
     }
 
-    record Captured(byte[] payload, ReplayEquipment equipment) {
+    record Captured(byte[] payload, Equipment equipment) {
     }
 
     private final ItemData primary;
@@ -36,7 +36,7 @@ final class EquipmentSnapshot {
         this.shared = shared;
     }
 
-    static ReplayEquipment capture(IsoPlayer player) throws IOException {
+    static Equipment capture(IsoPlayer player) throws IOException {
         return captureWithPayload(player).equipment();
     }
 
@@ -68,7 +68,7 @@ final class EquipmentSnapshot {
         payload.flip();
         byte[] bytes = new byte[payload.remaining()];
         payload.get(bytes);
-        ReplayEquipment equipment = new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+        Equipment equipment = new Equipment(Equipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
         return new Captured(bytes, equipment);
     }
@@ -95,7 +95,7 @@ final class EquipmentSnapshot {
             + item.getModelIndex();
     }
 
-    static EquipmentSnapshot decode(ReplayEquipment equipment) throws ReplayFormatException {
+    static EquipmentSnapshot decode(Equipment equipment) throws ReplayFormatException {
         ByteBuffer payload = ByteBuffer.wrap(equipment.decode()).order(ByteOrder.BIG_ENDIAN);
         try {
             int flags = payload.get() & 0xFF;

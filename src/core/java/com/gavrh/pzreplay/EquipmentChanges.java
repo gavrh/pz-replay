@@ -4,28 +4,28 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayAppearanceChanges(int version, String data) {
+public record EquipmentChanges(int version, String data) {
     public static final int NONE_VERSION = 0;
-    public static final int CURRENT_VERSION = ReplayAppearanceChangeCodec.CURRENT_VERSION;
+    public static final int CURRENT_VERSION = EquipmentChangeCodec.CURRENT_VERSION;
 
     private static final String CORRUPT_WARNING =
-        "appearance change data is corrupt or incomplete";
+        "equipment change data is corrupt or incomplete";
 
-    public ReplayAppearanceChanges {
+    public EquipmentChanges {
         data = data == null ? "" : data;
     }
 
-    public static ReplayAppearanceChanges none() {
-        return new ReplayAppearanceChanges(NONE_VERSION, "");
+    public static EquipmentChanges none() {
+        return new EquipmentChanges(NONE_VERSION, "");
     }
 
-    public static ReplayAppearanceChanges encode(List<ReplayAppearanceChange> changes)
+    public static EquipmentChanges encode(List<EquipmentChange> changes)
         throws ReplayFormatException {
         if (changes == null || changes.isEmpty()) {
             return none();
         }
-        byte[] bytes = ReplayAppearanceChangeCodec.encode(changes);
-        return new ReplayAppearanceChanges(CURRENT_VERSION,
+        byte[] bytes = EquipmentChangeCodec.encode(changes);
+        return new EquipmentChanges(CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
     }
 
@@ -37,10 +37,10 @@ public record ReplayAppearanceChanges(int version, String data) {
         return version == CURRENT_VERSION;
     }
 
-    public ReplayAppearanceChangeCodec.Result decode() throws ReplayFormatException {
+    public EquipmentChangeCodec.Result decode() throws ReplayFormatException {
         if (version != CURRENT_VERSION) {
             throw new ReplayFormatException(
-                "appearance change data version is unsupported: " + version);
+                "equipment change data version is unsupported: " + version);
         }
         if (data.isEmpty()) {
             throw new ReplayFormatException(CORRUPT_WARNING);
@@ -51,7 +51,7 @@ public record ReplayAppearanceChanges(int version, String data) {
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException(CORRUPT_WARNING, exception);
         }
-        return ReplayAppearanceChangeCodec.decode(bytes);
+        return EquipmentChangeCodec.decode(bytes);
     }
 
     public List<String> warnings() {
@@ -62,10 +62,10 @@ public record ReplayAppearanceChanges(int version, String data) {
             return List.of(CORRUPT_WARNING);
         }
         if (version != CURRENT_VERSION) {
-            return List.of("appearance change data version is unsupported: " + version);
+            return List.of("equipment change data version is unsupported: " + version);
         }
         try {
-            ReplayAppearanceChangeCodec.Result result = decode();
+            EquipmentChangeCodec.Result result = decode();
             if (result.changes().isEmpty() && result.warnings().isEmpty()) {
                 return List.of(CORRUPT_WARNING);
             }
@@ -75,16 +75,16 @@ public record ReplayAppearanceChanges(int version, String data) {
         }
     }
 
-    static ReplayAppearanceChanges fromValues(Map<String, String> values) {
-        String versionValue = values.get("appearance_changes_version");
-        String data = values.getOrDefault("appearance_changes_data", "");
+    static EquipmentChanges fromValues(Map<String, String> values) {
+        String versionValue = values.get("equipment_changes_version");
+        String data = values.getOrDefault("equipment_changes_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayAppearanceChanges(-1, data);
+            return data.isEmpty() ? none() : new EquipmentChanges(-1, data);
         }
         try {
-            return new ReplayAppearanceChanges(Integer.parseInt(versionValue), data);
+            return new EquipmentChanges(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayAppearanceChanges(-1, data);
+            return new EquipmentChanges(-1, data);
         }
     }
 }

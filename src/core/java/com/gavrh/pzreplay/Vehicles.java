@@ -4,27 +4,27 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayVehicles(int version, String data) {
+public record Vehicles(int version, String data) {
     public static final int NONE_VERSION = 0;
-    public static final int CURRENT_VERSION = ReplayVehicleCodec.CURRENT_VERSION;
+    public static final int CURRENT_VERSION = VehicleCodec.CURRENT_VERSION;
 
     private static final String CORRUPT_WARNING = "vehicle data is corrupt or incomplete";
 
-    public ReplayVehicles {
+    public Vehicles {
         data = data == null ? "" : data;
     }
 
-    public static ReplayVehicles none() {
-        return new ReplayVehicles(NONE_VERSION, "");
+    public static Vehicles none() {
+        return new Vehicles(NONE_VERSION, "");
     }
 
-    public static ReplayVehicles encode(List<ReplayVehicleSegment> segments)
+    public static Vehicles encode(List<VehicleSegment> segments)
         throws ReplayFormatException {
         if (segments == null || segments.isEmpty()) {
             return none();
         }
-        byte[] bytes = ReplayVehicleCodec.encode(segments);
-        return new ReplayVehicles(CURRENT_VERSION,
+        byte[] bytes = VehicleCodec.encode(segments);
+        return new Vehicles(CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
     }
 
@@ -36,7 +36,7 @@ public record ReplayVehicles(int version, String data) {
         return version == CURRENT_VERSION;
     }
 
-    public ReplayVehicleCodec.Result decode() throws ReplayFormatException {
+    public VehicleCodec.Result decode() throws ReplayFormatException {
         if (version != CURRENT_VERSION) {
             throw new ReplayFormatException(
                 "vehicle data version is unsupported: " + version);
@@ -50,7 +50,7 @@ public record ReplayVehicles(int version, String data) {
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException(CORRUPT_WARNING, exception);
         }
-        return ReplayVehicleCodec.decode(bytes);
+        return VehicleCodec.decode(bytes);
     }
 
     public List<String> warnings() {
@@ -64,7 +64,7 @@ public record ReplayVehicles(int version, String data) {
             return List.of("vehicle data version is unsupported: " + version);
         }
         try {
-            ReplayVehicleCodec.Result result = decode();
+            VehicleCodec.Result result = decode();
             if (result.segments().isEmpty() && result.warnings().isEmpty()) {
                 return List.of(CORRUPT_WARNING);
             }
@@ -74,16 +74,16 @@ public record ReplayVehicles(int version, String data) {
         }
     }
 
-    static ReplayVehicles fromValues(Map<String, String> values) {
+    static Vehicles fromValues(Map<String, String> values) {
         String versionValue = values.get("vehicles_version");
         String data = values.getOrDefault("vehicles_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayVehicles(-1, data);
+            return data.isEmpty() ? none() : new Vehicles(-1, data);
         }
         try {
-            return new ReplayVehicles(Integer.parseInt(versionValue), data);
+            return new Vehicles(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayVehicles(-1, data);
+            return new Vehicles(-1, data);
         }
     }
 }

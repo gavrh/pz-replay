@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EquipmentCaptureTest {
-    private static ReplayEquipment equipment(String value) {
-        return new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+    private static Equipment equipment(String value) {
+        return new Equipment(Equipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
     }
 
@@ -25,7 +25,7 @@ class EquipmentCaptureTest {
 
         assertTrue(capture.accept(0f, payload("initial"), equipment("initial")));
 
-        List<ReplayEquipmentChange> changes = capture.changes();
+        List<EquipmentChange> changes = capture.changes();
         assertEquals(1, changes.size());
         assertEquals(1L, changes.get(0).sequence());
         assertEquals(0f, changes.get(0).timeSeconds());
@@ -50,7 +50,7 @@ class EquipmentCaptureTest {
         assertFalse(capture.accept(1.5f, payload("pistol"), equipment("pistol")));
         assertTrue(capture.accept(2.0f, payload("none"), equipment("none")));
 
-        List<ReplayEquipmentChange> changes = capture.changes();
+        List<EquipmentChange> changes = capture.changes();
         assertEquals(3, changes.size());
         assertEquals(1.25f, changes.get(1).timeSeconds());
         assertEquals(2.0f, changes.get(2).timeSeconds());
@@ -79,29 +79,29 @@ class EquipmentCaptureTest {
         assertFalse(capture.accept(0f, null, equipment("initial")));
         assertFalse(capture.accept(0f, new byte[0], equipment("initial")));
         assertFalse(capture.accept(0f, payload("initial"),
-            new ReplayEquipment(ReplayEquipment.CURRENT_VERSION + 1, "AQ==")));
+            new Equipment(Equipment.CURRENT_VERSION + 1, "AQ==")));
         assertEquals(0, capture.size());
     }
 
     @Test
     void dropsChangesPastTheCountLimitButKeepsEarlierOnes() {
         EquipmentCapture capture = new EquipmentCapture();
-        for (int index = 0; index < ReplayEquipmentChangeCodec.MAX_CHANGES; index++) {
+        for (int index = 0; index < EquipmentChangeCodec.MAX_CHANGES; index++) {
             assertTrue(capture.accept(index, payload("item-" + index),
                 equipment("item-" + index)));
         }
 
-        assertFalse(capture.accept(ReplayEquipmentChangeCodec.MAX_CHANGES,
+        assertFalse(capture.accept(EquipmentChangeCodec.MAX_CHANGES,
             payload("overflow"), equipment("overflow")));
 
         assertTrue(capture.isDropped());
-        assertEquals(ReplayEquipmentChangeCodec.MAX_CHANGES, capture.size());
+        assertEquals(EquipmentChangeCodec.MAX_CHANGES, capture.size());
     }
 
     @Test
     void dropsChangesPastTheByteLimit() {
         EquipmentCapture capture = new EquipmentCapture();
-        int half = ReplayEquipmentChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2;
+        int half = EquipmentChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2;
         byte[] first = new byte[half];
         byte[] second = new byte[half];
         second[half - 1] = 1;

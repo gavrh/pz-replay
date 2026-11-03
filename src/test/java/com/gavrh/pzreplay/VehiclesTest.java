@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayVehiclesTest {
+class VehiclesTest {
     @TempDir
     Path tempDir;
 
@@ -25,17 +25,17 @@ class ReplayVehiclesTest {
             CaptureSample.flags(false, false, false, false, false, false, inVehicle));
     }
 
-    private static ReplayVehicleSample sample(float time, float x) {
-        return new ReplayVehicleSample(time, x, 20f, 0f, 0f, 0f, 0f, 1f);
+    private static VehicleSample sample(float time, float x) {
+        return new VehicleSample(time, x, 20f, 0f, 0f, 0f, 0f, 1f);
     }
 
-    private static ReplayVehicleSegment segment(float start, float end, String script,
-        int seat, ReplayVehicleSample... samples) {
-        return new ReplayVehicleSegment(start, end, script, "vehicles/script/model",
+    private static VehicleSegment segment(float start, float end, String script,
+        int seat, VehicleSample... samples) {
+        return new VehicleSegment(start, end, script, "vehicles/script/model",
             0, seat, List.of(samples));
     }
 
-    private static ReplayMetadata metadata(ReplayVehicles vehicles) {
+    private static ReplayMetadata metadata(Vehicles vehicles) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -50,9 +50,9 @@ class ReplayVehiclesTest {
             30.0,
             1L,
             2L,
-            ReplayAppearance.none(),
-            ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(),
+            Appearance.none(),
+            AppearanceChanges.none(),
+            Equipment.none(),
             ReplayEvents.none(),
             vehicles
         );
@@ -60,7 +60,7 @@ class ReplayVehiclesTest {
 
     @Test
     void roundTripsSegmentsThroughTheBinaryReplayFormat() throws Exception {
-        ReplayVehicles vehicles = ReplayVehicles.encode(List.of(
+        Vehicles vehicles = Vehicles.encode(List.of(
             segment(0.0f, 2.0f, "Base.ModernCar", 0, sample(0f, 100f), sample(2f, 110f)),
             segment(2.5f, 3.0f, "Base.Van", 1, sample(2.5f, 200f))
         ));
@@ -82,7 +82,7 @@ class ReplayVehiclesTest {
 
     @Test
     void oldReplaysWithoutVehicleDataRemainReadable() throws Exception {
-        ReplayVehicles vehicles = ReplayVehicles.none();
+        Vehicles vehicles = Vehicles.none();
         ReplayMetadata metadata = metadata(vehicles);
 
         assertFalse(vehicles.isPresent());
@@ -99,12 +99,12 @@ class ReplayVehiclesTest {
 
     @Test
     void corruptUnsupportedAndOversizedDataDegradeWithWarnings() throws Exception {
-        ReplayVehicles corrupt = new ReplayVehicles(ReplayVehicles.CURRENT_VERSION,
+        Vehicles corrupt = new Vehicles(Vehicles.CURRENT_VERSION,
             "not base64!");
-        ReplayVehicles unsupported = new ReplayVehicles(
-            ReplayVehicles.CURRENT_VERSION + 1, "AQ==");
-        ReplayVehicles missingPayload = new ReplayVehicles(
-            ReplayVehicles.CURRENT_VERSION, "");
+        Vehicles unsupported = new Vehicles(
+            Vehicles.CURRENT_VERSION + 1, "AQ==");
+        Vehicles missingPayload = new Vehicles(
+            Vehicles.CURRENT_VERSION, "");
 
         assertTrue(corrupt.warnings().get(0).contains("corrupt or incomplete"));
         assertTrue(unsupported.warnings().get(0).contains("version is unsupported"));
@@ -120,7 +120,7 @@ class ReplayVehiclesTest {
 
     @Test
     void invalidSegmentsAreSkippedWithoutBreakingOtherSegments() throws Exception {
-        List<ReplayVehicleSegment> segments = new ArrayList<>();
+        List<VehicleSegment> segments = new ArrayList<>();
         segments.add(null);
         segments.add(segment(0f, 1f, "", 0, sample(0f, 10f)));
         segments.add(segment(1f, 2f, "Base.Car", 0, sample(2.5f, 20f)));
@@ -159,9 +159,9 @@ class ReplayVehiclesTest {
         capture.record(1.5f, snapshot(2f, 0f, "Base.Car", 1));
         capture.finish(2.0f);
 
-        ReplayVehicles vehicles = capture.encode();
+        Vehicles vehicles = capture.encode();
         assertTrue(vehicles.isPresent());
-        ReplayVehicleCodec.Result result = assertDoesNotThrowDecode(vehicles);
+        VehicleCodec.Result result = assertDoesNotThrowDecode(vehicles);
         assertEquals(2, result.segments().size());
         assertEquals(0, result.segments().get(0).seat());
         assertEquals(0.0f, result.segments().get(0).startTimeSeconds(), 0.0001f);
@@ -183,7 +183,7 @@ class ReplayVehiclesTest {
         capture.record(1.1f, snapshot(5f, 0f, "Base.Car", 0));
         capture.finish(1.2f);
 
-        ReplayVehicleCodec.Result result = assertDoesNotThrowDecode(capture.encode());
+        VehicleCodec.Result result = assertDoesNotThrowDecode(capture.encode());
         assertEquals(1, result.segments().size());
         assertEquals(3, result.segments().get(0).samples().size());
     }
@@ -198,38 +198,38 @@ class ReplayVehiclesTest {
 
         assertTrue(capture.isSkipped());
         assertFalse(capture.getWarning().isBlank());
-        ReplayVehicleCodec.Result result = assertDoesNotThrowDecode(capture.encode());
+        VehicleCodec.Result result = assertDoesNotThrowDecode(capture.encode());
         assertEquals(1, result.segments().size());
     }
 
     @Test
     void metadataOmitsVehicleKeysWhenMissingAndPreservesThemOnEndUpdate()
         throws Exception {
-        ReplayVehicles vehicles = ReplayVehicles.encode(List.of(
+        Vehicles vehicles = Vehicles.encode(List.of(
             segment(0f, 1f, "Base.Car", 0, sample(0f, 1f))));
         ReplayMetadata present = metadata(vehicles);
 
         assertEquals(vehicles, present.withEnd(99L).vehicles());
         assertEquals(vehicles, ReplayMetadata.fromValues(present.toValues()).vehicles());
-        assertEquals(ReplayVehicles.none(),
-            ReplayMetadata.fromValues(metadata(ReplayVehicles.none()).toValues()).vehicles());
+        assertEquals(Vehicles.none(),
+            ReplayMetadata.fromValues(metadata(Vehicles.none()).toValues()).vehicles());
     }
 
     @Test
     void codecRejectsPayloadsBeyondTheDocumentedBounds() throws Exception {
-        List<ReplayVehicleSegment> tooMany = new ArrayList<>();
-        for (int index = 0; index < ReplayVehicleCodec.MAX_SEGMENTS + 1; index++) {
+        List<VehicleSegment> tooMany = new ArrayList<>();
+        for (int index = 0; index < VehicleCodec.MAX_SEGMENTS + 1; index++) {
             tooMany.add(segment(index, index + 1, "Base.Car", 0, sample(index, index)));
         }
-        assertThrows(ReplayFormatException.class, () -> ReplayVehicleCodec.encode(tooMany));
+        assertThrows(ReplayFormatException.class, () -> VehicleCodec.encode(tooMany));
 
-        List<ReplayVehicleSample> tooManySamples = new ArrayList<>();
-        for (int index = 0; index < ReplayVehicleCodec.MAX_SAMPLES; index++) {
+        List<VehicleSample> tooManySamples = new ArrayList<>();
+        for (int index = 0; index < VehicleCodec.MAX_SAMPLES; index++) {
             tooManySamples.add(sample(index, index));
         }
-        ReplayVehicleSegment large = new ReplayVehicleSegment(0f,
-            ReplayVehicleCodec.MAX_SAMPLES, "Base.Car", "", 0, 0, tooManySamples);
-        assertThrows(ReplayFormatException.class, () -> ReplayVehicleCodec.encode(
+        VehicleSegment large = new VehicleSegment(0f,
+            VehicleCodec.MAX_SAMPLES, "Base.Car", "", 0, 0, tooManySamples);
+        assertThrows(ReplayFormatException.class, () -> VehicleCodec.encode(
             List.of(large, large)));
     }
 
@@ -238,10 +238,10 @@ class ReplayVehiclesTest {
         ReplayCompatibility.Context context = new ReplayCompatibility.Context(
             "42.21.0", "save", "map", "Sandbox");
 
-        assertFalse(ReplayCompatibility.check(metadata(ReplayVehicles.none()), context)
+        assertFalse(ReplayCompatibility.check(metadata(Vehicles.none()), context)
             .warnings().stream().anyMatch(warning -> warning.contains("vehicle")));
-        assertTrue(ReplayCompatibility.check(metadata(new ReplayVehicles(
-            ReplayVehicles.CURRENT_VERSION, "not base64!")), context)
+        assertTrue(ReplayCompatibility.check(metadata(new Vehicles(
+            Vehicles.CURRENT_VERSION, "not base64!")), context)
             .warnings().stream().anyMatch(warning -> warning.contains("vehicle")));
     }
 
@@ -251,7 +251,7 @@ class ReplayVehiclesTest {
             script, "vehicles/model", 0, seat);
     }
 
-    private static ReplayVehicleCodec.Result assertDoesNotThrowDecode(ReplayVehicles vehicles) {
+    private static VehicleCodec.Result assertDoesNotThrowDecode(Vehicles vehicles) {
         try {
             return vehicles.decode();
         } catch (ReplayFormatException exception) {
@@ -261,8 +261,8 @@ class ReplayVehiclesTest {
 
     @Test
     void decodedSegmentsDoNotRetainMutableInputLists() throws Exception {
-        List<ReplayVehicleSample> samples = new ArrayList<>(List.of(sample(0f, 1f)));
-        ReplayVehicleSegment segment = new ReplayVehicleSegment(0f, 1f, "Base.Car", "", 0, 0,
+        List<VehicleSample> samples = new ArrayList<>(List.of(sample(0f, 1f)));
+        VehicleSegment segment = new VehicleSegment(0f, 1f, "Base.Car", "", 0, 0,
             samples);
         samples.add(sample(0.5f, 2f));
 
@@ -271,11 +271,11 @@ class ReplayVehiclesTest {
 
     @Test
     void metadataParsesVehicleValuesFromTheHeader() throws Exception {
-        ReplayVehicles vehicles = ReplayVehicles.encode(List.of(
+        Vehicles vehicles = Vehicles.encode(List.of(
             segment(0f, 1f, "Base.Car", 0, sample(0f, 1f))));
         Map<String, String> values = metadata(vehicles).toValues();
 
-        assertEquals(Integer.toString(ReplayVehicles.CURRENT_VERSION),
+        assertEquals(Integer.toString(Vehicles.CURRENT_VERSION),
             values.get("vehicles_version"));
         assertEquals(vehicles.data(), values.get("vehicles_data"));
         assertNotNull(ReplayMetadata.fromValues(values).vehicles());

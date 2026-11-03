@@ -21,10 +21,10 @@ public final class ReplayTimeline {
         boolean moving,
         boolean aiming,
         boolean inVehicle,
-        ReplayEquipment equipment
+        Equipment equipment
     ) {
         public Sample {
-            equipment = equipment == null ? ReplayEquipment.none() : equipment;
+            equipment = equipment == null ? Equipment.none() : equipment;
         }
     }
 
@@ -48,7 +48,7 @@ public final class ReplayTimeline {
     private final List<CaptureSample> frames;
     private final double[] relativeTimes;
     private final double duration;
-    private final ReplayEquipment equipment;
+    private final Equipment equipment;
     private final ReplayEquipmentTimeline equipmentTimeline;
     private final ReplayEventTimeline eventTimeline;
     private final List<String> eventWarnings;
@@ -67,35 +67,35 @@ public final class ReplayTimeline {
     public ReplayTimeline(ReplayData data) throws ReplayFormatException {
         this(data == null ? null : data.frames(),
             data == null || data.metadata() == null
-                ? ReplayAppearance.none() : data.metadata().appearance(),
+                ? Appearance.none() : data.metadata().appearance(),
             data == null || data.metadata() == null
-                ? ReplayAppearanceChanges.none() : data.metadata().appearanceChanges(),
+                ? AppearanceChanges.none() : data.metadata().appearanceChanges(),
             data == null || data.metadata() == null
-                ? ReplayEquipment.none() : data.metadata().equipment(),
+                ? Equipment.none() : data.metadata().equipment(),
             data == null || data.metadata() == null
-                ? ReplayEquipmentChanges.none() : data.metadata().equipmentChanges(),
+                ? EquipmentChanges.none() : data.metadata().equipmentChanges(),
             data == null || data.metadata() == null
                 ? ReplayEvents.none() : data.metadata().events(),
             data == null || data.metadata() == null
-                ? ReplayVehicles.none() : data.metadata().vehicles(),
+                ? Vehicles.none() : data.metadata().vehicles(),
             data == null || data.metadata() == null
                 ? ReplayGaps.none() : data.metadata().gaps());
     }
 
     public ReplayTimeline(List<CaptureSample> frames) throws ReplayFormatException {
-        this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
-            ReplayEquipment.none(), ReplayEquipmentChanges.none(), ReplayEvents.none(),
-            ReplayVehicles.none(), ReplayGaps.none());
+        this(frames, Appearance.none(), AppearanceChanges.none(),
+            Equipment.none(), EquipmentChanges.none(), ReplayEvents.none(),
+            Vehicles.none(), ReplayGaps.none());
     }
 
-    private ReplayTimeline(List<CaptureSample> frames, ReplayAppearance appearance,
-        ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
-        ReplayEquipmentChanges equipmentChanges, ReplayEvents events, ReplayVehicles vehicles,
+    private ReplayTimeline(List<CaptureSample> frames, Appearance appearance,
+        AppearanceChanges appearanceChanges, Equipment equipment,
+        EquipmentChanges equipmentChanges, ReplayEvents events, Vehicles vehicles,
         ReplayGaps gaps) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
-        this.equipment = equipment == null ? ReplayEquipment.none() : equipment;
+        this.equipment = equipment == null ? Equipment.none() : equipment;
         List<CaptureSample> validated = new ArrayList<>(frames);
         if (validated.isEmpty()) {
             this.frames = List.of();
@@ -348,7 +348,7 @@ public final class ReplayTimeline {
         return frames.size();
     }
 
-    public ReplayEquipment getEquipment() {
+    public Equipment getEquipment() {
         return equipment;
     }
 
@@ -356,9 +356,9 @@ public final class ReplayTimeline {
         return equipmentTimeline;
     }
 
-    public ReplayEquipment equipmentAt(double seconds) {
+    public Equipment equipmentAt(double seconds) {
         if (isGapHold(seconds)) {
-            return ReplayEquipment.none();
+            return Equipment.none();
         }
         return equipmentTimeline == null
             ? equipment : equipmentTimeline.equipmentAt(seconds);
@@ -376,11 +376,11 @@ public final class ReplayTimeline {
         return appearanceTimeline;
     }
 
-    public ReplayAppearance getInitialAppearance() {
+    public Appearance getInitialAppearance() {
         return appearanceTimeline.initialAppearance();
     }
 
-    public ReplayAppearance appearanceAt(double seconds) {
+    public Appearance appearanceAt(double seconds) {
         return appearanceTimeline.appearanceAt(effectiveGapTime(seconds));
     }
 
@@ -533,13 +533,13 @@ public final class ReplayTimeline {
     private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
     }
 
-    private static ReplayVehicleTimeline decodeVehicles(ReplayVehicles vehicles,
+    private static ReplayVehicleTimeline decodeVehicles(Vehicles vehicles,
         double duration) {
-        List<ReplayVehicleSegment> decoded = List.of();
+        List<VehicleSegment> decoded = List.of();
         List<String> warnings = new ArrayList<>();
         if (vehicles != null && vehicles.isPresent()) {
             try {
-                ReplayVehicleCodec.Result result = vehicles.decode();
+                VehicleCodec.Result result = vehicles.decode();
                 decoded = result.segments();
                 warnings.addAll(result.warnings());
             } catch (ReplayFormatException exception) {
@@ -558,13 +558,13 @@ public final class ReplayTimeline {
         }
     }
 
-    private static ReplayAppearanceTimeline decodeAppearances(ReplayAppearance appearance,
-        ReplayAppearanceChanges changes, double duration) {
-        List<ReplayAppearanceChange> decoded = List.of();
+    private static ReplayAppearanceTimeline decodeAppearances(Appearance appearance,
+        AppearanceChanges changes, double duration) {
+        List<AppearanceChange> decoded = List.of();
         List<String> warnings = new ArrayList<>();
         if (changes != null && changes.isPresent()) {
             try {
-                ReplayAppearanceChangeCodec.Result result = changes.decode();
+                AppearanceChangeCodec.Result result = changes.decode();
                 decoded = result.changes();
                 warnings.addAll(result.warnings());
             } catch (ReplayFormatException exception) {
@@ -588,13 +588,13 @@ public final class ReplayTimeline {
         }
     }
 
-    private static ReplayEquipmentTimeline decodeEquipment(ReplayEquipment equipment,
-        ReplayEquipmentChanges changes, double duration, double offsetSeconds) {
-        List<ReplayEquipmentChange> decoded = List.of();
+    private static ReplayEquipmentTimeline decodeEquipment(Equipment equipment,
+        EquipmentChanges changes, double duration, double offsetSeconds) {
+        List<EquipmentChange> decoded = List.of();
         List<String> warnings = new ArrayList<>();
         if (changes != null && changes.isPresent()) {
             try {
-                ReplayEquipmentChangeCodec.Result result = changes.decode();
+                EquipmentChangeCodec.Result result = changes.decode();
                 decoded = result.changes();
                 warnings.addAll(result.warnings());
             } catch (ReplayFormatException exception) {

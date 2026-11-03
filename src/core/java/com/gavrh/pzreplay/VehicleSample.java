@@ -1,6 +1,6 @@
 package com.gavrh.pzreplay;
 
-public record ReplayVehicleSample(
+public record VehicleSample(
     float timeSeconds,
     float x,
     float y,

@@ -14,26 +14,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayAppearanceChangesTest {
-    private static ReplayAppearance appearance(String value) {
-        return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+class AppearanceChangesTest {
+    private static Appearance appearance(String value) {
+        return new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private static ReplayAppearance appearance(byte[] value) {
-        return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+    private static Appearance appearance(byte[] value) {
+        return new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value));
     }
 
     @Test
     void roundTripsChangesWithEqualTimestampsAndSequenceOrder() throws Exception {
-        List<ReplayAppearanceChange> changes = List.of(
-            new ReplayAppearanceChange(1L, 1.5f, appearance("first")),
-            new ReplayAppearanceChange(2L, 1.5f, appearance("second")),
-            new ReplayAppearanceChange(3L, 4.0f, appearance("third")));
+        List<AppearanceChange> changes = List.of(
+            new AppearanceChange(1L, 1.5f, appearance("first")),
+            new AppearanceChange(2L, 1.5f, appearance("second")),
+            new AppearanceChange(3L, 4.0f, appearance("third")));
 
-        ReplayAppearanceChanges encoded = ReplayAppearanceChanges.encode(changes);
-        ReplayAppearanceChangeCodec.Result decoded = encoded.decode();
+        AppearanceChanges encoded = AppearanceChanges.encode(changes);
+        AppearanceChangeCodec.Result decoded = encoded.decode();
 
         assertEquals(changes, decoded.changes());
         assertTrue(decoded.warnings().isEmpty());
@@ -42,17 +42,17 @@ class ReplayAppearanceChangesTest {
 
     @Test
     void metadataOmitsKeysWhenNoChangesExist() {
-        ReplayMetadata metadata = metadata(ReplayAppearanceChanges.none());
+        ReplayMetadata metadata = metadata(AppearanceChanges.none());
 
         assertFalse(metadata.toValues().containsKey("appearance_changes_version"));
         assertFalse(metadata.toValues().containsKey("appearance_changes_data"));
-        assertTrue(ReplayAppearanceChanges.fromValues(Map.of()).warnings().isEmpty());
+        assertTrue(AppearanceChanges.fromValues(Map.of()).warnings().isEmpty());
     }
 
     @Test
     void unsupportedTimelineVersionWarnsWithoutThrowing() {
-        ReplayAppearanceChanges changes = new ReplayAppearanceChanges(
-            ReplayAppearanceChanges.CURRENT_VERSION + 1, "AQ==");
+        AppearanceChanges changes = new AppearanceChanges(
+            AppearanceChanges.CURRENT_VERSION + 1, "AQ==");
 
         assertEquals(1, changes.warnings().size());
         assertTrue(changes.warnings().get(0).contains("version is unsupported"));
@@ -61,8 +61,8 @@ class ReplayAppearanceChangesTest {
 
     @Test
     void corruptBase64WarnsWithoutThrowing() {
-        ReplayAppearanceChanges changes = new ReplayAppearanceChanges(
-            ReplayAppearanceChanges.CURRENT_VERSION, "not base64!");
+        AppearanceChanges changes = new AppearanceChanges(
+            AppearanceChanges.CURRENT_VERSION, "not base64!");
 
         assertEquals(1, changes.warnings().size());
         assertTrue(changes.warnings().get(0).contains("corrupt or incomplete"));
@@ -70,8 +70,8 @@ class ReplayAppearanceChangesTest {
 
     @Test
     void emptyTimelinePayloadIsCorrupt() {
-        ReplayAppearanceChanges changes = new ReplayAppearanceChanges(
-            ReplayAppearanceChanges.CURRENT_VERSION, "");
+        AppearanceChanges changes = new AppearanceChanges(
+            AppearanceChanges.CURRENT_VERSION, "");
 
         assertEquals(1, changes.warnings().size());
         assertTrue(changes.warnings().get(0).contains("corrupt or incomplete"));
@@ -79,13 +79,13 @@ class ReplayAppearanceChangesTest {
 
     @Test
     void decodeSkipsInvalidTimesAndUnknownSnapshotVersions() throws Exception {
-        List<ReplayAppearanceChange> changes = List.of(
-            new ReplayAppearanceChange(1L, 1.0f, appearance("valid")),
-            new ReplayAppearanceChange(2L, 2.0f, appearance("unknown-version")),
-            new ReplayAppearanceChange(3L, Float.NaN, appearance("invalid-time")));
+        List<AppearanceChange> changes = List.of(
+            new AppearanceChange(1L, 1.0f, appearance("valid")),
+            new AppearanceChange(2L, 2.0f, appearance("unknown-version")),
+            new AppearanceChange(3L, Float.NaN, appearance("invalid-time")));
 
-        ReplayAppearanceChangeCodec.Result result =
-            ReplayAppearanceChangeCodec.decode(rawPayload(changes, 2, Float.NaN));
+        AppearanceChangeCodec.Result result =
+            AppearanceChangeCodec.decode(rawPayload(changes, 2, Float.NaN));
 
         assertEquals(1, result.changes().size());
         assertEquals(1L, result.changes().get(0).sequence());
@@ -97,62 +97,62 @@ class ReplayAppearanceChangesTest {
     @Test
     void decodeRejectsTrailingData() throws Exception {
         byte[] bytes = rawPayload(List.of(
-            new ReplayAppearanceChange(1L, 1.0f, appearance("valid"))), 1, null);
+            new AppearanceChange(1L, 1.0f, appearance("valid"))), 1, null);
         byte[] extended = new byte[bytes.length + 1];
         System.arraycopy(bytes, 0, extended, 0, bytes.length);
 
         assertThrows(ReplayFormatException.class,
-            () -> ReplayAppearanceChangeCodec.decode(extended));
+            () -> AppearanceChangeCodec.decode(extended));
     }
 
     @Test
     void encodeRejectsTooManyChanges() {
-        List<ReplayAppearanceChange> changes = new ArrayList<>();
-        for (int index = 0; index < ReplayAppearanceChangeCodec.MAX_CHANGES + 1; index++) {
-            changes.add(new ReplayAppearanceChange(index, index, appearance("x")));
+        List<AppearanceChange> changes = new ArrayList<>();
+        for (int index = 0; index < AppearanceChangeCodec.MAX_CHANGES + 1; index++) {
+            changes.add(new AppearanceChange(index, index, appearance("x")));
         }
 
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> ReplayAppearanceChangeCodec.encode(changes));
+            () -> AppearanceChangeCodec.encode(changes));
         assertTrue(exception.getMessage().contains("too many appearance changes"));
     }
 
     @Test
     void encodeRejectsOversizedSnapshot() {
-        byte[] oversized = new byte[ReplayAppearanceChangeCodec.MAX_SNAPSHOT_BYTES + 1];
-        List<ReplayAppearanceChange> changes = List.of(
-            new ReplayAppearanceChange(1L, 1.0f, appearance(oversized)));
+        byte[] oversized = new byte[AppearanceChangeCodec.MAX_SNAPSHOT_BYTES + 1];
+        List<AppearanceChange> changes = List.of(
+            new AppearanceChange(1L, 1.0f, appearance(oversized)));
 
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> ReplayAppearanceChangeCodec.encode(changes));
+            () -> AppearanceChangeCodec.encode(changes));
         assertTrue(exception.getMessage().contains("invalid snapshot size"));
     }
 
     @Test
     void encodeRejectsTotalSnapshotAboveLimit() {
-        byte[] half = new byte[ReplayAppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2 + 1];
-        List<ReplayAppearanceChange> changes = List.of(
-            new ReplayAppearanceChange(1L, 1.0f, appearance(half)),
-            new ReplayAppearanceChange(2L, 2.0f, appearance(half)));
+        byte[] half = new byte[AppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2 + 1];
+        List<AppearanceChange> changes = List.of(
+            new AppearanceChange(1L, 1.0f, appearance(half)),
+            new AppearanceChange(2L, 2.0f, appearance(half)));
 
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> ReplayAppearanceChangeCodec.encode(changes));
+            () -> AppearanceChangeCodec.encode(changes));
         assertTrue(exception.getMessage().contains("too large"));
     }
 
     @Test
     void encodeRejectsUnsupportedSnapshotVersion() {
-        ReplayAppearance unsupported = new ReplayAppearance(
-            ReplayAppearance.CURRENT_VERSION + 1, "AQ==");
-        List<ReplayAppearanceChange> changes = List.of(
-            new ReplayAppearanceChange(1L, 1.0f, unsupported));
+        Appearance unsupported = new Appearance(
+            Appearance.CURRENT_VERSION + 1, "AQ==");
+        List<AppearanceChange> changes = List.of(
+            new AppearanceChange(1L, 1.0f, unsupported));
 
         ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> ReplayAppearanceChangeCodec.encode(changes));
+            () -> AppearanceChangeCodec.encode(changes));
         assertTrue(exception.getMessage().contains("unsupported snapshot version"));
     }
 
-    private static ReplayMetadata metadata(ReplayAppearanceChanges changes) {
+    private static ReplayMetadata metadata(AppearanceChanges changes) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -169,19 +169,19 @@ class ReplayAppearanceChangesTest {
             2L,
             appearance("initial"),
             changes,
-            ReplayEquipment.none(),
+            Equipment.none(),
             ReplayEvents.none()
         );
     }
 
-    private static byte[] rawPayload(List<ReplayAppearanceChange> changes,
+    private static byte[] rawPayload(List<AppearanceChange> changes,
         int snapshotVersionOverride, Float timeOverride) throws Exception {
         ByteArrayOutputStream payload = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(payload)) {
-            out.writeShort(ReplayAppearanceChangeCodec.CURRENT_VERSION);
+            out.writeShort(AppearanceChangeCodec.CURRENT_VERSION);
             out.writeInt(changes.size());
             for (int index = 0; index < changes.size(); index++) {
-                ReplayAppearanceChange change = changes.get(index);
+                AppearanceChange change = changes.get(index);
                 byte[] snapshot = change.appearance().decode();
                 int snapshotVersion = index == 1
                     ? snapshotVersionOverride : change.appearance().version();

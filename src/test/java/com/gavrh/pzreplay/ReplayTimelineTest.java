@@ -107,7 +107,7 @@ class ReplayTimelineTest {
 
     @Test
     void exposesRecordedHeldItemsThroughSamples() throws Exception {
-        ReplayEquipment equipment = new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+        Equipment equipment = new Equipment(Equipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(new byte[] { 1, 2, 3 }));
         ReplayMetadata metadata = new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
@@ -123,7 +123,7 @@ class ReplayTimelineTest {
             30.0,
             1L,
             2L,
-            new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "AQ=="),
+            new Appearance(Appearance.CURRENT_VERSION, "AQ=="),
             equipment
         );
         ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,

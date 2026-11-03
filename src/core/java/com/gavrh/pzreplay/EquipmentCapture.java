@@ -5,7 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class EquipmentCapture {
-    private final List<ReplayEquipmentChange> changes = new ArrayList<>();
+    private final List<EquipmentChange> changes = new ArrayList<>();
     private byte[] baseline;
     private long nextSequence = 1L;
     private int totalSnapshotBytes;
@@ -19,7 +19,7 @@ public final class EquipmentCapture {
         dropped = false;
     }
 
-    public boolean accept(float timeSeconds, byte[] payload, ReplayEquipment equipment) {
+    public boolean accept(float timeSeconds, byte[] payload, Equipment equipment) {
         if (payload == null || payload.length == 0 || equipment == null
             || !equipment.isCurrent()) {
             return false;
@@ -31,19 +31,19 @@ public final class EquipmentCapture {
         if (dropped) {
             return false;
         }
-        if (payload.length > ReplayEquipmentChangeCodec.MAX_SNAPSHOT_BYTES
-            || changes.size() >= ReplayEquipmentChangeCodec.MAX_CHANGES
+        if (payload.length > EquipmentChangeCodec.MAX_SNAPSHOT_BYTES
+            || changes.size() >= EquipmentChangeCodec.MAX_CHANGES
             || totalSnapshotBytes + payload.length
-                > ReplayEquipmentChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES) {
+                > EquipmentChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES) {
             dropped = true;
             return false;
         }
-        changes.add(new ReplayEquipmentChange(nextSequence++, timeSeconds, equipment));
+        changes.add(new EquipmentChange(nextSequence++, timeSeconds, equipment));
         totalSnapshotBytes += payload.length;
         return true;
     }
 
-    public List<ReplayEquipmentChange> changes() {
+    public List<EquipmentChange> changes() {
         return List.copyOf(changes);
     }
 

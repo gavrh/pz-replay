@@ -41,27 +41,27 @@ final class CaptureMetadataFactory {
         );
     }
 
-    private static ReplayAppearance captureAppearance(IsoPlayer player) {
+    private static Appearance captureAppearance(IsoPlayer player) {
         try {
-            ReplayAppearance appearance = AppearanceSnapshot.capture(player);
+            Appearance appearance = AppearanceSnapshot.capture(player);
             System.out.println("[pz-replay] appearance captured bytes="
                 + appearance.data().length());
             return appearance;
         } catch (IOException | RuntimeException exception) {
             System.out.println("[pz-replay] appearance capture failed: " + exception);
-            return ReplayAppearance.none();
+            return Appearance.none();
         }
     }
 
-    private static ReplayEquipment captureEquipment(IsoPlayer player) {
+    private static Equipment captureEquipment(IsoPlayer player) {
         try {
-            ReplayEquipment equipment = EquipmentSnapshot.capture(player);
+            Equipment equipment = EquipmentSnapshot.capture(player);
             System.out.println("[pz-replay] equipment captured bytes="
                 + equipment.data().length());
             return equipment;
         } catch (IOException | RuntimeException exception) {
             System.out.println("[pz-replay] equipment capture failed: " + exception);
-            return ReplayEquipment.none();
+            return Equipment.none();
         }
     }
 

@@ -10,10 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ReplayCompatibilityTest {
     private static final ReplayCompatibility.Context CURRENT = new ReplayCompatibility.Context(
         "42.21.0", "pz-replay-test", "Muldraugh, KY", "Sandbox");
-    private static final ReplayAppearance APPEARANCE = new ReplayAppearance(
-        ReplayAppearance.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 1 }));
-    private static final ReplayEquipment EQUIPMENT = new ReplayEquipment(
-        ReplayEquipment.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 2 }));
+    private static final Appearance APPEARANCE = new Appearance(
+        Appearance.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 1 }));
+    private static final Equipment EQUIPMENT = new Equipment(
+        Equipment.CURRENT_VERSION, Base64.getEncoder().encodeToString(new byte[] { 2 }));
 
     private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
         String mapName) {
@@ -21,12 +21,12 @@ class ReplayCompatibilityTest {
     }
 
     private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
-        String mapName, ReplayAppearance appearance) {
+        String mapName, Appearance appearance) {
         return metadata(gameVersion, saveName, gameMode, mapName, appearance, EQUIPMENT);
     }
 
     private static ReplayMetadata metadata(String gameVersion, String saveName, String gameMode,
-        String mapName, ReplayAppearance appearance, ReplayEquipment equipment) {
+        String mapName, Appearance appearance, Equipment equipment) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -126,7 +126,7 @@ class ReplayCompatibilityTest {
     void warnsWhenAppearanceIsMissing() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",
-                ReplayAppearance.none()), CURRENT);
+                Appearance.none()), CURRENT);
 
         assertFalse(result.isCompatible());
         assertEquals(1, result.warnings().size());
@@ -137,7 +137,7 @@ class ReplayCompatibilityTest {
     void warnsOnUnsupportedAppearanceVersion() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",
-                new ReplayAppearance(ReplayAppearance.CURRENT_VERSION + 1, "AQ==")), CURRENT);
+                new Appearance(Appearance.CURRENT_VERSION + 1, "AQ==")), CURRENT);
 
         assertFalse(result.isCompatible());
         assertEquals(1, result.warnings().size());
@@ -148,7 +148,7 @@ class ReplayCompatibilityTest {
     void warnsOnCorruptAppearance() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",
-                new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "not base64!")), CURRENT);
+                new Appearance(Appearance.CURRENT_VERSION, "not base64!")), CURRENT);
 
         assertFalse(result.isCompatible());
         assertEquals(1, result.warnings().size());
@@ -157,8 +157,8 @@ class ReplayCompatibilityTest {
 
     @Test
     void warnsOnUnsupportedAppearanceChangeTimeline() {
-        ReplayAppearanceChanges unsupported = new ReplayAppearanceChanges(
-            ReplayAppearanceChanges.CURRENT_VERSION + 1, "AQ==");
+        AppearanceChanges unsupported = new AppearanceChanges(
+            AppearanceChanges.CURRENT_VERSION + 1, "AQ==");
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY")
                 .withAppearanceChanges(unsupported), CURRENT);
@@ -171,8 +171,8 @@ class ReplayCompatibilityTest {
 
     @Test
     void warnsOnCorruptAppearanceChangeTimeline() {
-        ReplayAppearanceChanges corrupt = new ReplayAppearanceChanges(
-            ReplayAppearanceChanges.CURRENT_VERSION, "not base64!");
+        AppearanceChanges corrupt = new AppearanceChanges(
+            AppearanceChanges.CURRENT_VERSION, "not base64!");
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY")
                 .withAppearanceChanges(corrupt), CURRENT);
@@ -187,7 +187,7 @@ class ReplayCompatibilityTest {
     void warnsWhenHeldItemDataIsMissing() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.21.0", "pz-replay-test", "Sandbox", "Muldraugh, KY",
-                APPEARANCE, ReplayEquipment.none()), CURRENT);
+                APPEARANCE, Equipment.none()), CURRENT);
 
         assertFalse(result.isCompatible());
         assertEquals(1, result.warnings().size());
@@ -198,7 +198,7 @@ class ReplayCompatibilityTest {
     void keepsContextWarningsWhenAppearanceIsMissing() {
         ReplayCompatibility.Result result = ReplayCompatibility.check(
             metadata("42.20.0", "other-save", "Apocalypse", "West Point, KY",
-                ReplayAppearance.none()), CURRENT);
+                Appearance.none()), CURRENT);
 
         assertEquals(5, result.warnings().size());
         assertTrue(result.warnings().get(0).contains("game version mismatch"));

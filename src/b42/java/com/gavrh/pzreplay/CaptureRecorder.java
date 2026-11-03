@@ -561,18 +561,18 @@ final class CaptureRecorder {
         persist(summary);
     }
 
-    private ReplayAppearanceChanges encodeAppearanceChanges() {
-        List<ReplayAppearanceChange> changes = appearanceCapture.changes();
+    private AppearanceChanges encodeAppearanceChanges() {
+        List<AppearanceChange> changes = appearanceCapture.changes();
         if (changes.isEmpty()) {
             if (appearanceCapture.isDropped() && !appearanceDropReported) {
                 appearanceDropReported = true;
                 System.out.println("[pz-replay] capture appearance changes dropped"
                     + " reason=limit changes=0");
             }
-            return ReplayAppearanceChanges.none();
+            return AppearanceChanges.none();
         }
         try {
-            ReplayAppearanceChanges encoded = ReplayAppearanceChanges.encode(changes);
+            AppearanceChanges encoded = AppearanceChanges.encode(changes);
             System.out.println("[pz-replay] capture appearance changes count="
                 + changes.size() + " bytes=" + encoded.data().length()
                 + (appearanceCapture.isDropped() ? " dropped=true" : ""));
@@ -580,22 +580,22 @@ final class CaptureRecorder {
         } catch (ReplayFormatException exception) {
             System.out.println("[pz-replay] appearance changes could not be written: "
                 + exception);
-            return ReplayAppearanceChanges.none();
+            return AppearanceChanges.none();
         }
     }
 
-    private ReplayEquipmentChanges encodeEquipmentChanges() {
-        List<ReplayEquipmentChange> changes = equipmentCapture.changes();
+    private EquipmentChanges encodeEquipmentChanges() {
+        List<EquipmentChange> changes = equipmentCapture.changes();
         if (changes.size() <= 1 && metadata.equipment().isCurrent()) {
             if (equipmentCapture.isDropped() && !equipmentDropReported) {
                 equipmentDropReported = true;
                 System.out.println("[pz-replay] capture equipment changes dropped"
                     + " reason=limit changes=" + changes.size());
             }
-            return ReplayEquipmentChanges.none();
+            return EquipmentChanges.none();
         }
         try {
-            ReplayEquipmentChanges encoded = ReplayEquipmentChanges.encode(changes);
+            EquipmentChanges encoded = EquipmentChanges.encode(changes);
             System.out.println("[pz-replay] capture equipment changes count="
                 + changes.size() + " bytes=" + encoded.data().length()
                 + (equipmentCapture.isDropped() ? " dropped=true" : ""));
@@ -604,7 +604,7 @@ final class CaptureRecorder {
             lastError = "equipment changes could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] equipment changes could not be written: "
                 + exception);
-            return ReplayEquipmentChanges.none();
+            return EquipmentChanges.none();
         }
     }
 
@@ -640,8 +640,8 @@ final class CaptureRecorder {
         }
     }
 
-    private ReplayVehicles encodeVehicles() {
-        ReplayVehicles vehicles = vehicleCapture.encode();
+    private Vehicles encodeVehicles() {
+        Vehicles vehicles = vehicleCapture.encode();
         int segments = vehicleCapture.getSegmentCount();
         int samples = vehicleCapture.getSampleCount();
         if (!vehicleCapture.getWarning().isBlank()) {

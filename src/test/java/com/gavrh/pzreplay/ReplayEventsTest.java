@@ -44,8 +44,8 @@ class ReplayEventsTest {
             30.0,
             1L,
             2L,
-            ReplayAppearance.none(),
-            ReplayEquipment.none(),
+            Appearance.none(),
+            Equipment.none(),
             events
         );
     }

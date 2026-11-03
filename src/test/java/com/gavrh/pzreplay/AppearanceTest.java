@@ -11,15 +11,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayAppearanceTest {
-    private static ReplayAppearance appearance(String value) {
-        return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+class AppearanceTest {
+    private static Appearance appearance(String value) {
+        return new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
     }
 
     @Test
     void missingAppearanceWarnsButDecodesNothing() {
-        ReplayAppearance appearance = ReplayAppearance.none();
+        Appearance appearance = Appearance.none();
 
         assertFalse(appearance.isPresent());
         assertEquals(1, appearance.warnings().size());
@@ -29,7 +29,7 @@ class ReplayAppearanceTest {
 
     @Test
     void currentAppearanceDecodesAndHasNoWarnings() throws Exception {
-        ReplayAppearance appearance = appearance("snapshot");
+        Appearance appearance = appearance("snapshot");
 
         assertTrue(appearance.isPresent());
         assertTrue(appearance.isCurrent());
@@ -40,8 +40,8 @@ class ReplayAppearanceTest {
 
     @Test
     void unsupportedVersionWarnsWithoutDecoding() {
-        ReplayAppearance appearance = new ReplayAppearance(
-            ReplayAppearance.CURRENT_VERSION + 1, "AQ==");
+        Appearance appearance = new Appearance(
+            Appearance.CURRENT_VERSION + 1, "AQ==");
 
         assertTrue(appearance.isPresent());
         assertFalse(appearance.isCurrent());
@@ -52,8 +52,8 @@ class ReplayAppearanceTest {
 
     @Test
     void corruptBase64WarnsWithoutCrashing() {
-        ReplayAppearance appearance = new ReplayAppearance(
-            ReplayAppearance.CURRENT_VERSION, "not base64!");
+        Appearance appearance = new Appearance(
+            Appearance.CURRENT_VERSION, "not base64!");
 
         assertEquals(1, appearance.warnings().size());
         assertTrue(appearance.warnings().get(0).contains("corrupt or incomplete"));
@@ -62,7 +62,7 @@ class ReplayAppearanceTest {
 
     @Test
     void emptyDataIsIncomplete() {
-        ReplayAppearance appearance = new ReplayAppearance(ReplayAppearance.CURRENT_VERSION, "");
+        Appearance appearance = new Appearance(Appearance.CURRENT_VERSION, "");
 
         assertEquals(1, appearance.warnings().size());
         assertTrue(appearance.warnings().get(0).contains("corrupt or incomplete"));
@@ -74,7 +74,7 @@ class ReplayAppearanceTest {
         values.put("appearance_version", "not-a-number");
         values.put("appearance_data", "AQ==");
 
-        ReplayAppearance appearance = ReplayAppearance.fromValues(values);
+        Appearance appearance = Appearance.fromValues(values);
 
         assertTrue(appearance.isPresent());
         assertEquals(-1, appearance.version());
@@ -86,10 +86,10 @@ class ReplayAppearanceTest {
     void metadataOmitsAppearanceKeysWhenMissing() {
         ReplayMetadata metadata = new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION, "0.0.0-dev", "42.21.0", "save", "Sandbox",
-            "map", "player", 1f, 2f, 0f, 30.0, 1L, 2L, ReplayAppearance.none());
+            "map", "player", 1f, 2f, 0f, 30.0, 1L, 2L, Appearance.none());
 
         assertFalse(metadata.toValues().containsKey("appearance_version"));
         assertFalse(metadata.toValues().containsKey("appearance_data"));
-        assertEquals(ReplayAppearance.none(), ReplayAppearance.fromValues(Map.of()));
+        assertEquals(Appearance.none(), Appearance.fromValues(Map.of()));
     }
 }

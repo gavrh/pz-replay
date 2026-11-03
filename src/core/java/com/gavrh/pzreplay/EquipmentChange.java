@@ -1,12 +1,12 @@
 package com.gavrh.pzreplay;
 
-public record ReplayAppearanceChange(
+public record EquipmentChange(
     long sequence,
     float timeSeconds,
-    ReplayAppearance appearance
+    Equipment equipment
 ) {
-    public ReplayAppearanceChange {
-        appearance = appearance == null ? ReplayAppearance.none() : appearance;
+    public EquipmentChange {
+        equipment = equipment == null ? Equipment.none() : equipment;
         if (!Float.isFinite(timeSeconds) || timeSeconds < 0.0f) {
             timeSeconds = 0.0f;
         }

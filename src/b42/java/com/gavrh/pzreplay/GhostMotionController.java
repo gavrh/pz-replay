@@ -23,8 +23,8 @@ public final class GhostMotionController {
     private State state = State.STOPPED;
     private double elapsed;
     private long lastReplayUpdateNanos;
-    private ReplayEquipment appliedEquipment;
-    private ReplayAppearance appliedAppearance;
+    private Equipment appliedEquipment;
+    private Appearance appliedAppearance;
     private ReplayVehicleVisual vehicleVisual;
     private String vehicleFailureKey = "";
     private boolean holdingGap;
@@ -306,7 +306,7 @@ public final class GhostMotionController {
 
     void markSpawnAppearanceApplied() {
         appliedAppearance = replay == null
-            ? ReplayAppearance.none() : replay.getInitialAppearance();
+            ? Appearance.none() : replay.getInitialAppearance();
     }
 
     public boolean isCameraFree() {
@@ -355,7 +355,7 @@ public final class GhostMotionController {
     private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             CaptureSample.Stance.STAND, sample.locomotion() != CaptureSample.Locomotion.IDLE,
-            false, ReplayEquipment.none(), ReplayAppearance.none(),
+            false, Equipment.none(), Appearance.none(),
             new ReplayTimeline.Movement(0.0f, 0.0f));
     }
 
@@ -419,8 +419,8 @@ public final class GhostMotionController {
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
         CaptureSample.Locomotion locomotion, CaptureSample.Stance stance,
-        boolean recordedMoving, boolean aiming, ReplayEquipment equipment,
-        ReplayAppearance appearance, ReplayTimeline.Movement movement) {
+        boolean recordedMoving, boolean aiming, Equipment equipment,
+        Appearance appearance, ReplayTimeline.Movement movement) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);
@@ -457,8 +457,8 @@ public final class GhostMotionController {
         ghost.setIsAiming(animation.aiming());
     }
 
-    private void applyEquipment(ReplayGhost ghost, ReplayEquipment equipment) {
-        ReplayEquipment next = equipment == null ? ReplayEquipment.none() : equipment;
+    private void applyEquipment(ReplayGhost ghost, Equipment equipment) {
+        Equipment next = equipment == null ? Equipment.none() : equipment;
         if (next.equals(appliedEquipment)) {
             return;
         }
@@ -489,8 +489,8 @@ public final class GhostMotionController {
         }
     }
 
-    private void applyAppearance(ReplayGhost ghost, ReplayAppearance appearance) {
-        ReplayAppearance next = appearance == null ? ReplayAppearance.none() : appearance;
+    private void applyAppearance(ReplayGhost ghost, Appearance appearance) {
+        Appearance next = appearance == null ? Appearance.none() : appearance;
         if (next.equals(appliedAppearance)) {
             return;
         }

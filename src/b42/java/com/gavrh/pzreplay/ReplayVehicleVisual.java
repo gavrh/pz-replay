@@ -22,7 +22,7 @@ final class ReplayVehicleVisual {
         this.key = key;
     }
 
-    static ReplayVehicleVisual spawn(ReplayVehicleSegment segment, Consumer<String> warning) {
+    static ReplayVehicleVisual spawn(VehicleSegment segment, Consumer<String> warning) {
         if (segment == null || segment.scriptName().isBlank()) {
             warn(warning, "recorded vehicle type is missing");
             return null;
@@ -81,7 +81,7 @@ final class ReplayVehicleVisual {
         return vehicle.getScriptName();
     }
 
-    boolean matches(ReplayVehicleSegment segment) {
+    boolean matches(VehicleSegment segment) {
         return segment != null && key.equals(segment.key());
     }
 

@@ -2,20 +2,20 @@ package com.gavrh.pzreplay;
 
 import java.util.List;
 
-public record ReplayVehicleSegment(
+public record VehicleSegment(
     float startTimeSeconds,
     float endTimeSeconds,
     String scriptName,
     String modelFile,
     int skinIndex,
     int seat,
-    List<ReplayVehicleSample> samples
+    List<VehicleSample> samples
 ) {
     public static final int MAX_SCRIPT_LENGTH = 128;
     public static final int MAX_MODEL_LENGTH = 256;
     public static final int MAX_SEAT = 7;
 
-    public ReplayVehicleSegment {
+    public VehicleSegment {
         scriptName = safe(scriptName, MAX_SCRIPT_LENGTH);
         modelFile = safe(modelFile, MAX_MODEL_LENGTH);
         samples = samples == null ? List.of() : List.copyOf(samples);
