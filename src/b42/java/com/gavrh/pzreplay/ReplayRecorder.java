@@ -17,8 +17,10 @@ final class ReplayRecorder {
     static final ReplayRecorder INSTANCE = new ReplayRecorder();
     private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
     private static final long APPEARANCE_CHECK_INTERVAL_MILLIS = 1000L;
+    private static final long EQUIPMENT_CHECK_INTERVAL_MILLIS = 1000L;
 
     private final ReplayAppearanceCapture appearanceCapture = new ReplayAppearanceCapture();
+    private final ReplayEquipmentCapture equipmentCapture = new ReplayEquipmentCapture();
     private final ReplayVehicleCapture vehicleCapture = new ReplayVehicleCapture();
     private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
@@ -27,6 +29,8 @@ final class ReplayRecorder {
     private long tickCounter;
     private long nextStatusLogMillis;
     private long nextAppearanceCheckMillis;
+    private long nextEquipmentCheckMillis;
+    private String lastEquipmentKey = "";
     private long captureCostNanos;
     private long captureCostMaxNanos;
     private long captureCostTicks;
@@ -36,6 +40,8 @@ final class ReplayRecorder {
     private boolean captureSitting;
     private boolean appearanceCaptureFailed;
     private boolean appearanceDropReported;
+    private boolean equipmentCaptureFailed;
+    private boolean equipmentDropReported;
     private String lastError;
     private String lastReplayPath;
     private String lastReplaySummary;
@@ -88,9 +94,13 @@ final class ReplayRecorder {
         captureInVehicle = false;
         captureSitting = false;
         appearanceCapture.reset();
+        equipmentCapture.reset();
         vehicleCapture.reset();
         appearanceCaptureFailed = false;
         appearanceDropReported = false;
+        equipmentCaptureFailed = false;
+        equipmentDropReported = false;
+        lastEquipmentKey = "";
         lastError = null;
         eventsDropped = false;
         captureResultPath = null;
@@ -107,7 +117,22 @@ final class ReplayRecorder {
             System.out.println("[pz-replay] appearance change baseline unavailable: "
                 + exception);
         }
+        IsoPlayer initialPlayer = IsoPlayer.getInstance();
+        if (initialPlayer != null) {
+            lastEquipmentKey = EquipmentSnapshot.visualKey(initialPlayer);
+        }
+        try {
+            if (metadata.equipment().isCurrent()) {
+                equipmentCapture.accept(0f, metadata.equipment().decode(),
+                    metadata.equipment());
+            }
+        } catch (ReplayFormatException exception) {
+            equipmentCaptureFailed = true;
+            System.out.println("[pz-replay] equipment change baseline unavailable: "
+                + exception);
+        }
         nextAppearanceCheckMillis = nowMillis + APPEARANCE_CHECK_INTERVAL_MILLIS;
+        nextEquipmentCheckMillis = nowMillis;
         nextStatusLogMillis = nowMillis + STATUS_LOG_INTERVAL_MILLIS;
         System.out.println("[pz-replay] capture started name=" + captureName
             + " rate=" + sampleRateHz + "Hz"
@@ -166,6 +191,7 @@ final class ReplayRecorder {
         session.tick(tickCounter, nowMillis, snapshot, paused);
         if (!paused && session.isRecording()) {
             captureAppearance(player, false);
+            captureEquipment(player, false);
         }
         recordCost(tickStartNanos);
         afterTick(nowMillis);
@@ -306,6 +332,46 @@ final class ReplayRecorder {
             if (!appearanceCaptureFailed) {
                 appearanceCaptureFailed = true;
                 System.out.println("[pz-replay] appearance change capture failed: "
+                    + exception);
+            }
+            return false;
+        }
+    }
+
+    private boolean captureEquipment(IsoPlayer player, boolean force) {
+        if (!session.isRecording() || equipmentCapture.isDropped()) {
+            return false;
+        }
+        long nowMillis = System.currentTimeMillis();
+        String key = EquipmentSnapshot.visualKey(player);
+        boolean changed = !key.equals(lastEquipmentKey);
+        if (!force && !changed && nowMillis < nextEquipmentCheckMillis) {
+            return false;
+        }
+        nextEquipmentCheckMillis = nowMillis + EQUIPMENT_CHECK_INTERVAL_MILLIS;
+        lastEquipmentKey = key;
+        try {
+            EquipmentSnapshot.Captured captured = EquipmentSnapshot.captureWithPayload(player);
+            boolean accepted = equipmentCapture.accept(session.currentTimeSeconds(),
+                captured.payload(), captured.equipment());
+            equipmentCaptureFailed = false;
+            if (accepted) {
+                System.out.println("[pz-replay] capture equipment change time="
+                    + String.format(Locale.ROOT, "%.3f", session.currentTimeSeconds())
+                    + " sequence=" + equipmentCapture.size()
+                    + " bytes=" + captured.payload().length
+                    + " changes=" + equipmentCapture.size());
+            }
+            if (equipmentCapture.isDropped() && !equipmentDropReported) {
+                equipmentDropReported = true;
+                System.out.println("[pz-replay] capture equipment changes dropped"
+                    + " reason=limit changes=" + equipmentCapture.size());
+            }
+            return accepted;
+        } catch (IOException | RuntimeException exception) {
+            if (!equipmentCaptureFailed) {
+                equipmentCaptureFailed = true;
+                System.out.println("[pz-replay] equipment change capture failed: "
                     + exception);
             }
             return false;
@@ -518,6 +584,29 @@ final class ReplayRecorder {
         }
     }
 
+    private ReplayEquipmentChanges encodeEquipmentChanges() {
+        List<ReplayEquipmentChange> changes = equipmentCapture.changes();
+        if (changes.size() <= 1 && metadata.equipment().isCurrent()) {
+            if (equipmentCapture.isDropped() && !equipmentDropReported) {
+                equipmentDropReported = true;
+                System.out.println("[pz-replay] capture equipment changes dropped"
+                    + " reason=limit changes=" + changes.size());
+            }
+            return ReplayEquipmentChanges.none();
+        }
+        try {
+            ReplayEquipmentChanges encoded = ReplayEquipmentChanges.encode(changes);
+            System.out.println("[pz-replay] capture equipment changes count="
+                + changes.size() + " bytes=" + encoded.data().length()
+                + (equipmentCapture.isDropped() ? " dropped=true" : ""));
+            return encoded;
+        } catch (ReplayFormatException exception) {
+            System.out.println("[pz-replay] equipment changes could not be written: "
+                + exception);
+            return ReplayEquipmentChanges.none();
+        }
+    }
+
     private ReplayEvents encodeEvents() {
         try {
             ReplayEvents events = ReplayEvents.encode(session.events());
@@ -572,6 +661,7 @@ final class ReplayRecorder {
         ReplayMetadata finalMetadata = metadata.withEnd(
             metadata.startTimeMillis() + durationMillis)
             .withAppearanceChanges(encodeAppearanceChanges())
+            .withEquipmentChanges(encodeEquipmentChanges())
             .withEvents(encodeEvents())
             .withVehicles(encodeVehicles())
             .withGaps(encodeGaps());

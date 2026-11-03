@@ -23,6 +23,9 @@ final class EquipmentSnapshot {
         byte[] visual) {
     }
 
+    record Captured(byte[] payload, ReplayEquipment equipment) {
+    }
+
     private final ItemData primary;
     private final ItemData secondary;
     private final boolean shared;
@@ -34,6 +37,10 @@ final class EquipmentSnapshot {
     }
 
     static ReplayEquipment capture(IsoPlayer player) throws IOException {
+        return captureWithPayload(player).equipment();
+    }
+
+    static Captured captureWithPayload(IsoPlayer player) throws IOException {
         InventoryItem primaryItem = player.getPrimaryHandItem();
         InventoryItem secondaryItem = player.getSecondaryHandItem();
         boolean shared = primaryItem != null && primaryItem == secondaryItem;
@@ -61,8 +68,31 @@ final class EquipmentSnapshot {
         payload.flip();
         byte[] bytes = new byte[payload.remaining()];
         payload.get(bytes);
-        return new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
+        ReplayEquipment equipment = new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
+        return new Captured(bytes, equipment);
+    }
+
+    static String visualKey(IsoPlayer player) {
+        try {
+            InventoryItem primaryItem = player.getPrimaryHandItem();
+            InventoryItem secondaryItem = player.getSecondaryHandItem();
+            boolean shared = primaryItem != null && primaryItem == secondaryItem;
+            return itemKey(primaryItem) + '|'
+                + (shared ? "shared" : itemKey(secondaryItem));
+        } catch (RuntimeException exception) {
+            return "";
+        }
+    }
+
+    private static String itemKey(InventoryItem item) {
+        if (item == null) {
+            return "";
+        }
+        return System.identityHashCode(item) + ":"
+            + safe(item.getFullType()) + ":"
+            + safe(item.getStaticModel()) + ":"
+            + item.getModelIndex();
     }
 
     static EquipmentSnapshot decode(ReplayEquipment equipment) throws ReplayFormatException {
