@@ -601,6 +601,7 @@ final class ReplayRecorder {
                 + (equipmentCapture.isDropped() ? " dropped=true" : ""));
             return encoded;
         } catch (ReplayFormatException exception) {
+            lastError = "equipment changes could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] equipment changes could not be written: "
                 + exception);
             return ReplayEquipmentChanges.none();
