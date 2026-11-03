@@ -138,7 +138,7 @@ public final class ReplayEquipmentChangeCodec {
                     continue;
                 }
                 if (time < previousTime - TIME_EPSILON) {
-                    addWarning(warnings, "equipment changes are out of order and were sorted");
+                    addWarning(warnings, "equipment changes are out of order");
                 }
                 previousTime = Math.max(previousTime, time);
                 ReplayEquipment equipment = new ReplayEquipment(snapshotVersion,
