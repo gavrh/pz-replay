@@ -10,7 +10,7 @@ class ReplayAnimationStateTest {
     @Test
     void walkingWhileAimingKeepsTheWalkAnimationAndAimBlend() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
 
         assertTrue(state.moving());
@@ -25,10 +25,10 @@ class ReplayAnimationStateTest {
     @Test
     void runningAndSprintingKeepTheirLocomotionClipsWhileAiming() {
         ReplayAnimationState run = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
         ReplayAnimationState sprint = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.SPRINT, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.SPRINT, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
 
         assertTrue(run.running());
@@ -42,7 +42,7 @@ class ReplayAnimationStateTest {
     @Test
     void sneakingWhileMovingKeepsTheSneakWalkState() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH, true, true,
+            CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, true, true,
             0.0f, 1.0f, false);
 
         assertTrue(state.moving());
@@ -55,7 +55,7 @@ class ReplayAnimationStateTest {
     @Test
     void crouchedIdleDoesNotUseTheSneakWalkAnimation() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH, false, true,
+            CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, false, true,
             0.0f, 1.0f, false);
 
         assertFalse(state.moving());
@@ -70,7 +70,7 @@ class ReplayAnimationStateTest {
     @Test
     void crouchedIdleWithoutAimAlsoStaysStill() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH, false, false,
+            CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, false, false,
             0.0f, 1.0f, false);
 
         assertFalse(state.moving());
@@ -82,7 +82,7 @@ class ReplayAnimationStateTest {
     @Test
     void legacyWalkingFramesStillMoveWithoutTheMovingFlag() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, false, false,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, false, false,
             0.0f, 0.0f, false);
 
         assertTrue(state.moving());
@@ -92,7 +92,7 @@ class ReplayAnimationStateTest {
     @Test
     void idleAimingKeepsTheAimPoseWithoutStrafing() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, false, true,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, false, true,
             0.0f, 1.0f, false);
 
         assertFalse(state.moving());
@@ -105,7 +105,7 @@ class ReplayAnimationStateTest {
     @Test
     void activeActionsPreserveTheRecordedAimForAttackVariants() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, true);
 
         assertTrue(state.aiming());
@@ -116,7 +116,7 @@ class ReplayAnimationStateTest {
     @Test
     void sidewaysMovementBlendsIntoTheStrafeAnimation() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             1.0f, 0.0f, false);
 
         assertTrue(state.strafing());
@@ -127,7 +127,7 @@ class ReplayAnimationStateTest {
     @Test
     void missingMovementFallsBackToForwardWalkWhileAiming() {
         ReplayAnimationState state = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, true, true,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             0.0f, 0.0f, false);
 
         assertEquals(0.0f, state.deltaX(), 0.0001f);
@@ -136,27 +136,27 @@ class ReplayAnimationStateTest {
 
     @Test
     void capturedCrouchedIdleIsIdleInsteadOfSneakWalk() {
-        assertEquals(ReplaySample.Locomotion.IDLE,
-            ReplaySample.Locomotion.fromState(false, false, true, false));
-        assertEquals(ReplaySample.Locomotion.SNEAK,
-            ReplaySample.Locomotion.fromState(false, false, true, true));
-        assertEquals(ReplaySample.Locomotion.IDLE,
-            ReplaySample.Locomotion.fromState(false, false, false, false));
-        assertEquals(ReplaySample.Locomotion.WALK,
-            ReplaySample.Locomotion.fromState(false, false, false, true));
-        assertEquals(ReplaySample.Locomotion.RUN,
-            ReplaySample.Locomotion.fromState(false, true, false, true));
-        assertEquals(ReplaySample.Locomotion.SPRINT,
-            ReplaySample.Locomotion.fromState(true, true, false, true));
+        assertEquals(CaptureSample.Locomotion.IDLE,
+            CaptureSample.Locomotion.fromState(false, false, true, false));
+        assertEquals(CaptureSample.Locomotion.SNEAK,
+            CaptureSample.Locomotion.fromState(false, false, true, true));
+        assertEquals(CaptureSample.Locomotion.IDLE,
+            CaptureSample.Locomotion.fromState(false, false, false, false));
+        assertEquals(CaptureSample.Locomotion.WALK,
+            CaptureSample.Locomotion.fromState(false, false, false, true));
+        assertEquals(CaptureSample.Locomotion.RUN,
+            CaptureSample.Locomotion.fromState(false, true, false, true));
+        assertEquals(CaptureSample.Locomotion.SPRINT,
+            CaptureSample.Locomotion.fromState(true, true, false, true));
     }
 
     @Test
     void stanceAndNullInputsAreNormalised() {
         ReplayAnimationState crouch = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.CROUCH, false, false,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.CROUCH, false, false,
             0.0f, 0.0f, false);
         ReplayAnimationState prone = ReplayAnimationState.compose(
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.PRONE, false, false,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.PRONE, false, false,
             0.0f, 0.0f, false);
         ReplayAnimationState empty = ReplayAnimationState.compose(null, null, false, false,
             0.0f, 0.0f, false);

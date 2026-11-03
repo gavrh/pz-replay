@@ -9,10 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReplayGapPlaybackTest {
-    private static ReplaySample frame(float time, float x) {
-        return new ReplaySample(0L, time, 0f, x, 0f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND,
-            ReplaySample.flags(false, false, false, false, false, true));
+    private static CaptureSample frame(float time, float x) {
+        return new CaptureSample(0L, time, 0f, x, 0f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND,
+            CaptureSample.flags(false, false, false, false, false, true));
     }
 
     private static ReplayMetadata metadata(ReplayGaps gaps, ReplayVehicles vehicles) {

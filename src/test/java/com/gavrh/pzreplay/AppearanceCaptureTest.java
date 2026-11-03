@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayAppearanceCaptureTest {
+class AppearanceCaptureTest {
     private static ReplayAppearance appearance(String value) {
         return new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
@@ -20,7 +20,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void ignoresPayloadsEqualToListedBaseline() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
         capture.markBaseline(payload("outfit-a"));
 
         assertFalse(capture.accept(1.0f, payload("outfit-a"), appearance("outfit-a")));
@@ -31,7 +31,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void recordsOneEntryPerMeaningfulChangeWithIncreasingSequence() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
 
         assertTrue(capture.accept(1.5f, payload("a"), appearance("a")));
         assertFalse(capture.accept(1.6f, payload("a"), appearance("a")));
@@ -47,7 +47,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void equalTimestampsKeepDistinctSequenceOrder() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
 
         assertTrue(capture.accept(2.0f, payload("a"), appearance("a")));
         assertTrue(capture.accept(2.0f, payload("b"), appearance("b")));
@@ -59,7 +59,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void dropsChangesAfterTheEntryLimit() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
         for (int index = 0; index < ReplayAppearanceChangeCodec.MAX_CHANGES; index++) {
             byte[] payload = new byte[] { (byte) index, (byte) (index >>> 8) };
             assertTrue(capture.accept(index, payload, appearance("entry")));
@@ -72,7 +72,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void dropsChangesAboveTheTotalSnapshotLimit() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
         byte[] large = new byte[ReplayAppearanceChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2 + 1];
         byte[] second = large.clone();
         second[0] = 1;
@@ -85,7 +85,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void rejectsEmptyOrUnsupportedSnapshots() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
 
         assertFalse(capture.accept(1.0f, new byte[0], appearance("empty")));
         assertFalse(capture.accept(2.0f, payload("a"),
@@ -97,7 +97,7 @@ class ReplayAppearanceCaptureTest {
 
     @Test
     void resetClearsBaselineDropsAndSequence() {
-        ReplayAppearanceCapture capture = new ReplayAppearanceCapture();
+        AppearanceCapture capture = new AppearanceCapture();
         capture.markBaseline(payload("baseline"));
         assertTrue(capture.accept(1.0f, payload("a"), appearance("a")));
 

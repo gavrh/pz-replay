@@ -11,19 +11,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReplayTimelineTest {
-    private static ReplaySample frame(float time, float x, float y, float z, float angle,
-        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance) {
-        return new ReplaySample(0L, time, 0f, x, y, z, angle, 0f, locomotion, stance, 0);
+    private static CaptureSample frame(float time, float x, float y, float z, float angle,
+        CaptureSample.Locomotion locomotion, CaptureSample.Stance stance) {
+        return new CaptureSample(0L, time, 0f, x, y, z, angle, 0f, locomotion, stance, 0);
     }
 
     private static ReplayTimeline timeline() throws ReplayFormatException {
         return new ReplayTimeline(List.of(
-            frame(10f, 100f, 200f, 0f, 170f, ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND),
-            frame(11f, 110f, 220f, 0.5f, -170f, ReplaySample.Locomotion.RUN,
-                ReplaySample.Stance.CROUCH),
-            frame(12f, 110f, 230f, 0f, 90f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND)
+            frame(10f, 100f, 200f, 0f, 170f, CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND),
+            frame(11f, 110f, 220f, 0.5f, -170f, CaptureSample.Locomotion.RUN,
+                CaptureSample.Stance.CROUCH),
+            frame(12f, 110f, 230f, 0f, 90f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND)
         ));
     }
 
@@ -32,20 +32,20 @@ class ReplayTimelineTest {
         ReplayTimeline timeline = timeline();
 
         assertSample(timeline.sampleAt(0.0), 0.0, 100f, 200f, 0f, 170f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
         assertSample(timeline.sampleAt(1.0), 1.0, 110f, 220f, 0.5f, -170f,
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.CROUCH);
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.CROUCH);
         assertSample(timeline.sampleAt(2.0), 2.0, 110f, 230f, 0f, 90f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND);
     }
 
     @Test
     void derivesTheRecordedMovementDirectionForAnimationBlending() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND),
-            frame(1f, 3f, 4f, 0f, 0f, ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND)
+            frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND),
+            frame(1f, 3f, 4f, 0f, 0f, CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND)
         ));
 
         ReplayTimeline.Movement movement = timeline.movementAt(0.5);
@@ -60,10 +60,10 @@ class ReplayTimelineTest {
     @Test
     void stationaryReplaysHaveNoMovementDirection() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            frame(0f, 5f, 5f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND),
-            frame(1f, 5f, 5f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND)
+            frame(0f, 5f, 5f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND),
+            frame(1f, 5f, 5f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND)
         ));
 
         ReplayTimeline.Movement movement = timeline.movementAt(0.5);
@@ -76,12 +76,12 @@ class ReplayTimelineTest {
     @Test
     void exposesTheRecordedMovingFlagFromTheActiveFrame() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH,
-                ReplaySample.flags(false, true, false, false, false, false)),
-            new ReplaySample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.SNEAK, ReplaySample.Stance.CROUCH,
-                ReplaySample.flags(false, true, false, false, false, true))
+            new CaptureSample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH,
+                CaptureSample.flags(false, true, false, false, false, false)),
+            new CaptureSample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH,
+                CaptureSample.flags(false, true, false, false, false, true))
         ));
 
         assertFalse(timeline.sampleAt(0.0).moving());
@@ -92,12 +92,12 @@ class ReplayTimelineTest {
     @Test
     void exposesAimingFromTheActiveFrame() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND,
-                ReplaySample.flags(true, false, false, false, false, true)),
-            new ReplaySample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND,
-                ReplaySample.flags(false, false, false, false, false, true))
+            new CaptureSample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND,
+                CaptureSample.flags(true, false, false, false, false, true)),
+            new CaptureSample(1L, 1f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND,
+                CaptureSample.flags(false, false, false, false, false, true))
         ));
 
         assertTrue(timeline.sampleAt(0.0).aiming());
@@ -127,8 +127,8 @@ class ReplayTimelineTest {
             equipment
         );
         ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,
-            List.of(frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND))));
+            List.of(frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND))));
 
         assertEquals(equipment, timeline.getEquipment());
         assertEquals(equipment, timeline.sampleAt(0.0).equipment());
@@ -139,16 +139,16 @@ class ReplayTimelineTest {
         ReplayTimeline.Sample sample = timeline().sampleAt(0.5);
 
         assertSample(sample, 0.5, 105f, 210f, 0.25f, 180f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
     }
 
     @Test
     void interpolatesFacingAcrossZero() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            frame(0f, 0f, 0f, 0f, 350f, ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND),
-            frame(1f, 0f, 0f, 0f, 10f, ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND)
+            frame(0f, 0f, 0f, 0f, 350f, CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND),
+            frame(1f, 0f, 0f, 0f, 10f, CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND)
         ));
 
         assertEquals(0f, timeline.sampleAt(0.5).facing(), 0.0001f);
@@ -159,9 +159,9 @@ class ReplayTimelineTest {
         ReplayTimeline timeline = timeline();
 
         assertSample(timeline.sampleAt(-5.0), 0.0, 100f, 200f, 0f, 170f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
         assertSample(timeline.sampleAt(50.0), 2.0, 110f, 230f, 0f, 90f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND);
     }
 
     @Test
@@ -219,13 +219,13 @@ class ReplayTimelineTest {
     @Test
     void singleFrameTimelineHoldsItsPoseAndEndsImmediately() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            frame(5f, 7f, 8f, 9f, 45f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.CROUCH)
+            frame(5f, 7f, 8f, 9f, 45f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.CROUCH)
         ));
 
         assertEquals(0.0, timeline.getDuration(), 0.0001);
         assertSample(timeline.sampleAt(0.0), 0.0, 7f, 8f, 9f, 45f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.CROUCH);
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.CROUCH);
         assertTrue(timeline.start());
         assertFalse(timeline.advance(0.1));
         assertFalse(timeline.isPlaying());
@@ -234,35 +234,35 @@ class ReplayTimelineTest {
     @Test
     void rejectsInvalidFrames() {
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
-            (List<ReplaySample>) null));
+            (List<CaptureSample>) null));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
-            Arrays.asList((ReplaySample) null)));
+            Arrays.asList((CaptureSample) null)));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(Arrays.asList(
-            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND),
+            frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND),
             null
         )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
-            frame(1f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND),
-            frame(1f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND)
+            frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND),
+            frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND)
         )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
-            frame(1f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND),
-            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND)
+            frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND),
+            frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND)
         )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
-            frame(Float.NaN, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE,
-                ReplaySample.Stance.STAND)
+            frame(Float.NaN, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
+                CaptureSample.Stance.STAND)
         )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
-            frame(0f, 0f, 0f, 0f, 0f, null, ReplaySample.Stance.STAND)
+            frame(0f, 0f, 0f, 0f, 0f, null, CaptureSample.Stance.STAND)
         )));
         assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
-            frame(0f, 0f, 0f, 0f, 0f, ReplaySample.Locomotion.IDLE, null)
+            frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE, null)
         )));
     }
 
@@ -286,7 +286,7 @@ class ReplayTimelineTest {
 
         assertTrue(timeline.seek(0.5));
         assertSample(timeline.sample(), 0.5, 105f, 210f, 0.25f, 180f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
         assertTrue(timeline.isPlaying());
     }
 
@@ -303,7 +303,7 @@ class ReplayTimelineTest {
         assertFalse(timeline.advance(0.1));
         assertEquals(1.5, timeline.getCurrentTime(), 0.0001);
         assertSample(timeline.sample(), 1.5, 110f, 225f, 0.25f, 140f,
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.CROUCH);
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.CROUCH);
     }
 
     @Test
@@ -362,13 +362,13 @@ class ReplayTimelineTest {
 
         assertEquals(1.0, timeline.getCurrentTime(), 0.0001);
         assertSample(timeline.sample(), 1.0, 110f, 220f, 0.5f, -170f,
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.CROUCH);
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.CROUCH);
 
         assertTrue(timeline.setSpeed(0.25));
         timeline.advance(0.2);
         assertEquals(1.05, timeline.getCurrentTime(), 0.0001);
         assertSample(timeline.sample(), 1.05, 110f, 220.5f, 0.475f, -175f,
-            ReplaySample.Locomotion.RUN, ReplaySample.Stance.CROUCH);
+            CaptureSample.Locomotion.RUN, CaptureSample.Stance.CROUCH);
     }
 
     @Test
@@ -380,7 +380,7 @@ class ReplayTimelineTest {
         assertTrue(timeline.setSpeed(4.0));
         assertEquals(0.4, timeline.getCurrentTime(), 0.0001);
         assertSample(timeline.sample(), 0.4, 104f, 208f, 0.2f, 178f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
     }
 
     @Test
@@ -414,7 +414,7 @@ class ReplayTimelineTest {
         assertFalse(timeline.isPlaying());
         assertEquals(0.0, timeline.getCurrentTime(), 0.0001);
         assertSample(timeline.sample(), 0.0, 100f, 200f, 0f, 170f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
     }
 
     @Test
@@ -444,7 +444,7 @@ class ReplayTimelineTest {
     }
 
     private static void assertSample(ReplayTimeline.Sample sample, double time, float x, float y,
-        float z, float facing, ReplaySample.Locomotion locomotion, ReplaySample.Stance stance) {
+        float z, float facing, CaptureSample.Locomotion locomotion, CaptureSample.Stance stance) {
         assertEquals(time, sample.time(), 0.0001);
         assertEquals(x, sample.x(), 0.0001f);
         assertEquals(y, sample.y(), 0.0001f);

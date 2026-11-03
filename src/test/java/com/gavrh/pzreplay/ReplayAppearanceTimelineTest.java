@@ -21,11 +21,11 @@ class ReplayAppearanceTimelineTest {
         return ReplayAppearanceChanges.encode(List.of(entries));
     }
 
-    private static List<ReplaySample> frames(int count) {
-        List<ReplaySample> frames = new ArrayList<>();
+    private static List<CaptureSample> frames(int count) {
+        List<CaptureSample> frames = new ArrayList<>();
         for (int index = 0; index <= count; index++) {
-            frames.add(new ReplaySample(index, index, 0f, index, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0));
+            frames.add(new CaptureSample(index, index, 0f, index, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0));
         }
         return frames;
     }

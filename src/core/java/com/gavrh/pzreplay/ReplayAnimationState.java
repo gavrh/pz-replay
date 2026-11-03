@@ -18,27 +18,27 @@ public record ReplayAnimationState(
     public static final float SNEAK_SPEED = 0.8f;
     public static final float MIN_MOVEMENT = 0.01f;
 
-    public static ReplayAnimationState compose(ReplaySample.Locomotion locomotion,
-        ReplaySample.Stance stance, boolean recordedMoving, boolean aiming, float deltaX,
+    public static ReplayAnimationState compose(CaptureSample.Locomotion locomotion,
+        CaptureSample.Stance stance, boolean recordedMoving, boolean aiming, float deltaX,
         float deltaY, boolean actionActive) {
-        ReplaySample.Locomotion movement = locomotion == null
-            ? ReplaySample.Locomotion.IDLE : locomotion;
-        ReplaySample.Stance position = stance == null
-            ? ReplaySample.Stance.STAND : stance;
-        boolean moving = movement != ReplaySample.Locomotion.IDLE
-            && (movement != ReplaySample.Locomotion.SNEAK || recordedMoving);
-        ReplaySample.Locomotion effectiveMovement = moving
-            ? movement : ReplaySample.Locomotion.IDLE;
-        boolean running = moving && (effectiveMovement == ReplaySample.Locomotion.RUN
-            || effectiveMovement == ReplaySample.Locomotion.SPRINT);
-        boolean sprinting = moving && effectiveMovement == ReplaySample.Locomotion.SPRINT;
-        boolean sneakMovement = moving && effectiveMovement == ReplaySample.Locomotion.SNEAK;
-        boolean crouch = position == ReplaySample.Stance.CROUCH;
-        boolean prone = position == ReplaySample.Stance.PRONE;
+        CaptureSample.Locomotion movement = locomotion == null
+            ? CaptureSample.Locomotion.IDLE : locomotion;
+        CaptureSample.Stance position = stance == null
+            ? CaptureSample.Stance.STAND : stance;
+        boolean moving = movement != CaptureSample.Locomotion.IDLE
+            && (movement != CaptureSample.Locomotion.SNEAK || recordedMoving);
+        CaptureSample.Locomotion effectiveMovement = moving
+            ? movement : CaptureSample.Locomotion.IDLE;
+        boolean running = moving && (effectiveMovement == CaptureSample.Locomotion.RUN
+            || effectiveMovement == CaptureSample.Locomotion.SPRINT);
+        boolean sprinting = moving && effectiveMovement == CaptureSample.Locomotion.SPRINT;
+        boolean sneakMovement = moving && effectiveMovement == CaptureSample.Locomotion.SNEAK;
+        boolean crouch = position == CaptureSample.Stance.CROUCH;
+        boolean prone = position == CaptureSample.Stance.PRONE;
         boolean locomotionAiming = aiming
             && (actionActive || !moving || keepsAim(effectiveMovement));
         boolean strafing = locomotionAiming
-            && effectiveMovement == ReplaySample.Locomotion.WALK;
+            && effectiveMovement == CaptureSample.Locomotion.WALK;
         float localX = 0.0f;
         float localY = 0.0f;
         if (strafing) {
@@ -62,12 +62,12 @@ public record ReplayAnimationState(
         );
     }
 
-    private static boolean keepsAim(ReplaySample.Locomotion locomotion) {
-        return locomotion == ReplaySample.Locomotion.IDLE
-            || locomotion == ReplaySample.Locomotion.WALK;
+    private static boolean keepsAim(CaptureSample.Locomotion locomotion) {
+        return locomotion == CaptureSample.Locomotion.IDLE
+            || locomotion == CaptureSample.Locomotion.WALK;
     }
 
-    private static float speed(ReplaySample.Locomotion locomotion) {
+    private static float speed(CaptureSample.Locomotion locomotion) {
         return switch (locomotion) {
             case RUN -> RUN_SPEED;
             case SPRINT -> SPRINT_SPEED;

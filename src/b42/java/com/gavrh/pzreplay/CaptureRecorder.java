@@ -13,15 +13,15 @@ import zombie.inventory.types.HandWeapon;
 import zombie.inventory.types.WeaponType;
 import zombie.vehicles.BaseVehicle;
 
-final class ReplayRecorder {
-    static final ReplayRecorder INSTANCE = new ReplayRecorder();
+final class CaptureRecorder {
+    static final CaptureRecorder INSTANCE = new CaptureRecorder();
     private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
     private static final long APPEARANCE_CHECK_INTERVAL_MILLIS = 1000L;
     private static final long EQUIPMENT_CHECK_INTERVAL_MILLIS = 1000L;
 
-    private final ReplayAppearanceCapture appearanceCapture = new ReplayAppearanceCapture();
-    private final ReplayEquipmentCapture equipmentCapture = new ReplayEquipmentCapture();
-    private final ReplayVehicleCapture vehicleCapture = new ReplayVehicleCapture();
+    private final AppearanceCapture appearanceCapture = new AppearanceCapture();
+    private final EquipmentCapture equipmentCapture = new EquipmentCapture();
+    private final VehicleCapture vehicleCapture = new VehicleCapture();
     private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
@@ -49,7 +49,7 @@ final class ReplayRecorder {
     private String captureResultPath;
     private String captureResultSummary;
 
-    private ReplayRecorder() {
+    private CaptureRecorder() {
     }
 
     boolean start(String name, double sampleRateHz) {
@@ -402,7 +402,7 @@ final class ReplayRecorder {
         }
         vehicle.jniTransform.getRotation(vehicleRotation);
         vehicleCapture.record(session.currentTimeSeconds(),
-            new ReplayVehicleCapture.VehicleSnapshot(
+            new VehicleCapture.VehicleSnapshot(
                 vehicle.getX(),
                 vehicle.getY(),
                 vehicle.getZ(),
@@ -740,7 +740,7 @@ final class ReplayRecorder {
             gameSeconds(),
             locomotion(sprinting, running, sneaking, moving),
             stance(prone, sneaking),
-            ReplaySample.flags(aiming, sneaking, sprinting, running, prone, moving,
+            CaptureSample.flags(aiming, sneaking, sprinting, running, prone, moving,
                 inVehicle)
         );
     }
@@ -753,18 +753,18 @@ final class ReplayRecorder {
         }
     }
 
-    private static ReplaySample.Locomotion locomotion(boolean sprinting, boolean running,
+    private static CaptureSample.Locomotion locomotion(boolean sprinting, boolean running,
         boolean sneaking, boolean moving) {
-        return ReplaySample.Locomotion.fromState(sprinting, running, sneaking, moving);
+        return CaptureSample.Locomotion.fromState(sprinting, running, sneaking, moving);
     }
 
-    private static ReplaySample.Stance stance(boolean prone, boolean sneaking) {
+    private static CaptureSample.Stance stance(boolean prone, boolean sneaking) {
         if (prone) {
-            return ReplaySample.Stance.PRONE;
+            return CaptureSample.Stance.PRONE;
         }
         if (sneaking) {
-            return ReplaySample.Stance.CROUCH;
+            return CaptureSample.Stance.CROUCH;
         }
-        return ReplaySample.Stance.STAND;
+        return CaptureSample.Stance.STAND;
     }
 }

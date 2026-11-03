@@ -3,7 +3,7 @@ package com.gavrh.pzreplay;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class ReplayVehicleCapture {
+public final class VehicleCapture {
     public static final double SAMPLE_INTERVAL_SECONDS = 0.1;
     public static final double HEARTBEAT_SECONDS = 1.0;
     public static final float POSITION_EPSILON = 0.005f;

@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayEquipmentCaptureTest {
+class EquipmentCaptureTest {
     private static ReplayEquipment equipment(String value) {
         return new ReplayEquipment(ReplayEquipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
@@ -21,7 +21,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void recordsT0AsTheFirstEntry() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
 
         assertTrue(capture.accept(0f, payload("initial"), equipment("initial")));
 
@@ -34,7 +34,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void ignoresAnUnchangedVisual() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
         capture.accept(0f, payload("initial"), equipment("initial"));
 
         assertFalse(capture.accept(1f, payload("initial"), equipment("initial")));
@@ -43,7 +43,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void recordsOnlyActualChangesWithIncreasingSequence() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
         capture.accept(0f, payload("initial"), equipment("initial"));
 
         assertTrue(capture.accept(1.25f, payload("pistol"), equipment("pistol")));
@@ -60,7 +60,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void resetClearsTheTimelineAndSequence() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
         capture.accept(0f, payload("initial"), equipment("initial"));
         capture.accept(1f, payload("pistol"), equipment("pistol"));
 
@@ -74,7 +74,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void rejectsMissingUnsupportedOrEmptyData() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
 
         assertFalse(capture.accept(0f, null, equipment("initial")));
         assertFalse(capture.accept(0f, new byte[0], equipment("initial")));
@@ -85,7 +85,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void dropsChangesPastTheCountLimitButKeepsEarlierOnes() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
         for (int index = 0; index < ReplayEquipmentChangeCodec.MAX_CHANGES; index++) {
             assertTrue(capture.accept(index, payload("item-" + index),
                 equipment("item-" + index)));
@@ -100,7 +100,7 @@ class ReplayEquipmentCaptureTest {
 
     @Test
     void dropsChangesPastTheByteLimit() {
-        ReplayEquipmentCapture capture = new ReplayEquipmentCapture();
+        EquipmentCapture capture = new EquipmentCapture();
         int half = ReplayEquipmentChangeCodec.MAX_TOTAL_SNAPSHOT_BYTES / 2;
         byte[] first = new byte[half];
         byte[] second = new byte[half];

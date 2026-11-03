@@ -26,7 +26,7 @@ public final class ReplayPlaybackApi {
             fail(path, "kill switch is enabled");
             return false;
         }
-        if (ReplayRecorder.INSTANCE.isRecording()) {
+        if (CaptureRecorder.INSTANCE.isRecording()) {
             fail(path, "recording is active");
             return false;
         }

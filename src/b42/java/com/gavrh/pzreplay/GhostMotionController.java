@@ -354,7 +354,7 @@ public final class GhostMotionController {
 
     private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            ReplaySample.Stance.STAND, sample.locomotion() != ReplaySample.Locomotion.IDLE,
+            CaptureSample.Stance.STAND, sample.locomotion() != CaptureSample.Locomotion.IDLE,
             false, ReplayEquipment.none(), ReplayAppearance.none(),
             new ReplayTimeline.Movement(0.0f, 0.0f));
     }
@@ -418,7 +418,7 @@ public final class GhostMotionController {
     }
 
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
-        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance,
+        CaptureSample.Locomotion locomotion, CaptureSample.Stance stance,
         boolean recordedMoving, boolean aiming, ReplayEquipment equipment,
         ReplayAppearance appearance, ReplayTimeline.Movement movement) {
         ghost.setForceX(x);

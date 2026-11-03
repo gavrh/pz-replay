@@ -36,13 +36,13 @@ public final class CaptureSession {
         float z,
         float angle,
         float gameTimeSeconds,
-        ReplaySample.Locomotion locomotion,
-        ReplaySample.Stance stance,
+        CaptureSample.Locomotion locomotion,
+        CaptureSample.Stance stance,
         int flags
     ) {
         public PlayerSnapshot {
-            locomotion = locomotion == null ? ReplaySample.Locomotion.IDLE : locomotion;
-            stance = stance == null ? ReplaySample.Stance.STAND : stance;
+            locomotion = locomotion == null ? CaptureSample.Locomotion.IDLE : locomotion;
+            stance = stance == null ? CaptureSample.Stance.STAND : stance;
         }
     }
 
@@ -76,7 +76,7 @@ public final class CaptureSession {
     private final double sampleIntervalSeconds;
     private final int maxFrames;
     private final double maxDurationSeconds;
-    private final List<ReplaySample> frames;
+    private final List<CaptureSample> frames;
     private final List<ReplayEvent> events;
     private final List<GapDraft> gaps;
     private final List<String> warnings;
@@ -211,7 +211,7 @@ public final class CaptureSession {
 
         float speed = speed(player);
         closeOpenGap((float) activeSeconds, player.x(), player.y(), player.z());
-        frames.add(new ReplaySample(
+        frames.add(new CaptureSample(
             tick,
             (float) activeSeconds,
             player.gameTimeSeconds(),
@@ -267,7 +267,7 @@ public final class CaptureSession {
         return lastSummary == null ? summary(false) : lastSummary;
     }
 
-    public List<ReplaySample> frames() {
+    public List<CaptureSample> frames() {
         return List.copyOf(frames);
     }
 
@@ -340,7 +340,7 @@ public final class CaptureSession {
         if (distance < TELEPORT_MIN_DISTANCE) {
             return false;
         }
-        boolean inVehicle = (player.flags() & ReplaySample.FLAG_IN_VEHICLE) != 0;
+        boolean inVehicle = (player.flags() & CaptureSample.FLAG_IN_VEHICLE) != 0;
         double speed = distance / deltaSeconds;
         if (inVehicle) {
             if (distance >= VEHICLE_TELEPORT_MIN_DISTANCE) {

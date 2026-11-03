@@ -19,9 +19,9 @@ class ReplayGapsTest {
     @TempDir
     Path tempDir;
 
-    private static ReplaySample frame(float time, float x) {
-        return new ReplaySample(0L, time, 0f, x, 20f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0);
+    private static CaptureSample frame(float time, float x) {
+        return new CaptureSample(0L, time, 0f, x, 20f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0);
     }
 
     private static ReplayGap gap(float start, float end, ReplayGap.Reason reason,

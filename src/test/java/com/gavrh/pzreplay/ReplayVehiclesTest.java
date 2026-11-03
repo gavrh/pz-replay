@@ -19,10 +19,10 @@ class ReplayVehiclesTest {
     @TempDir
     Path tempDir;
 
-    private static ReplaySample frame(float time, boolean inVehicle) {
-        return new ReplaySample(0L, time, 0f, 10f, 20f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND,
-            ReplaySample.flags(false, false, false, false, false, false, inVehicle));
+    private static CaptureSample frame(float time, boolean inVehicle) {
+        return new CaptureSample(0L, time, 0f, 10f, 20f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND,
+            CaptureSample.flags(false, false, false, false, false, false, inVehicle));
     }
 
     private static ReplayVehicleSample sample(float time, float x) {
@@ -151,7 +151,7 @@ class ReplayVehiclesTest {
 
     @Test
     void captureRecordsEnterExitAndSeatChanges() {
-        ReplayVehicleCapture capture = new ReplayVehicleCapture();
+        VehicleCapture capture = new VehicleCapture();
 
         capture.record(0.0f, snapshot(0f, 0f, "Base.Car", 0));
         capture.record(0.5f, snapshot(1f, 0f, "Base.Car", 0));
@@ -173,7 +173,7 @@ class ReplayVehiclesTest {
 
     @Test
     void captureDeduplicatesStationaryTransformsButKeepsAHeartbeat() {
-        ReplayVehicleCapture capture = new ReplayVehicleCapture();
+        VehicleCapture capture = new VehicleCapture();
 
         capture.record(0.0f, snapshot(0f, 0f, "Base.Car", 0));
         for (int step = 1; step < 10; step++) {
@@ -190,7 +190,7 @@ class ReplayVehiclesTest {
 
     @Test
     void captureSkipsVehiclesWithoutASafeIdentity() {
-        ReplayVehicleCapture capture = new ReplayVehicleCapture();
+        VehicleCapture capture = new VehicleCapture();
 
         capture.record(0.0f, snapshot(0f, 0f, "", 0));
         capture.record(0.2f, snapshot(1f, 0f, "Base.Car", 0));
@@ -245,9 +245,9 @@ class ReplayVehiclesTest {
             .warnings().stream().anyMatch(warning -> warning.contains("vehicle")));
     }
 
-    private static ReplayVehicleCapture.VehicleSnapshot snapshot(float x, float y,
+    private static VehicleCapture.VehicleSnapshot snapshot(float x, float y,
         String script, int seat) {
-        return new ReplayVehicleCapture.VehicleSnapshot(x, y, 0f, 0f, 0f, 0f, 1f,
+        return new VehicleCapture.VehicleSnapshot(x, y, 0f, 0f, 0f, 0f, 1f,
             script, "vehicles/model", 0, seat);
     }
 

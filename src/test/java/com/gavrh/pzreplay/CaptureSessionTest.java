@@ -19,9 +19,9 @@ class CaptureSessionTest {
             0f,
             45f,
             gameTime,
-            ReplaySample.Locomotion.IDLE,
-            ReplaySample.Stance.STAND,
-            ReplaySample.FLAG_MOVING
+            CaptureSample.Locomotion.IDLE,
+            CaptureSample.Stance.STAND,
+            CaptureSample.FLAG_MOVING
         );
     }
 
@@ -59,10 +59,10 @@ class CaptureSessionTest {
         assertEquals(30.0, summary.configuredRateHz());
         assertEquals(30.0, summary.actualRateHz(), 0.5);
 
-        List<ReplaySample> frames = session.frames();
+        List<CaptureSample> frames = session.frames();
         Set<Long> ticks = new HashSet<>();
         float previousTime = -1f;
-        for (ReplaySample frame : frames) {
+        for (CaptureSample frame : frames) {
             assertTrue(ticks.add(frame.tick()), "duplicate tick " + frame.tick());
             if (previousTime >= 0f) {
                 float delta = frame.timeSeconds() - previousTime;
@@ -96,7 +96,7 @@ class CaptureSessionTest {
         session.tick(2, 20L, player(0f, 0f, 0f), false);
         session.tick(3, 40L, player(1f, 0f, 0f), false);
 
-        List<ReplaySample> frames = session.frames();
+        List<CaptureSample> frames = session.frames();
         assertEquals(2, frames.size());
         assertEquals(0f, frames.get(0).speed(), 0.0001f);
         assertEquals(1f / 0.03f, frames.get(1).speed(), 0.01f);
@@ -224,7 +224,7 @@ class CaptureSessionTest {
         session.tick(1, 10L, player(0f, 0f, 0f), false);
         session.tick(2, 40L, player(0f, 0f, 0.09f), false);
 
-        List<ReplaySample> frames = session.frames();
+        List<CaptureSample> frames = session.frames();
         assertEquals(2, frames.size());
         assertEquals(0.09f, frames.get(1).gameTimeSeconds(), 0.0001f);
         assertEquals(0.04f, frames.get(1).timeSeconds(), 0.0001f);
@@ -251,7 +251,7 @@ class CaptureSessionTest {
         }
 
         CaptureSession.Summary summary = session.stop(CaptureSession.StopReason.REQUESTED);
-        List<ReplaySample> frames = session.frames();
+        List<CaptureSample> frames = session.frames();
 
         assertFalse(session.isRecording());
         assertEquals(frames.size(), summary.frameCount());
@@ -377,14 +377,14 @@ class CaptureSessionTest {
 
     @Test
     void flagsCoverAimingAndVehicleState() {
-        int flags = ReplaySample.flags(true, false, false, false, false, true, true);
-        ReplaySample sample = new ReplaySample(1, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, flags);
+        int flags = CaptureSample.flags(true, false, false, false, false, true, true);
+        CaptureSample sample = new CaptureSample(1, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, flags);
 
         assertTrue(sample.aiming());
         assertTrue(sample.inVehicle());
-        assertFalse(new ReplaySample(2, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0).aiming());
+        assertFalse(new CaptureSample(2, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0).aiming());
     }
 
     @Test
@@ -392,7 +392,7 @@ class CaptureSessionTest {
         CaptureSession.PlayerSnapshot snapshot = new CaptureSession.PlayerSnapshot(
             1f, 2f, 3f, 4f, 5f, null, null, 0);
 
-        assertEquals(ReplaySample.Locomotion.IDLE, snapshot.locomotion());
-        assertEquals(ReplaySample.Stance.STAND, snapshot.stance());
+        assertEquals(CaptureSample.Locomotion.IDLE, snapshot.locomotion());
+        assertEquals(CaptureSample.Stance.STAND, snapshot.stance());
     }
 }

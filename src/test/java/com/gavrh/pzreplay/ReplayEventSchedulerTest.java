@@ -78,10 +78,10 @@ class ReplayEventSchedulerTest {
     @Test
     void speedChangesOnlyMoveTheTimelineClock() throws Exception {
         ReplayTimeline timeline = new ReplayTimeline(List.of(
-            new ReplaySample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0),
-            new ReplaySample(1L, 2f, 0f, 0f, 0f, 0f, 0f, 0f,
-                ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0)
+            new CaptureSample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0),
+            new CaptureSample(1L, 2f, 0f, 0f, 0f, 0f, 0f, 0f,
+                CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0)
         ));
         ReplayEventScheduler scheduler = scheduler();
         timeline.start();

@@ -1,6 +1,6 @@
 package com.gavrh.pzreplay;
 
-public record ReplaySample(
+public record CaptureSample(
     long tick,
     float timeSeconds,
     float gameTimeSeconds,

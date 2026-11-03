@@ -9,12 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CaptureSessionGapTest {
-    private static final int FRAME_FLAGS = ReplaySample.flags(false, false, false, false,
+    private static final int FRAME_FLAGS = CaptureSample.flags(false, false, false, false,
         false, true);
 
     private static CaptureSession.PlayerSnapshot snapshot(float x, float y, int flags) {
         return new CaptureSession.PlayerSnapshot(x, y, 0f, 0f, 0f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, flags);
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, flags);
     }
 
     private static void tick(CaptureSession session, long tick, long wallMillis, float x,
@@ -63,7 +63,7 @@ class CaptureSessionGapTest {
     @Test
     void fastVehicleMovementIsNotClassifiedAsATeleport() {
         CaptureSession session = started();
-        int vehicleFlags = ReplaySample.flags(false, false, false, false, false, true,
+        int vehicleFlags = CaptureSample.flags(false, false, false, false, false, true,
             true);
 
         session.tick(1, 33, snapshot(0f, 0f, vehicleFlags), false);
@@ -76,7 +76,7 @@ class CaptureSessionGapTest {
     @Test
     void veryLargeVehicleJumpIsStillMarkedAsATeleportGap() {
         CaptureSession session = started();
-        int vehicleFlags = ReplaySample.flags(false, false, false, false, false, true,
+        int vehicleFlags = CaptureSample.flags(false, false, false, false, false, true,
             true);
 
         session.tick(1, 33, snapshot(0f, 0f, vehicleFlags), false);
@@ -170,7 +170,7 @@ class CaptureSessionGapTest {
     @Test
     void gapWarningListIsBoundedAndInputsAreNotMutated() {
         CaptureSession session = started();
-        int vehicleFlags = ReplaySample.flags(false, false, false, false, false, true,
+        int vehicleFlags = CaptureSample.flags(false, false, false, false, false, true,
             true);
         CaptureSession.PlayerSnapshot first = snapshot(0f, 0f, vehicleFlags);
         CaptureSession.PlayerSnapshot second = snapshot(100f, 0f, vehicleFlags);

@@ -28,7 +28,7 @@ public final class PZReplayLua {
 
     public static boolean startRecording(String name) {
         ReplaySettings settings = ReplaySettingsStore.get();
-        if (COUNTDOWN.isRunning() || ReplayRecorder.INSTANCE.isRecording()) {
+        if (COUNTDOWN.isRunning() || CaptureRecorder.INSTANCE.isRecording()) {
             return false;
         }
         String blocker = startBlocker(settings);
@@ -61,7 +61,7 @@ public final class PZReplayLua {
         if (COUNTDOWN.isRunning()) {
             return cancelCountdownInternal("requested");
         }
-        boolean stopped = ReplayRecorder.INSTANCE.stop();
+        boolean stopped = CaptureRecorder.INSTANCE.stop();
         if (stopped) {
             finishCapture();
         }
@@ -72,7 +72,7 @@ public final class PZReplayLua {
         if (COUNTDOWN.isRunning()) {
             return cancelCountdownInternal("player died");
         }
-        boolean stopped = ReplayRecorder.INSTANCE.stop(CaptureSession.StopReason.PLAYER_DEAD);
+        boolean stopped = CaptureRecorder.INSTANCE.stop(CaptureSession.StopReason.PLAYER_DEAD);
         if (stopped) {
             finishCapture();
         }
@@ -83,7 +83,7 @@ public final class PZReplayLua {
         if (COUNTDOWN.isRunning()) {
             return cancelCountdownInternal("world loading");
         }
-        boolean stopped = ReplayRecorder.INSTANCE.stop(CaptureSession.StopReason.LOADING);
+        boolean stopped = CaptureRecorder.INSTANCE.stop(CaptureSession.StopReason.LOADING);
         if (stopped) {
             finishCapture();
         }
@@ -107,7 +107,7 @@ public final class PZReplayLua {
     }
 
     public static String getRecordingName() {
-        return COUNTDOWN.isRunning() ? countdownName : ReplayRecorder.INSTANCE.getCaptureName();
+        return COUNTDOWN.isRunning() ? countdownName : CaptureRecorder.INSTANCE.getCaptureName();
     }
 
     public static String getLastRecordingResult() {
@@ -120,7 +120,7 @@ public final class PZReplayLua {
 
     public static void tick() {
         tickCountdown();
-        ReplayRecorder.INSTANCE.tick();
+        CaptureRecorder.INSTANCE.tick();
         syncRecordingState();
         ReplayPlaybackApi.tick();
     }
@@ -133,7 +133,7 @@ public final class PZReplayLua {
         if (!GameTime.isGamePaused()) {
             return;
         }
-        ReplayRecorder.INSTANCE.tickPaused();
+        CaptureRecorder.INSTANCE.tickPaused();
         syncRecordingState();
     }
 
@@ -142,16 +142,16 @@ public final class PZReplayLua {
     }
 
     public static boolean isRecording() {
-        return ReplayRecorder.INSTANCE.isRecording();
+        return CaptureRecorder.INSTANCE.isRecording();
     }
 
     public static boolean recordAction(String kind, String detail, float direction,
         float duration) {
-        return ReplayRecorder.INSTANCE.recordAction(kind, detail, direction, duration);
+        return CaptureRecorder.INSTANCE.recordAction(kind, detail, direction, duration);
     }
 
     public static boolean recordAppearanceChange() {
-        return ReplayRecorder.INSTANCE.recordAppearanceChange();
+        return CaptureRecorder.INSTANCE.recordAppearanceChange();
     }
 
     public static boolean isDebugEnabled() {
@@ -164,15 +164,15 @@ public final class PZReplayLua {
     }
 
     public static String getStatus() {
-        return ReplayRecorder.INSTANCE.getStatus();
+        return CaptureRecorder.INSTANCE.getStatus();
     }
 
     public static String getLastReplayPath() {
-        return ReplayRecorder.INSTANCE.getLastReplayPath();
+        return CaptureRecorder.INSTANCE.getLastReplayPath();
     }
 
     public static String getLastReplaySummary() {
-        return ReplayRecorder.INSTANCE.getLastReplaySummary();
+        return CaptureRecorder.INSTANCE.getLastReplaySummary();
     }
 
     public static float getRecordingSeconds() {
@@ -246,7 +246,7 @@ public final class PZReplayLua {
         }
         if (enabled) {
             cancelCountdownInternal("kill switch is enabled");
-            if (ReplayRecorder.INSTANCE.isRecording()) {
+            if (CaptureRecorder.INSTANCE.isRecording()) {
                 stopRecording();
             }
             ReplayPlaybackApi.stop();
@@ -330,7 +330,7 @@ public final class PZReplayLua {
         countdownName = "";
         countdownPaused = false;
         STATE.countdownFinished();
-        if (ReplayRecorder.INSTANCE.isRecording()) {
+        if (CaptureRecorder.INSTANCE.isRecording()) {
             failCapture("recording is already active");
             return;
         }
@@ -376,12 +376,12 @@ public final class PZReplayLua {
     }
 
     private static boolean startCapture(String name, ReplaySettings settings) {
-        boolean started = ReplayRecorder.INSTANCE.start(name, settings.getSampleRate());
+        boolean started = CaptureRecorder.INSTANCE.start(name, settings.getSampleRate());
         if (started) {
             STATE.recordingStarted(settings.getSampleRate(),
-                ReplayRecorder.INSTANCE.getCaptureName());
+                CaptureRecorder.INSTANCE.getCaptureName());
         } else {
-            String error = ReplayRecorder.INSTANCE.getLastError();
+            String error = CaptureRecorder.INSTANCE.getLastError();
             failCapture(error.isBlank() ? "capture could not start" : error);
         }
         return started;
@@ -402,8 +402,8 @@ public final class PZReplayLua {
     }
 
     private static void syncRecordingState() {
-        if (ReplayRecorder.INSTANCE.isRecording()) {
-            CaptureSession.Summary summary = ReplayRecorder.INSTANCE.getSummary();
+        if (CaptureRecorder.INSTANCE.isRecording()) {
+            CaptureSession.Summary summary = CaptureRecorder.INSTANCE.getSummary();
             STATE.recordingProgress(summary.durationSeconds(), summary.frameCount(),
                 summary.configuredRateHz(), summary.actualRateHz());
         } else if (STATE.isRecording()) {
@@ -412,13 +412,13 @@ public final class PZReplayLua {
     }
 
     private static void finishCapture() {
-        CaptureSession.Summary summary = ReplayRecorder.INSTANCE.getSummary();
-        String error = ReplayRecorder.INSTANCE.getLastError();
+        CaptureSession.Summary summary = CaptureRecorder.INSTANCE.getSummary();
+        String error = CaptureRecorder.INSTANCE.getLastError();
         if (error.isBlank() && summary.stopReason() == CaptureSession.StopReason.NO_FRAMES) {
             error = "no frames";
         }
-        STATE.recordingStopped(ReplayRecorder.INSTANCE.getCaptureResultPath(),
-            ReplayRecorder.INSTANCE.getCaptureResultSummary(), error);
+        STATE.recordingStopped(CaptureRecorder.INSTANCE.getCaptureResultPath(),
+            CaptureRecorder.INSTANCE.getCaptureResultSummary(), error);
     }
 
     private static void failCapture(String message) {

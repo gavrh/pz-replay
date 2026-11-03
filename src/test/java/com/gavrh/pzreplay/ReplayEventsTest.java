@@ -24,9 +24,9 @@ class ReplayEventsTest {
         return new ReplayEvent(sequence, time, kind, end, detail, 0f, 0f);
     }
 
-    private static ReplaySample frame(float time) {
-        return new ReplaySample(0L, time, 0f, 0f, 0f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0);
+    private static CaptureSample frame(float time) {
+        return new CaptureSample(0L, time, 0f, 0f, 0f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0);
     }
 
     private static ReplayMetadata metadata(ReplayEvents events) {

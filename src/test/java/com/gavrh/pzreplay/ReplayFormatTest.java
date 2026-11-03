@@ -49,14 +49,14 @@ class ReplayFormatTest {
         );
     }
 
-    private static List<ReplaySample> frames() {
-        List<ReplaySample> frames = new ArrayList<>();
-        frames.add(new ReplaySample(100, 0f, 10f, 1000.5f, 2000.25f, 0f, 45.5f,
-            1.25f, ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, 0b100000));
-        frames.add(new ReplaySample(130, 1f, 11f, 1001.25f, 2000.75f, 0f, 90.0f,
-            2.5f, ReplaySample.Locomotion.RUN, ReplaySample.Stance.STAND, 0b101000));
-        frames.add(new ReplaySample(160, 2f, 12f, 1002.0f, 2001.0f, 0.5f, 180.0f,
-            0f, ReplaySample.Locomotion.IDLE, ReplaySample.Stance.CROUCH, 0b10));
+    private static List<CaptureSample> frames() {
+        List<CaptureSample> frames = new ArrayList<>();
+        frames.add(new CaptureSample(100, 0f, 10f, 1000.5f, 2000.25f, 0f, 45.5f,
+            1.25f, CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, 0b100000));
+        frames.add(new CaptureSample(130, 1f, 11f, 1001.25f, 2000.75f, 0f, 90.0f,
+            2.5f, CaptureSample.Locomotion.RUN, CaptureSample.Stance.STAND, 0b101000));
+        frames.add(new CaptureSample(160, 2f, 12f, 1002.0f, 2001.0f, 0.5f, 180.0f,
+            0f, CaptureSample.Locomotion.IDLE, CaptureSample.Stance.CROUCH, 0b10));
         return frames;
     }
 
@@ -405,11 +405,11 @@ class ReplayFormatTest {
         return payload.toByteArray();
     }
 
-    private static List<ReplaySample> realisticFrames() {
-        List<ReplaySample> frames = new ArrayList<>(1800);
+    private static List<CaptureSample> realisticFrames() {
+        List<CaptureSample> frames = new ArrayList<>(1800);
         for (int index = 0; index < 1800; index++) {
             float time = index / 30f;
-            frames.add(new ReplaySample(
+            frames.add(new CaptureSample(
                 1000 + index,
                 time,
                 100f + time,
@@ -418,9 +418,9 @@ class ReplayFormatTest {
                 0f,
                 (float) (index * 0.01),
                 1.25f,
-                ReplaySample.Locomotion.WALK,
-                ReplaySample.Stance.STAND,
-                ReplaySample.FLAG_MOVING
+                CaptureSample.Locomotion.WALK,
+                CaptureSample.Stance.STAND,
+                CaptureSample.FLAG_MOVING
             ));
         }
         return frames;

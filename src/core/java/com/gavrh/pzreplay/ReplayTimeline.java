@@ -16,8 +16,8 @@ public final class ReplayTimeline {
         float y,
         float z,
         float facing,
-        ReplaySample.Locomotion locomotion,
-        ReplaySample.Stance stance,
+        CaptureSample.Locomotion locomotion,
+        CaptureSample.Stance stance,
         boolean moving,
         boolean aiming,
         boolean inVehicle,
@@ -45,7 +45,7 @@ public final class ReplayTimeline {
     public static final double MIN_SPEED = 0.25;
     public static final double MAX_SPEED = 4.0;
 
-    private final List<ReplaySample> frames;
+    private final List<CaptureSample> frames;
     private final double[] relativeTimes;
     private final double duration;
     private final ReplayEquipment equipment;
@@ -82,13 +82,13 @@ public final class ReplayTimeline {
                 ? ReplayGaps.none() : data.metadata().gaps());
     }
 
-    public ReplayTimeline(List<ReplaySample> frames) throws ReplayFormatException {
+    public ReplayTimeline(List<CaptureSample> frames) throws ReplayFormatException {
         this(frames, ReplayAppearance.none(), ReplayAppearanceChanges.none(),
             ReplayEquipment.none(), ReplayEquipmentChanges.none(), ReplayEvents.none(),
             ReplayVehicles.none(), ReplayGaps.none());
     }
 
-    private ReplayTimeline(List<ReplaySample> frames, ReplayAppearance appearance,
+    private ReplayTimeline(List<CaptureSample> frames, ReplayAppearance appearance,
         ReplayAppearanceChanges appearanceChanges, ReplayEquipment equipment,
         ReplayEquipmentChanges equipmentChanges, ReplayEvents events, ReplayVehicles vehicles,
         ReplayGaps gaps) throws ReplayFormatException {
@@ -96,7 +96,7 @@ public final class ReplayTimeline {
             throw new ReplayFormatException("replay data is missing");
         }
         this.equipment = equipment == null ? ReplayEquipment.none() : equipment;
-        List<ReplaySample> validated = new ArrayList<>(frames);
+        List<CaptureSample> validated = new ArrayList<>(frames);
         if (validated.isEmpty()) {
             this.frames = List.of();
             this.relativeTimes = new double[0];
@@ -114,7 +114,7 @@ public final class ReplayTimeline {
         }
 
         for (int index = 0; index < validated.size(); index++) {
-            ReplaySample frame = validated.get(index);
+            CaptureSample frame = validated.get(index);
             if (frame == null) {
                 throw new ReplayFormatException("replay frame " + index + " is missing");
             }
@@ -124,7 +124,7 @@ public final class ReplayTimeline {
         double firstSeconds = validated.get(0).timeSeconds();
         double[] times = new double[validated.size()];
         for (int index = 0; index < validated.size(); index++) {
-            ReplaySample frame = validated.get(index);
+            CaptureSample frame = validated.get(index);
             double relative = (double) frame.timeSeconds() - firstSeconds;
             if (relative < 0.0 || (index > 0 && relative <= times[index - 1])) {
                 throw new ReplayFormatException("replay frame times are not increasing at frame "
@@ -263,8 +263,8 @@ public final class ReplayTimeline {
             return sampleOf(hold.frameIndex(), target);
         }
 
-        ReplaySample start = frames.get(index);
-        ReplaySample end = frames.get(index + 1);
+        CaptureSample start = frames.get(index);
+        CaptureSample end = frames.get(index + 1);
         double span = relativeTimes[index + 1] - relativeTimes[index];
         if (span <= 0.0) {
             return sampleOf(index, target);
@@ -676,7 +676,7 @@ public final class ReplayTimeline {
     }
 
     private Sample sampleOf(int index, double equipmentTime) {
-        ReplaySample frame = frames.get(index);
+        CaptureSample frame = frames.get(index);
         return new Sample(
             relativeTimes[index],
             frame.x(),
@@ -692,7 +692,7 @@ public final class ReplayTimeline {
         );
     }
 
-    private static void validateFrame(ReplaySample frame, int index) throws ReplayFormatException {
+    private static void validateFrame(CaptureSample frame, int index) throws ReplayFormatException {
         if (!Float.isFinite(frame.timeSeconds())
             || !Float.isFinite(frame.x())
             || !Float.isFinite(frame.y())

@@ -15,10 +15,10 @@ class ReplayEquipmentTimelineTest {
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
     }
 
-    private static ReplaySample frame(float time, float x) {
-        return new ReplaySample(0L, time, 0f, x, 0f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND,
-            ReplaySample.flags(false, false, false, false, false, false));
+    private static CaptureSample frame(float time, float x) {
+        return new CaptureSample(0L, time, 0f, x, 0f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND,
+            CaptureSample.flags(false, false, false, false, false, false));
     }
 
     private static ReplayMetadata metadata(ReplayEquipment initial,
