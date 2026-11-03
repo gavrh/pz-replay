@@ -18,7 +18,7 @@ public final class GhostMotionController {
     private final ScriptedGhostPath path;
     private final PlaybackTimeline replay;
     private final Consumer<String> warning;
-    private final ReplayCameraController camera = new ReplayCameraController();
+    private final CameraController camera = new CameraController();
     private final GhostActionController actions;
     private State state = State.STOPPED;
     private double elapsed;
@@ -284,7 +284,7 @@ public final class GhostMotionController {
         camera.update(ghost, delta);
     }
 
-    public boolean setCameraMode(ReplayCameraMode mode, GhostActor ghost) {
+    public boolean setCameraMode(CameraMode mode, GhostActor ghost) {
         return camera.setMode(mode, ghost);
     }
 
@@ -296,7 +296,7 @@ public final class GhostMotionController {
         return camera.exitFree(ghost);
     }
 
-    public ReplayCameraMode getCameraMode() {
+    public CameraMode getCameraMode() {
         return camera.getMode();
     }
 

@@ -11,17 +11,17 @@ import zombie.iso.IsoUtils;
 import zombie.iso.IsoWorld;
 import zombie.iso.PlayerCamera;
 
-public final class ReplayCameraController {
+public final class CameraController {
     private static final float PAN_SPEED_TILES_PER_SECOND = 8.0f;
     private static final float MAX_STEP_SECONDS = 0.1f;
 
     private final FreeCamera freeCamera = new FreeCamera();
     private final CameraSmoothing smoothing = new CameraSmoothing();
-    private ReplayCameraMode mode = ReplayCameraMode.PLAYER;
-    private ReplayCameraMode modeBeforeFree = ReplayCameraMode.PLAYER;
+    private CameraMode mode = CameraMode.PLAYER;
+    private CameraMode modeBeforeFree = CameraMode.PLAYER;
     private boolean returningToPlayer;
 
-    public boolean setMode(ReplayCameraMode requested, GhostActor ghost) {
+    public boolean setMode(CameraMode requested, GhostActor ghost) {
         if (requested == null) {
             return false;
         }
@@ -30,12 +30,12 @@ public final class ReplayCameraController {
         if (player == null || camera == null) {
             return false;
         }
-        if (requested != ReplayCameraMode.PLAYER && ghost == null) {
+        if (requested != CameraMode.PLAYER && ghost == null) {
             return false;
         }
 
-        ReplayCameraMode previous = mode;
-        ReplayCameraMode previousBeforeFree = modeBeforeFree;
+        CameraMode previous = mode;
+        CameraMode previousBeforeFree = modeBeforeFree;
         boolean previousReturning = returningToPlayer;
         try {
             switch (requested) {
@@ -52,12 +52,12 @@ public final class ReplayCameraController {
             mode = previous;
             modeBeforeFree = previousBeforeFree;
             returningToPlayer = previousReturning;
-            if (previous != ReplayCameraMode.FREE) {
+            if (previous != CameraMode.FREE) {
                 freeCamera.reset();
             }
             smoothing.clear();
             restorePlayerCamera();
-            if (mode == ReplayCameraMode.FOLLOW_GHOST && ghost != null) {
+            if (mode == CameraMode.FOLLOW_GHOST && ghost != null) {
                 snapFollow(ghost, player, camera);
                 camera.center();
             }
@@ -68,16 +68,16 @@ public final class ReplayCameraController {
     }
 
     public boolean setFollow(boolean enabled, GhostActor ghost) {
-        return setMode(enabled ? ReplayCameraMode.FOLLOW_GHOST : ReplayCameraMode.PLAYER, ghost);
+        return setMode(enabled ? CameraMode.FOLLOW_GHOST : CameraMode.PLAYER, ghost);
     }
 
     public boolean exitFree(GhostActor ghost) {
-        if (mode != ReplayCameraMode.FREE) {
+        if (mode != CameraMode.FREE) {
             return false;
         }
-        ReplayCameraMode target = modeBeforeFree;
-        if (target == ReplayCameraMode.FREE) {
-            target = ReplayCameraMode.PLAYER;
+        CameraMode target = modeBeforeFree;
+        if (target == CameraMode.FREE) {
+            target = CameraMode.PLAYER;
         }
         return setMode(target, ghost);
     }
@@ -88,7 +88,7 @@ public final class ReplayCameraController {
         if (player == null || camera == null) {
             return;
         }
-        if (mode == ReplayCameraMode.FOLLOW_GHOST) {
+        if (mode == CameraMode.FOLLOW_GHOST) {
             if (ghost != null) {
                 smoothing.setTarget(ghost.getX() - player.getX(),
                     ghost.getY() - player.getY());
@@ -97,7 +97,7 @@ public final class ReplayCameraController {
             }
             return;
         }
-        if (mode == ReplayCameraMode.FREE) {
+        if (mode == CameraMode.FREE) {
             updateFreeCamera(player, camera, deltaSeconds);
             return;
         }
@@ -114,7 +114,7 @@ public final class ReplayCameraController {
         if (player == null || camera == null) {
             return;
         }
-        if (mode == ReplayCameraMode.FOLLOW_GHOST) {
+        if (mode == CameraMode.FOLLOW_GHOST) {
             if (ghost != null) {
                 if (!smoothing.isActive()) {
                     snapFollow(ghost, player, camera);
@@ -124,7 +124,7 @@ public final class ReplayCameraController {
             }
             return;
         }
-        if (mode == ReplayCameraMode.FREE) {
+        if (mode == CameraMode.FREE) {
             applyFreeCamera(player, camera);
             return;
         }
@@ -136,7 +136,7 @@ public final class ReplayCameraController {
     }
 
     public void resetSmoothing(GhostActor ghost) {
-        if (mode != ReplayCameraMode.FOLLOW_GHOST || ghost == null) {
+        if (mode != CameraMode.FOLLOW_GHOST || ghost == null) {
             return;
         }
         IsoPlayer player = localPlayer();
@@ -149,8 +149,8 @@ public final class ReplayCameraController {
     }
 
     public void restore() {
-        mode = ReplayCameraMode.PLAYER;
-        modeBeforeFree = ReplayCameraMode.PLAYER;
+        mode = CameraMode.PLAYER;
+        modeBeforeFree = CameraMode.PLAYER;
         returningToPlayer = false;
         freeCamera.reset();
         smoothing.clear();
@@ -158,16 +158,16 @@ public final class ReplayCameraController {
         System.out.println("[pz-replay] replay camera restored mode=player");
     }
 
-    public ReplayCameraMode getMode() {
+    public CameraMode getMode() {
         return mode;
     }
 
     public boolean isFollowing() {
-        return mode == ReplayCameraMode.FOLLOW_GHOST;
+        return mode == CameraMode.FOLLOW_GHOST;
     }
 
     public boolean isFree() {
-        return mode == ReplayCameraMode.FREE;
+        return mode == CameraMode.FREE;
     }
 
     public String status(GhostActor ghost) {
@@ -226,13 +226,13 @@ public final class ReplayCameraController {
     }
 
     private void enterFree(IsoPlayer player, PlayerCamera camera) {
-        if (mode == ReplayCameraMode.FREE) {
+        if (mode == CameraMode.FREE) {
             return;
         }
         modeBeforeFree = mode;
         if (!freeCamera.moveTo(player.getX() + camera.deferedX,
             player.getY() + camera.deferedY)) {
-            modeBeforeFree = ReplayCameraMode.PLAYER;
+            modeBeforeFree = CameraMode.PLAYER;
             throw new IllegalStateException("free camera position is invalid");
         }
         freeCamera.clampTo(player.getX(), player.getY());

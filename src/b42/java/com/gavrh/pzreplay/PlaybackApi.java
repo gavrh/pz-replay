@@ -124,11 +124,11 @@ public final class PlaybackApi {
             return false;
         }
         state.setCompatibilityWarnings(warnings);
-        ReplayCameraMode initialMode = settings.isCameraFollowDefault()
-            ? ReplayCameraMode.FOLLOW_GHOST : ReplayCameraMode.PLAYER;
+        CameraMode initialMode = settings.isCameraFollowDefault()
+            ? CameraMode.FOLLOW_GHOST : CameraMode.PLAYER;
         if (!loadedController.setCameraMode(initialMode, ghost)
-            && initialMode != ReplayCameraMode.PLAYER) {
-            loadedController.setCameraMode(ReplayCameraMode.PLAYER, ghost);
+            && initialMode != CameraMode.PLAYER) {
+            loadedController.setCameraMode(CameraMode.PLAYER, ghost);
         }
         state.setCameraMode(loadedController.getCameraMode());
 
@@ -168,7 +168,7 @@ public final class PlaybackApi {
             state.playbackStopped();
         }
         if (active != null) {
-            ReplayCameraController.restorePlayerCamera();
+            CameraController.restorePlayerCamera();
         }
         return active != null;
     }
@@ -268,7 +268,7 @@ public final class PlaybackApi {
     }
 
     public static boolean setCameraMode(String modeId) {
-        ReplayCameraMode mode = ReplayCameraMode.fromId(modeId);
+        CameraMode mode = CameraMode.fromId(modeId);
         if (mode == null || controller == null) {
             return false;
         }
@@ -357,7 +357,7 @@ public final class PlaybackApi {
             timeline = null;
             lastPath = "";
             reportedFinished = false;
-            ReplayCameraController.restorePlayerCamera();
+            CameraController.restorePlayerCamera();
             state.playbackFailed("ghost was removed");
             return;
         }
@@ -388,7 +388,7 @@ public final class PlaybackApi {
         timeline = null;
         lastPath = "";
         reportedFinished = false;
-        ReplayCameraController.restorePlayerCamera();
+        CameraController.restorePlayerCamera();
     }
 
     private static void syncTransportState() {

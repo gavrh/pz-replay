@@ -119,7 +119,7 @@ public final class GhostApi {
             return true;
         } catch (Throwable t) {
             PlaybackApi.onGhostDespawned();
-            ReplayCameraController.restorePlayerCamera();
+            CameraController.restorePlayerCamera();
             return false;
         }
     }

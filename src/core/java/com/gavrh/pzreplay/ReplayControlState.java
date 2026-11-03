@@ -23,7 +23,7 @@ public final class ReplayControlState {
     private double playbackSpeed = 1.0;
     private double playbackTime;
     private double playbackDuration;
-    private ReplayCameraMode cameraMode = ReplayCameraMode.PLAYER;
+    private CameraMode cameraMode = CameraMode.PLAYER;
     private String playbackError = "";
     private List<String> compatibilityWarnings = List.of();
 
@@ -116,17 +116,17 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = Math.max(0.0, duration);
-        cameraMode = ReplayCameraMode.PLAYER;
+        cameraMode = CameraMode.PLAYER;
         playbackError = "";
         compatibilityWarnings = List.of();
         return true;
     }
 
     public synchronized void playbackProgress(double time, double duration,
-        ReplayCameraMode mode) {
+        CameraMode mode) {
         playbackTime = Math.max(0.0, time);
         playbackDuration = Math.max(0.0, duration);
-        cameraMode = mode == null ? ReplayCameraMode.PLAYER : mode;
+        cameraMode = mode == null ? CameraMode.PLAYER : mode;
     }
 
     public synchronized void setPlaybackPaused(boolean paused) {
@@ -145,7 +145,7 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
-        cameraMode = ReplayCameraMode.PLAYER;
+        cameraMode = CameraMode.PLAYER;
     }
 
     public synchronized void playbackFailed(String error) {
@@ -154,7 +154,7 @@ public final class ReplayControlState {
         playbackSpeed = 1.0;
         playbackTime = 0.0;
         playbackDuration = 0.0;
-        cameraMode = ReplayCameraMode.PLAYER;
+        cameraMode = CameraMode.PLAYER;
         playbackError = safe(error);
         compatibilityWarnings = List.of();
     }
@@ -163,7 +163,7 @@ public final class ReplayControlState {
         compatibilityWarnings = warnings == null ? List.of() : List.copyOf(warnings);
     }
 
-    public synchronized boolean setCameraMode(ReplayCameraMode mode) {
+    public synchronized boolean setCameraMode(CameraMode mode) {
         if (mode == null) {
             return false;
         }
@@ -172,7 +172,7 @@ public final class ReplayControlState {
     }
 
     public synchronized boolean setCameraMode(String modeId) {
-        return setCameraMode(ReplayCameraMode.fromId(modeId));
+        return setCameraMode(CameraMode.fromId(modeId));
     }
 
     public synchronized void clearErrors() {
@@ -256,7 +256,7 @@ public final class ReplayControlState {
         return playbackDuration;
     }
 
-    public synchronized ReplayCameraMode getCameraMode() {
+    public synchronized CameraMode getCameraMode() {
         return cameraMode;
     }
 
@@ -269,7 +269,7 @@ public final class ReplayControlState {
     }
 
     public synchronized boolean isCameraFollow() {
-        return cameraMode == ReplayCameraMode.FOLLOW_GHOST;
+        return cameraMode == CameraMode.FOLLOW_GHOST;
     }
 
     public synchronized String getPlaybackError() {

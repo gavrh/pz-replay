@@ -2,7 +2,7 @@ package com.gavrh.pzreplay;
 
 import java.util.Locale;
 
-public enum ReplayCameraMode {
+public enum CameraMode {
     PLAYER("player", "Player"),
     FOLLOW_GHOST("follow_ghost", "Follow ghost"),
     FREE("free", "Free camera");
@@ -10,7 +10,7 @@ public enum ReplayCameraMode {
     private final String id;
     private final String label;
 
-    ReplayCameraMode(String id, String label) {
+    CameraMode(String id, String label) {
         this.id = id;
         this.label = label;
     }
@@ -23,12 +23,12 @@ public enum ReplayCameraMode {
         return label;
     }
 
-    public static ReplayCameraMode fromId(String id) {
+    public static CameraMode fromId(String id) {
         if (id == null) {
             return null;
         }
         String normalized = id.trim().toLowerCase(Locale.ROOT);
-        for (ReplayCameraMode mode : values()) {
+        for (CameraMode mode : values()) {
             if (mode.id.equals(normalized)) {
                 return mode;
             }
