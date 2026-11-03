@@ -1,6 +1,6 @@
 package com.gavrh.pzreplay;
 
-public record ReplayGap(
+public record TimelineGap(
     float startTimeSeconds,
     float endTimeSeconds,
     Reason reason,
@@ -40,7 +40,7 @@ public record ReplayGap(
         }
     }
 
-    public ReplayGap {
+    public TimelineGap {
         if (!Float.isFinite(startTimeSeconds) || startTimeSeconds < 0.0f) {
             startTimeSeconds = 0.0f;
         }

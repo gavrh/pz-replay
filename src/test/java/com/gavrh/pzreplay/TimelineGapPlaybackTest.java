@@ -8,14 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayGapPlaybackTest {
+class TimelineGapPlaybackTest {
     private static CaptureSample frame(float time, float x) {
         return new CaptureSample(0L, time, 0f, x, 0f, 0f, 0f, 0f,
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND,
             CaptureSample.flags(false, false, false, false, false, true));
     }
 
-    private static ReplayMetadata metadata(ReplayGaps gaps, Vehicles vehicles) {
+    private static ReplayMetadata metadata(TimelineGaps gaps, Vehicles vehicles) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -33,17 +33,17 @@ class ReplayGapPlaybackTest {
             Appearance.none(),
             AppearanceChanges.none(),
             Equipment.none(),
-            ReplayEvents.none(),
+            ActionEvents.none(),
             vehicles,
             gaps
         );
     }
 
-    private static ReplayTimeline teleportTimeline(Vehicles vehicles)
+    private static PlaybackTimeline teleportTimeline(Vehicles vehicles)
         throws ReplayFormatException {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(new ReplayGap(
-            10.5f, 11.0f, ReplayGap.Reason.TELEPORT, 5f, 0f, 0f, 100f, 0f, 0f)));
-        return new ReplayTimeline(new ReplayData(metadata(gaps, vehicles), List.of(
+        TimelineGaps gaps = TimelineGaps.encode(List.of(new TimelineGap(
+            10.5f, 11.0f, TimelineGap.Reason.TELEPORT, 5f, 0f, 0f, 100f, 0f, 0f)));
+        return new PlaybackTimeline(new ReplayData(metadata(gaps, vehicles), List.of(
             frame(10f, 0f),
             frame(10.5f, 5f),
             frame(11f, 100f),
@@ -53,7 +53,7 @@ class ReplayGapPlaybackTest {
     @Test
     void positionIsHeldAtTheLastValidSampleInsteadOfInterpolatingAcrossTheGap()
         throws Exception {
-        ReplayTimeline timeline = teleportTimeline(Vehicles.none());
+        PlaybackTimeline timeline = teleportTimeline(Vehicles.none());
 
         assertEquals(1, timeline.getGapCount());
         assertEquals(2.5f, timeline.sampleAt(0.25).x(), 0.0001f);
@@ -63,15 +63,15 @@ class ReplayGapPlaybackTest {
         assertEquals(100f, timeline.sampleAt(1.0).x(), 0.0001f);
         assertEquals(101f, timeline.sampleAt(1.5).x(), 0.0001f);
         assertTrue(timeline.isGapHold(0.75));
-        assertEquals(ReplayGap.Reason.TELEPORT, timeline.gapReasonAt(0.75));
+        assertEquals(TimelineGap.Reason.TELEPORT, timeline.gapReasonAt(0.75));
         assertNull(timeline.gapReasonAt(1.0));
     }
 
     @Test
     void holdExtendsToTheFirstFrameAfterAnUnalignedGapEnd() throws Exception {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(new ReplayGap(
-            1.0f, 1.2f, ReplayGap.Reason.TELEPORT, 0f, 0f, 0f, 50f, 0f, 0f)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(
+        TimelineGaps gaps = TimelineGaps.encode(List.of(new TimelineGap(
+            1.0f, 1.2f, TimelineGap.Reason.TELEPORT, 0f, 0f, 0f, 50f, 0f, 0f)));
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(
             metadata(gaps, Vehicles.none()), List.of(
                 frame(0f, 0f),
                 frame(1.0f, 0f),
@@ -87,11 +87,11 @@ class ReplayGapPlaybackTest {
 
     @Test
     void movementDirectionIsNotDerivedAcrossAGap() throws Exception {
-        ReplayTimeline timeline = teleportTimeline(Vehicles.none());
+        PlaybackTimeline timeline = teleportTimeline(Vehicles.none());
 
-        ReplayTimeline.Movement held = timeline.movementAt(0.75);
-        ReplayTimeline.Movement before = timeline.movementAt(0.3);
-        ReplayTimeline.Movement after = timeline.movementAt(1.5);
+        PlaybackTimeline.Movement held = timeline.movementAt(0.75);
+        PlaybackTimeline.Movement before = timeline.movementAt(0.3);
+        PlaybackTimeline.Movement after = timeline.movementAt(1.5);
 
         assertFalse(held.isMoving());
         assertTrue(before.isMoving());
@@ -100,7 +100,7 @@ class ReplayGapPlaybackTest {
 
     @Test
     void seekReconstructsTheCorrectSideOfTheGap() throws Exception {
-        ReplayTimeline timeline = teleportTimeline(Vehicles.none());
+        PlaybackTimeline timeline = teleportTimeline(Vehicles.none());
         timeline.start();
 
         assertTrue(timeline.seek(0.75));
@@ -121,7 +121,7 @@ class ReplayGapPlaybackTest {
 
     @Test
     void speedAdvanceSnapsToTheDestinationWithoutInterpolating() throws Exception {
-        ReplayTimeline timeline = teleportTimeline(Vehicles.none());
+        PlaybackTimeline timeline = teleportTimeline(Vehicles.none());
         timeline.start();
 
         assertTrue(timeline.advance(0.2));
@@ -141,7 +141,7 @@ class ReplayGapPlaybackTest {
             new VehicleSegment(0f, 2f, "Base.Car", "vehicles/car", 0, 0,
                 List.of(new VehicleSample(0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f),
                     new VehicleSample(2f, 200f, 0f, 0f, 0f, 0f, 0f, 1f)))));
-        ReplayTimeline timeline = teleportTimeline(vehicles);
+        PlaybackTimeline timeline = teleportTimeline(vehicles);
 
         assertEquals(1, timeline.getVehicleCount());
         assertEquals(50f, timeline.vehicleAt(0.5).x(), 0.0001f);
@@ -151,7 +151,7 @@ class ReplayGapPlaybackTest {
 
     @Test
     void endOfReplayStopsAtTheRecordedEnd() throws Exception {
-        ReplayTimeline timeline = teleportTimeline(Vehicles.none());
+        PlaybackTimeline timeline = teleportTimeline(Vehicles.none());
         timeline.start();
 
         assertFalse(timeline.advance(10.0));

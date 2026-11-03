@@ -38,7 +38,7 @@ public final class ReplaySurfaceApi {
     }
 
     public static String escapeAction() {
-        switch (MODEL.escapeAction(ReplayPlaybackApi.isCameraFree())) {
+        switch (MODEL.escapeAction(PlaybackApi.isCameraFree())) {
             case DIALOG:
                 return "dialog";
             case FREE_CAMERA:

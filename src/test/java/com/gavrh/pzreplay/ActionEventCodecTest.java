@@ -10,33 +10,33 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayEventCodecTest {
-    private static ReplayEvent event(long sequence, float time, ReplayEvent.Kind kind,
+class ActionEventCodecTest {
+    private static ActionEvent event(long sequence, float time, ActionEvent.Kind kind,
         boolean end, String detail, float direction, float duration) {
-        return new ReplayEvent(sequence, time, kind, end, detail, direction, duration);
+        return new ActionEvent(sequence, time, kind, end, detail, direction, duration);
     }
 
     @Test
     void roundTripsEveryFieldAndPreservesOrder() throws Exception {
-        ReplayActionContext melee = new ReplayActionContext("1handed", "overhead", "",
+        ActionEventContext melee = new ActionEventContext("1handed", "overhead", "",
             true, false, false, false, false, false, false);
-        ReplayActionContext ranged = new ReplayActionContext("handgun", "shot", "Single",
+        ActionEventContext ranged = new ActionEventContext("handgun", "shot", "Single",
             true, false, false, true, false, false, false);
-        List<ReplayEvent> events = List.of(
-            new ReplayEvent(2, 0.25f, ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+        List<ActionEvent> events = List.of(
+            new ActionEvent(2, 0.25f, ActionEvent.Kind.MELEE_ATTACK, false, "1handed",
                 45f, 1.2f, melee),
-            new ReplayEvent(3, 0.5f, ReplayEvent.Kind.RANGED_ATTACK, false, "handgun",
+            new ActionEvent(3, 0.5f, ActionEvent.Kind.RANGED_ATTACK, false, "handgun",
                 -10f, 0.9f, ranged),
-            event(4, 0.75f, ReplayEvent.Kind.RELOAD, false, "handgun", 0f, 2.2f),
-            event(5, 0.9f, ReplayEvent.Kind.DOOR, false, "door", 180f, 0.6f),
-            event(6, 1.0f, ReplayEvent.Kind.SIT, false, "ground", 90f, 0f),
-            event(7, 3.0f, ReplayEvent.Kind.SIT, true, "ground", 90f, 0f),
-            event(8, 4.0f, ReplayEvent.Kind.FALL, false, "", 0f, 1.0f),
-            event(9, 5.0f, ReplayEvent.Kind.CLIMB, false, "window", 270f, 1.5f)
+            event(4, 0.75f, ActionEvent.Kind.RELOAD, false, "handgun", 0f, 2.2f),
+            event(5, 0.9f, ActionEvent.Kind.DOOR, false, "door", 180f, 0.6f),
+            event(6, 1.0f, ActionEvent.Kind.SIT, false, "ground", 90f, 0f),
+            event(7, 3.0f, ActionEvent.Kind.SIT, true, "ground", 90f, 0f),
+            event(8, 4.0f, ActionEvent.Kind.FALL, false, "", 0f, 1.0f),
+            event(9, 5.0f, ActionEvent.Kind.CLIMB, false, "window", 270f, 1.5f)
         );
 
-        ReplayEventCodec.Result result =
-            ReplayEventCodec.decode(ReplayEventCodec.encode(events));
+        ActionEventCodec.Result result =
+            ActionEventCodec.decode(ActionEventCodec.encode(events));
 
         assertEquals(events, result.events());
         assertTrue(result.warnings().isEmpty());
@@ -46,25 +46,25 @@ class ReplayEventCodecTest {
     void decodesVersionOneEventsWithoutAnimationContext() throws Exception {
         byte[] encoded = versionOneEvent(1L, 0.5f, 1, false, "1handed", 45f, 1.2f);
 
-        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+        ActionEventCodec.Result result = ActionEventCodec.decode(encoded);
 
         assertEquals(1, result.events().size());
-        assertEquals(ReplayActionContext.none(), result.events().get(0).context());
+        assertEquals(ActionEventContext.none(), result.events().get(0).context());
         assertTrue(result.warnings().isEmpty());
     }
 
     @Test
     void unknownContextFlagsKeepKnownStateAndWarn() throws Exception {
-        ReplayActionContext context = new ReplayActionContext("knife", "miss", "",
+        ActionEventContext context = new ActionEventContext("knife", "miss", "",
             false, false, false, false, false, false, false);
-        byte[] encoded = ReplayEventCodec.encode(List.of(
-            new ReplayEvent(1, 0.5f, ReplayEvent.Kind.MELEE_ATTACK, false, "knife",
+        byte[] encoded = ActionEventCodec.encode(List.of(
+            new ActionEvent(1, 0.5f, ActionEvent.Kind.MELEE_ATTACK, false, "knife",
                 0f, 1f, context)));
         int flagsOffset = 2 + 4 + 4 + 4 + 1 + 1 + 4 + 4 + 2
             + "knife".getBytes(StandardCharsets.UTF_8).length;
         encoded[flagsOffset] = (byte) 0x80;
 
-        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+        ActionEventCodec.Result result = ActionEventCodec.decode(encoded);
 
         assertEquals(1, result.events().size());
         assertEquals(context, result.events().get(0).context());
@@ -74,30 +74,30 @@ class ReplayEventCodecTest {
 
     @Test
     void invalidContextDataDegradesTheEventWithAWarning() throws Exception {
-        ReplayActionContext context = new ReplayActionContext("axe", "overhead", "",
+        ActionEventContext context = new ActionEventContext("axe", "overhead", "",
             true, false, false, false, false, false, false);
-        byte[] encoded = ReplayEventCodec.encode(List.of(
-            new ReplayEvent(1, 0.5f, ReplayEvent.Kind.MELEE_ATTACK, false, "axe",
+        byte[] encoded = ActionEventCodec.encode(List.of(
+            new ActionEvent(1, 0.5f, ActionEvent.Kind.MELEE_ATTACK, false, "axe",
                 0f, 1f, context)));
         int weaponOffset = 2 + 4 + 4 + 4 + 1 + 1 + 4 + 4 + 2
             + "axe".getBytes(StandardCharsets.UTF_8).length + 4;
         encoded[weaponOffset] = (byte) 0x7F;
 
-        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+        ActionEventCodec.Result result = ActionEventCodec.decode(encoded);
 
         assertEquals(1, result.events().size());
-        assertEquals(ReplayActionContext.none(), result.events().get(0).context());
+        assertEquals(ActionEventContext.none(), result.events().get(0).context());
         assertEquals(1, result.warnings().size());
         assertTrue(result.warnings().get(0).contains("invalid animation context"));
     }
 
     @Test
     void unknownEventTypeIsIgnoredWithAWarning() throws Exception {
-        byte[] encoded = ReplayEventCodec.encode(List.of(
-            event(1, 0.5f, ReplayEvent.Kind.MELEE_ATTACK, false, "1handed", 0f, 1f)));
+        byte[] encoded = ActionEventCodec.encode(List.of(
+            event(1, 0.5f, ActionEvent.Kind.MELEE_ATTACK, false, "1handed", 0f, 1f)));
         encoded[14] = 99;
 
-        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+        ActionEventCodec.Result result = ActionEventCodec.decode(encoded);
 
         assertTrue(result.events().isEmpty());
         assertEquals(1, result.warnings().size());
@@ -106,12 +106,12 @@ class ReplayEventCodecTest {
 
     @Test
     void invalidEventValuesAreIgnoredWithAWarning() throws Exception {
-        byte[] encoded = ReplayEventCodec.encode(List.of(
-            event(1, 0.5f, ReplayEvent.Kind.FALL, false, "", 0f, 1f)));
+        byte[] encoded = ActionEventCodec.encode(List.of(
+            event(1, 0.5f, ActionEvent.Kind.FALL, false, "", 0f, 1f)));
         int timeOffset = 2 + 4 + 4;
         java.nio.ByteBuffer.wrap(encoded).putFloat(timeOffset, Float.NaN);
 
-        ReplayEventCodec.Result result = ReplayEventCodec.decode(encoded);
+        ActionEventCodec.Result result = ActionEventCodec.decode(encoded);
 
         assertTrue(result.events().isEmpty());
         assertEquals(1, result.warnings().size());
@@ -121,29 +121,29 @@ class ReplayEventCodecTest {
     @Test
     void truncatedPayloadIsRejected() {
         assertThrows(ReplayFormatException.class,
-            () -> ReplayEventCodec.decode(new byte[] { 0, 1 }));
+            () -> ActionEventCodec.decode(new byte[] { 0, 1 }));
         assertThrows(ReplayFormatException.class,
-            () -> ReplayEventCodec.decode(new byte[] { 0, 1, 0, 0, 0, 1, 0 }));
+            () -> ActionEventCodec.decode(new byte[] { 0, 1, 0, 0, 0, 1, 0 }));
     }
 
     @Test
     void eventCountIsBounded() {
         byte[] encoded = new byte[6];
         java.nio.ByteBuffer.wrap(encoded).putShort(0, (short) 1)
-            .putInt(2, ReplayEventCodec.MAX_EVENTS + 1);
+            .putInt(2, ActionEventCodec.MAX_EVENTS + 1);
 
-        assertThrows(ReplayFormatException.class, () -> ReplayEventCodec.decode(encoded));
+        assertThrows(ReplayFormatException.class, () -> ActionEventCodec.decode(encoded));
     }
 
     @Test
     void oversizedDetailIsTruncatedByTheModelAndStillRoundTrips() throws Exception {
-        String detail = "x".repeat(ReplayEvent.MAX_DETAIL_LENGTH + 20);
-        ReplayEvent event = event(1, 0f, ReplayEvent.Kind.CLIMB, false, detail, 0f, 0f);
+        String detail = "x".repeat(ActionEvent.MAX_DETAIL_LENGTH + 20);
+        ActionEvent event = event(1, 0f, ActionEvent.Kind.CLIMB, false, detail, 0f, 0f);
 
-        ReplayEvent decoded = ReplayEventCodec.decode(
-            ReplayEventCodec.encode(List.of(event))).events().get(0);
+        ActionEvent decoded = ActionEventCodec.decode(
+            ActionEventCodec.encode(List.of(event))).events().get(0);
 
-        assertEquals(ReplayEvent.MAX_DETAIL_LENGTH, decoded.detail().length());
+        assertEquals(ActionEvent.MAX_DETAIL_LENGTH, decoded.detail().length());
         assertEquals(event, decoded);
     }
 
@@ -168,12 +168,12 @@ class ReplayEventCodecTest {
 
     @Test
     void tooManyEventsCannotBeEncoded() {
-        List<ReplayEvent> events = new java.util.ArrayList<>();
-        for (int index = 0; index < ReplayEventCodec.MAX_EVENTS + 1; index++) {
-            events.add(event(index, 0f, ReplayEvent.Kind.DOOR, false,
+        List<ActionEvent> events = new java.util.ArrayList<>();
+        for (int index = 0; index < ActionEventCodec.MAX_EVENTS + 1; index++) {
+            events.add(event(index, 0f, ActionEvent.Kind.DOOR, false,
                 Integer.toString(index), 0f, 0f));
         }
 
-        assertThrows(ReplayFormatException.class, () -> ReplayEventCodec.encode(events));
+        assertThrows(ReplayFormatException.class, () -> ActionEventCodec.encode(events));
     }
 }

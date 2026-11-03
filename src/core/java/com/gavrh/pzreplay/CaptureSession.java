@@ -11,7 +11,7 @@ public final class CaptureSession {
     public static final int MAX_FRAMES = 54_000;
     public static final double MAX_DURATION_SECONDS = 30.0 * 60.0;
     public static final int ESTIMATED_BYTES_PER_FRAME = BinaryReplayCodec.RECORD_BYTES;
-    public static final int MAX_EVENTS = ReplayEventCodec.MAX_EVENTS;
+    public static final int MAX_EVENTS = ActionEventCodec.MAX_EVENTS;
     static final long MAX_ACTIVE_WALL_DELTA_MILLIS = 250L;
     static final double EVENT_DEDUPE_SECONDS = 0.08;
     static final float TELEPORT_MIN_DISTANCE = 10.0f;
@@ -77,7 +77,7 @@ public final class CaptureSession {
     private final int maxFrames;
     private final double maxDurationSeconds;
     private final List<CaptureSample> frames;
-    private final List<ReplayEvent> events;
+    private final List<ActionEvent> events;
     private final List<GapDraft> gaps;
     private final List<String> warnings;
 
@@ -168,7 +168,7 @@ public final class CaptureSession {
         pausedLastTick = paused;
         if (paused) {
             if (!wasPaused) {
-                openGap(ReplayGap.Reason.RECORDING_PAUSE);
+                openGap(TimelineGap.Reason.RECORDING_PAUSE);
             }
             pausedSeconds += activeDeltaMillis / 1000.0;
             return;
@@ -192,7 +192,7 @@ public final class CaptureSession {
         boolean discontinuity = false;
         if (hasLastPosition && openGap == null) {
             if (wallDeltaMillis > activeDeltaMillis) {
-                openGap(ReplayGap.Reason.LONG_TICK);
+                openGap(TimelineGap.Reason.LONG_TICK);
                 discontinuity = true;
             } else {
                 discontinuity = openTeleportGap(player);
@@ -271,12 +271,12 @@ public final class CaptureSession {
         return List.copyOf(frames);
     }
 
-    public List<ReplayEvent> events() {
+    public List<ActionEvent> events() {
         return List.copyOf(events);
     }
 
-    public List<ReplayGap> gaps() {
-        List<ReplayGap> result = new ArrayList<>(gaps.size() + 1);
+    public List<TimelineGap> gaps() {
+        List<TimelineGap> result = new ArrayList<>(gaps.size() + 1);
         for (GapDraft draft : gaps) {
             result.add(draft.toGap());
         }
@@ -294,14 +294,14 @@ public final class CaptureSession {
         return (float) activeSeconds;
     }
 
-    public boolean recordEvent(ReplayEvent.Kind kind, boolean end, String detail,
+    public boolean recordEvent(ActionEvent.Kind kind, boolean end, String detail,
         float direction, float durationSeconds) {
         return recordEvent(kind, end, detail, direction, durationSeconds,
-            ReplayActionContext.none());
+            ActionEventContext.none());
     }
 
-    public boolean recordEvent(ReplayEvent.Kind kind, boolean end, String detail,
-        float direction, float durationSeconds, ReplayActionContext context) {
+    public boolean recordEvent(ActionEvent.Kind kind, boolean end, String detail,
+        float direction, float durationSeconds, ActionEventContext context) {
         if (!recording || kind == null) {
             return false;
         }
@@ -309,13 +309,13 @@ public final class CaptureSession {
             return false;
         }
         String safeDetail = detail == null ? "" : detail;
-        if (safeDetail.length() > ReplayEvent.MAX_DETAIL_LENGTH) {
-            safeDetail = safeDetail.substring(0, ReplayEvent.MAX_DETAIL_LENGTH);
+        if (safeDetail.length() > ActionEvent.MAX_DETAIL_LENGTH) {
+            safeDetail = safeDetail.substring(0, ActionEvent.MAX_DETAIL_LENGTH);
         }
-        ReplayActionContext safeContext =
-            context == null ? ReplayActionContext.none() : context;
+        ActionEventContext safeContext =
+            context == null ? ActionEventContext.none() : context;
         if (!events.isEmpty()) {
-            ReplayEvent previous = events.get(events.size() - 1);
+            ActionEvent previous = events.get(events.size() - 1);
             if (previous.kind() == kind
                 && previous.end() == end
                 && previous.detail().equals(safeDetail)
@@ -324,7 +324,7 @@ public final class CaptureSession {
                 return false;
             }
         }
-        events.add(new ReplayEvent(events.size() + 1L, (float) activeSeconds, kind, end,
+        events.add(new ActionEvent(events.size() + 1L, (float) activeSeconds, kind, end,
             safeDetail, direction, durationSeconds, safeContext));
         return true;
     }
@@ -344,11 +344,11 @@ public final class CaptureSession {
         double speed = distance / deltaSeconds;
         if (inVehicle) {
             if (distance >= VEHICLE_TELEPORT_MIN_DISTANCE) {
-                openGap(ReplayGap.Reason.TELEPORT);
+                openGap(TimelineGap.Reason.TELEPORT);
                 return true;
             }
         } else if (speed >= TELEPORT_MIN_SPEED) {
-            openGap(ReplayGap.Reason.TELEPORT);
+            openGap(TimelineGap.Reason.TELEPORT);
             return true;
         }
         recordWarning("unclassified discontinuity distance="
@@ -357,7 +357,7 @@ public final class CaptureSession {
         return false;
     }
 
-    private void openGap(ReplayGap.Reason reason) {
+    private void openGap(TimelineGap.Reason reason) {
         if (openGap != null || !hasLastPosition || reason == null) {
             return;
         }
@@ -379,14 +379,14 @@ public final class CaptureSession {
         }
     }
 
-    private static ReplayGap.Reason gapReason(StopReason reason) {
+    private static TimelineGap.Reason gapReason(StopReason reason) {
         if (reason == StopReason.PLAYER_DEAD) {
-            return ReplayGap.Reason.DEATH;
+            return TimelineGap.Reason.DEATH;
         }
         if (reason == StopReason.LOADING) {
-            return ReplayGap.Reason.LOADING;
+            return TimelineGap.Reason.LOADING;
         }
-        return ReplayGap.Reason.PLAYER_UNAVAILABLE;
+        return TimelineGap.Reason.PLAYER_UNAVAILABLE;
     }
 
     private static double square(float value) {
@@ -399,7 +399,7 @@ public final class CaptureSession {
 
     private static final class GapDraft {
         private final float startTimeSeconds;
-        private final ReplayGap.Reason reason;
+        private final TimelineGap.Reason reason;
         private final float lastX;
         private final float lastY;
         private final float lastZ;
@@ -408,7 +408,7 @@ public final class CaptureSession {
         private float nextY;
         private float nextZ;
 
-        private GapDraft(float startTimeSeconds, ReplayGap.Reason reason,
+        private GapDraft(float startTimeSeconds, TimelineGap.Reason reason,
             float lastX, float lastY, float lastZ) {
             this.startTimeSeconds = startTimeSeconds;
             this.endTimeSeconds = startTimeSeconds;
@@ -428,8 +428,8 @@ public final class CaptureSession {
             this.nextZ = nextZ;
         }
 
-        private ReplayGap toGap() {
-            return new ReplayGap(startTimeSeconds, endTimeSeconds, reason,
+        private TimelineGap toGap() {
+            return new TimelineGap(startTimeSeconds, endTimeSeconds, reason,
                 lastX, lastY, lastZ, nextX, nextY, nextZ);
         }
     }

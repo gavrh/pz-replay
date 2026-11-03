@@ -4,27 +4,27 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayGaps(int version, String data) {
+public record TimelineGaps(int version, String data) {
     public static final int NONE_VERSION = 0;
-    public static final int CURRENT_VERSION = ReplayGapCodec.CURRENT_VERSION;
+    public static final int CURRENT_VERSION = TimelineGapCodec.CURRENT_VERSION;
 
     private static final String CORRUPT_WARNING =
         "timeline gap data is corrupt or incomplete";
 
-    public ReplayGaps {
+    public TimelineGaps {
         data = data == null ? "" : data;
     }
 
-    public static ReplayGaps none() {
-        return new ReplayGaps(NONE_VERSION, "");
+    public static TimelineGaps none() {
+        return new TimelineGaps(NONE_VERSION, "");
     }
 
-    public static ReplayGaps encode(List<ReplayGap> gaps) throws ReplayFormatException {
+    public static TimelineGaps encode(List<TimelineGap> gaps) throws ReplayFormatException {
         if (gaps == null || gaps.isEmpty()) {
             return none();
         }
-        byte[] bytes = ReplayGapCodec.encode(gaps);
-        return new ReplayGaps(CURRENT_VERSION, Base64.getEncoder().encodeToString(bytes));
+        byte[] bytes = TimelineGapCodec.encode(gaps);
+        return new TimelineGaps(CURRENT_VERSION, Base64.getEncoder().encodeToString(bytes));
     }
 
     public boolean isPresent() {
@@ -35,7 +35,7 @@ public record ReplayGaps(int version, String data) {
         return version == CURRENT_VERSION;
     }
 
-    public ReplayGapCodec.Result decode() throws ReplayFormatException {
+    public TimelineGapCodec.Result decode() throws ReplayFormatException {
         if (version != CURRENT_VERSION) {
             throw new ReplayFormatException(
                 "timeline gap data version is unsupported: " + version);
@@ -49,7 +49,7 @@ public record ReplayGaps(int version, String data) {
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException(CORRUPT_WARNING, exception);
         }
-        return ReplayGapCodec.decode(bytes);
+        return TimelineGapCodec.decode(bytes);
     }
 
     public List<String> warnings() {
@@ -63,7 +63,7 @@ public record ReplayGaps(int version, String data) {
             return List.of("timeline gap data version is unsupported: " + version);
         }
         try {
-            ReplayGapCodec.Result result = decode();
+            TimelineGapCodec.Result result = decode();
             if (result.gaps().isEmpty() && result.warnings().isEmpty()) {
                 return List.of(CORRUPT_WARNING);
             }
@@ -73,16 +73,16 @@ public record ReplayGaps(int version, String data) {
         }
     }
 
-    static ReplayGaps fromValues(Map<String, String> values) {
+    static TimelineGaps fromValues(Map<String, String> values) {
         String versionValue = values.get("gaps_version");
         String data = values.getOrDefault("gaps_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayGaps(-1, data);
+            return data.isEmpty() ? none() : new TimelineGaps(-1, data);
         }
         try {
-            return new ReplayGaps(Integer.parseInt(versionValue), data);
+            return new TimelineGaps(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayGaps(-1, data);
+            return new TimelineGaps(-1, data);
         }
     }
 }

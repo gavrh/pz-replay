@@ -3,7 +3,7 @@ package com.gavrh.pzreplay;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class ReplayTimeline {
+public final class PlaybackTimeline {
     public enum State {
         STOPPED,
         PLAYING,
@@ -49,22 +49,22 @@ public final class ReplayTimeline {
     private final double[] relativeTimes;
     private final double duration;
     private final Equipment equipment;
-    private final ReplayEquipmentTimeline equipmentTimeline;
-    private final ReplayEventTimeline eventTimeline;
+    private final EquipmentTimeline equipmentTimeline;
+    private final ActionEventTimeline eventTimeline;
     private final List<String> eventWarnings;
-    private final ReplayAppearanceTimeline appearanceTimeline;
-    private final ReplayVehicleTimeline vehicleTimeline;
-    private final ReplayGapTimeline gapTimeline;
+    private final AppearanceTimeline appearanceTimeline;
+    private final VehicleTimeline vehicleTimeline;
+    private final TimelineGapPlayback gapTimeline;
     private final List<GapHold> gapHolds;
 
-    private record GapHold(float holdStart, float holdEnd, int frameIndex, ReplayGap gap) {
+    private record GapHold(float holdStart, float holdEnd, int frameIndex, TimelineGap gap) {
     }
 
     private State state = State.STOPPED;
     private double elapsed;
     private double speed = 1.0;
 
-    public ReplayTimeline(ReplayData data) throws ReplayFormatException {
+    public PlaybackTimeline(ReplayData data) throws ReplayFormatException {
         this(data == null ? null : data.frames(),
             data == null || data.metadata() == null
                 ? Appearance.none() : data.metadata().appearance(),
@@ -75,23 +75,23 @@ public final class ReplayTimeline {
             data == null || data.metadata() == null
                 ? EquipmentChanges.none() : data.metadata().equipmentChanges(),
             data == null || data.metadata() == null
-                ? ReplayEvents.none() : data.metadata().events(),
+                ? ActionEvents.none() : data.metadata().events(),
             data == null || data.metadata() == null
                 ? Vehicles.none() : data.metadata().vehicles(),
             data == null || data.metadata() == null
-                ? ReplayGaps.none() : data.metadata().gaps());
+                ? TimelineGaps.none() : data.metadata().gaps());
     }
 
-    public ReplayTimeline(List<CaptureSample> frames) throws ReplayFormatException {
+    public PlaybackTimeline(List<CaptureSample> frames) throws ReplayFormatException {
         this(frames, Appearance.none(), AppearanceChanges.none(),
-            Equipment.none(), EquipmentChanges.none(), ReplayEvents.none(),
-            Vehicles.none(), ReplayGaps.none());
+            Equipment.none(), EquipmentChanges.none(), ActionEvents.none(),
+            Vehicles.none(), TimelineGaps.none());
     }
 
-    private ReplayTimeline(List<CaptureSample> frames, Appearance appearance,
+    private PlaybackTimeline(List<CaptureSample> frames, Appearance appearance,
         AppearanceChanges appearanceChanges, Equipment equipment,
-        EquipmentChanges equipmentChanges, ReplayEvents events, Vehicles vehicles,
-        ReplayGaps gaps) throws ReplayFormatException {
+        EquipmentChanges equipmentChanges, ActionEvents events, Vehicles vehicles,
+        TimelineGaps gaps) throws ReplayFormatException {
         if (frames == null) {
             throw new ReplayFormatException("replay data is missing");
         }
@@ -352,7 +352,7 @@ public final class ReplayTimeline {
         return equipment;
     }
 
-    public ReplayEquipmentTimeline getEquipmentTimeline() {
+    public EquipmentTimeline getEquipmentTimeline() {
         return equipmentTimeline;
     }
 
@@ -372,7 +372,7 @@ public final class ReplayTimeline {
         return equipmentTimeline == null ? List.of() : equipmentTimeline.warnings();
     }
 
-    public ReplayAppearanceTimeline getAppearanceTimeline() {
+    public AppearanceTimeline getAppearanceTimeline() {
         return appearanceTimeline;
     }
 
@@ -392,11 +392,11 @@ public final class ReplayTimeline {
         return appearanceTimeline.warnings();
     }
 
-    public ReplayEventTimeline getEventTimeline() {
+    public ActionEventTimeline getEventTimeline() {
         return eventTimeline;
     }
 
-    public List<ReplayEvent> getEvents() {
+    public List<ActionEvent> getEvents() {
         return eventTimeline.events();
     }
 
@@ -408,11 +408,11 @@ public final class ReplayTimeline {
         return eventWarnings;
     }
 
-    public ReplayVehicleTimeline getVehicleTimeline() {
+    public VehicleTimeline getVehicleTimeline() {
         return vehicleTimeline;
     }
 
-    public ReplayVehicleTimeline.State vehicleAt(double seconds) {
+    public VehicleTimeline.State vehicleAt(double seconds) {
         if (isGapHold(seconds)) {
             return null;
         }
@@ -427,11 +427,11 @@ public final class ReplayTimeline {
         return vehicleTimeline == null ? List.of() : vehicleTimeline.warnings();
     }
 
-    public ReplayGapTimeline getGapTimeline() {
+    public TimelineGapPlayback getGapTimeline() {
         return gapTimeline;
     }
 
-    public List<ReplayGap> getGaps() {
+    public List<TimelineGap> getGaps() {
         return gapTimeline == null ? List.of() : gapTimeline.gaps();
     }
 
@@ -447,21 +447,21 @@ public final class ReplayTimeline {
         return gapHoldAt(seconds) != null;
     }
 
-    public ReplayGap.Reason gapReasonAt(double seconds) {
+    public TimelineGap.Reason gapReasonAt(double seconds) {
         GapHold hold = gapHoldAt(seconds);
         return hold == null ? null : hold.gap().reason();
     }
 
-    private static ReplayGapTimeline decodeGaps(ReplayGaps gaps, double duration,
+    private static TimelineGapPlayback decodeGaps(TimelineGaps gaps, double duration,
         double offsetSeconds) {
-        List<ReplayGap> decoded = List.of();
+        List<TimelineGap> decoded = List.of();
         List<String> warnings = new ArrayList<>();
         if (gaps != null && gaps.isPresent()) {
             try {
-                ReplayGapCodec.Result result = gaps.decode();
-                List<ReplayGap> shifted = new ArrayList<>(result.gaps().size());
-                for (ReplayGap gap : result.gaps()) {
-                    shifted.add(new ReplayGap(
+                TimelineGapCodec.Result result = gaps.decode();
+                List<TimelineGap> shifted = new ArrayList<>(result.gaps().size());
+                for (TimelineGap gap : result.gaps()) {
+                    shifted.add(new TimelineGap(
                         (float) (gap.startTimeSeconds() - offsetSeconds),
                         (float) (gap.endTimeSeconds() - offsetSeconds),
                         gap.reason(), gap.lastX(), gap.lastY(), gap.lastZ(), gap.nextX(),
@@ -479,18 +479,18 @@ public final class ReplayTimeline {
             }
         }
         try {
-            return new ReplayGapTimeline(decoded, duration, warnings);
+            return new TimelineGapPlayback(decoded, duration, warnings);
         } catch (ReplayFormatException exception) {
             return null;
         }
     }
 
-    private List<GapHold> buildGapHolds(ReplayGapTimeline timeline) {
+    private List<GapHold> buildGapHolds(TimelineGapPlayback timeline) {
         if (timeline == null || timeline.isEmpty()) {
             return List.of();
         }
         List<GapHold> holds = new ArrayList<>();
-        for (ReplayGap gap : timeline.gaps()) {
+        for (TimelineGap gap : timeline.gaps()) {
             double start = clampRelative(gap.startTimeSeconds());
             double end = clampRelative(gap.endTimeSeconds());
             int index = lastFrameAtOrBefore(start);
@@ -530,10 +530,10 @@ public final class ReplayTimeline {
         return hold == null ? seconds : hold.holdStart();
     }
 
-    private record EventDecode(ReplayEventTimeline timeline, List<String> warnings) {
+    private record EventDecode(ActionEventTimeline timeline, List<String> warnings) {
     }
 
-    private static ReplayVehicleTimeline decodeVehicles(Vehicles vehicles,
+    private static VehicleTimeline decodeVehicles(Vehicles vehicles,
         double duration) {
         List<VehicleSegment> decoded = List.of();
         List<String> warnings = new ArrayList<>();
@@ -552,13 +552,13 @@ public final class ReplayTimeline {
             }
         }
         try {
-            return new ReplayVehicleTimeline(decoded, duration, warnings);
+            return new VehicleTimeline(decoded, duration, warnings);
         } catch (ReplayFormatException exception) {
             return null;
         }
     }
 
-    private static ReplayAppearanceTimeline decodeAppearances(Appearance appearance,
+    private static AppearanceTimeline decodeAppearances(Appearance appearance,
         AppearanceChanges changes, double duration) {
         List<AppearanceChange> decoded = List.of();
         List<String> warnings = new ArrayList<>();
@@ -577,18 +577,18 @@ public final class ReplayTimeline {
             }
         }
         try {
-            return new ReplayAppearanceTimeline(appearance, decoded, duration, warnings);
+            return new AppearanceTimeline(appearance, decoded, duration, warnings);
         } catch (ReplayFormatException exception) {
             warnings.add("appearance change data is corrupt or incomplete");
             try {
-                return new ReplayAppearanceTimeline(appearance, List.of(), duration, warnings);
+                return new AppearanceTimeline(appearance, List.of(), duration, warnings);
             } catch (ReplayFormatException ignored) {
                 return null;
             }
         }
     }
 
-    private static ReplayEquipmentTimeline decodeEquipment(Equipment equipment,
+    private static EquipmentTimeline decodeEquipment(Equipment equipment,
         EquipmentChanges changes, double duration, double offsetSeconds) {
         List<EquipmentChange> decoded = List.of();
         List<String> warnings = new ArrayList<>();
@@ -607,12 +607,12 @@ public final class ReplayTimeline {
             }
         }
         try {
-            return new ReplayEquipmentTimeline(equipment, decoded, duration, offsetSeconds,
+            return new EquipmentTimeline(equipment, decoded, duration, offsetSeconds,
                 warnings);
         } catch (ReplayFormatException exception) {
             warnings.add("equipment change data is corrupt or incomplete");
             try {
-                return new ReplayEquipmentTimeline(equipment, List.of(), duration, offsetSeconds,
+                return new EquipmentTimeline(equipment, List.of(), duration, offsetSeconds,
                     warnings);
             } catch (ReplayFormatException ignored) {
                 return null;
@@ -620,12 +620,12 @@ public final class ReplayTimeline {
         }
     }
 
-    private static EventDecode decodeEvents(ReplayEvents events, double duration) {
-        List<ReplayEvent> decoded = List.of();
+    private static EventDecode decodeEvents(ActionEvents events, double duration) {
+        List<ActionEvent> decoded = List.of();
         List<String> warnings = new ArrayList<>();
         if (events != null && events.isPresent()) {
             try {
-                ReplayEventCodec.Result result = events.decode();
+                ActionEventCodec.Result result = events.decode();
                 decoded = result.events();
                 warnings.addAll(result.warnings());
             } catch (ReplayFormatException exception) {
@@ -633,13 +633,13 @@ public final class ReplayTimeline {
             }
         }
         try {
-            ReplayEventTimeline timeline = new ReplayEventTimeline(decoded, duration);
+            ActionEventTimeline timeline = new ActionEventTimeline(decoded, duration);
             warnings.addAll(timeline.warnings());
             return new EventDecode(timeline, List.copyOf(warnings));
         } catch (ReplayFormatException exception) {
             warnings.add("action event data is corrupt or incomplete");
             try {
-                return new EventDecode(new ReplayEventTimeline(List.of(), duration),
+                return new EventDecode(new ActionEventTimeline(List.of(), duration),
                     List.copyOf(warnings));
             } catch (ReplayFormatException ignored) {
                 return new EventDecode(null, List.copyOf(warnings));

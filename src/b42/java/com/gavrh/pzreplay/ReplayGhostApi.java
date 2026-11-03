@@ -115,10 +115,10 @@ public final class ReplayGhostApi {
             removeGhost(current);
             System.out.println("[pz-replay] replay ghost despawned identity="
                 + current.getIdentity());
-            ReplayPlaybackApi.onGhostDespawned();
+            PlaybackApi.onGhostDespawned();
             return true;
         } catch (Throwable t) {
-            ReplayPlaybackApi.onGhostDespawned();
+            PlaybackApi.onGhostDespawned();
             ReplayCameraController.restorePlayerCamera();
             return false;
         }

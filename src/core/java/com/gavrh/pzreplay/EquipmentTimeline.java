@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayEquipmentTimeline {
+public final class EquipmentTimeline {
     private static final double TIME_EPSILON = 0.0001;
     private static final double MAX_CHANGE_TAIL_SECONDS = 0.25;
     private static final int MAX_WARNINGS = 8;
@@ -15,12 +15,12 @@ public final class ReplayEquipmentTimeline {
     private final List<EquipmentChange> changes;
     private final List<String> warnings;
 
-    public ReplayEquipmentTimeline(Equipment initial,
+    public EquipmentTimeline(Equipment initial,
         List<EquipmentChange> changes, double duration) throws ReplayFormatException {
         this(initial, changes, duration, 0.0, List.of());
     }
 
-    public ReplayEquipmentTimeline(Equipment initial,
+    public EquipmentTimeline(Equipment initial,
         List<EquipmentChange> changes, double duration, double offsetSeconds,
         List<String> extraWarnings) throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {

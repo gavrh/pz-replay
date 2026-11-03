@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayEquipmentTimelineTest {
+class EquipmentTimelineTest {
     private static Equipment equipment(String value) {
         return new Equipment(Equipment.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
@@ -22,7 +22,7 @@ class ReplayEquipmentTimelineTest {
     }
 
     private static ReplayMetadata metadata(Equipment initial,
-        EquipmentChanges changes, ReplayGaps gaps) {
+        EquipmentChanges changes, TimelineGaps gaps) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -42,9 +42,9 @@ class ReplayEquipmentTimelineTest {
         ).withEquipmentChanges(changes).withGaps(gaps);
     }
 
-    private static ReplayTimeline timeline(Equipment initial,
+    private static PlaybackTimeline timeline(Equipment initial,
         EquipmentChanges changes) throws ReplayFormatException {
-        return new ReplayTimeline(new ReplayData(metadata(initial, changes, ReplayGaps.none()),
+        return new PlaybackTimeline(new ReplayData(metadata(initial, changes, TimelineGaps.none()),
             List.of(frame(0f, 0f), frame(1f, 1f), frame(2f, 2f), frame(3f, 3f))));
     }
 
@@ -63,7 +63,7 @@ class ReplayEquipmentTimelineTest {
         Equipment initial = equipment("initial");
         Equipment pistol = equipment("pistol");
         Equipment rifle = equipment("rifle");
-        ReplayTimeline timeline = timeline(initial, changes(initial, pistol, rifle));
+        PlaybackTimeline timeline = timeline(initial, changes(initial, pistol, rifle));
 
         assertEquals(initial, timeline.sampleAt(0.0).equipment());
         assertEquals(initial, timeline.sampleAt(0.99).equipment());
@@ -78,7 +78,7 @@ class ReplayEquipmentTimelineTest {
         Equipment initial = equipment("initial");
         Equipment pistol = equipment("pistol");
         Equipment rifle = equipment("rifle");
-        ReplayTimeline timeline = timeline(initial, changes(initial, pistol, rifle));
+        PlaybackTimeline timeline = timeline(initial, changes(initial, pistol, rifle));
         timeline.start();
 
         assertTrue(timeline.seek(1.5));
@@ -91,7 +91,7 @@ class ReplayEquipmentTimelineTest {
     void seekBackwardReconstructsTheLatestEarlierChange() throws Exception {
         Equipment initial = equipment("initial");
         Equipment pistol = equipment("pistol");
-        ReplayTimeline timeline = timeline(initial, changes(initial, pistol));
+        PlaybackTimeline timeline = timeline(initial, changes(initial, pistol));
         timeline.start();
         timeline.seek(2.5);
         assertEquals(pistol, timeline.sample().equipment());
@@ -105,7 +105,7 @@ class ReplayEquipmentTimelineTest {
     void restartReturnsToTheT0Equipment() throws Exception {
         Equipment initial = equipment("initial");
         Equipment pistol = equipment("pistol");
-        ReplayTimeline timeline = timeline(initial, changes(initial, pistol));
+        PlaybackTimeline timeline = timeline(initial, changes(initial, pistol));
         timeline.start();
         timeline.seek(2.5);
         assertEquals(pistol, timeline.sample().equipment());
@@ -122,8 +122,8 @@ class ReplayEquipmentTimelineTest {
         EquipmentChanges changes = EquipmentChanges.encode(List.of(
             new EquipmentChange(1L, 10.0f, initial),
             new EquipmentChange(2L, 10.5f, pistol)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(
-            metadata(initial, changes, ReplayGaps.none()),
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(
+            metadata(initial, changes, TimelineGaps.none()),
             List.of(frame(10f, 0f), frame(11f, 1f))));
 
         assertEquals(initial, timeline.sampleAt(0.25).equipment());
@@ -134,12 +134,12 @@ class ReplayEquipmentTimelineTest {
     void gapClearsHeldItemsAndReappliesTheDestinationState() throws Exception {
         Equipment initial = equipment("initial");
         Equipment pistol = equipment("pistol");
-        ReplayGaps gaps = ReplayGaps.encode(List.of(new ReplayGap(
-            0.5f, 1.0f, ReplayGap.Reason.TELEPORT, 0f, 0f, 0f, 10f, 0f, 0f)));
+        TimelineGaps gaps = TimelineGaps.encode(List.of(new TimelineGap(
+            0.5f, 1.0f, TimelineGap.Reason.TELEPORT, 0f, 0f, 0f, 10f, 0f, 0f)));
         EquipmentChanges changes = EquipmentChanges.encode(List.of(
             new EquipmentChange(1L, 0.0f, initial),
             new EquipmentChange(2L, 1.0f, pistol)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(
             metadata(initial, changes, gaps),
             List.of(frame(0f, 0f), frame(0.5f, 0f), frame(1.0f, 10f), frame(2f, 12f))));
 
@@ -152,9 +152,9 @@ class ReplayEquipmentTimelineTest {
     @Test
     void gapReappliesTheHeldItemThatWasAlreadyEquippedBeforeTheGap() throws Exception {
         Equipment initial = equipment("initial");
-        ReplayGaps gaps = ReplayGaps.encode(List.of(new ReplayGap(
-            0.5f, 1.0f, ReplayGap.Reason.TELEPORT, 0f, 0f, 0f, 10f, 0f, 0f)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(
+        TimelineGaps gaps = TimelineGaps.encode(List.of(new TimelineGap(
+            0.5f, 1.0f, TimelineGap.Reason.TELEPORT, 0f, 0f, 0f, 10f, 0f, 0f)));
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(
             metadata(initial, EquipmentChanges.none(), gaps),
             List.of(frame(0f, 0f), frame(0.5f, 0f), frame(1.0f, 10f), frame(2f, 12f))));
 
@@ -165,7 +165,7 @@ class ReplayEquipmentTimelineTest {
     @Test
     void replayWithoutChangeDataFallsBackToTheExistingSnapshot() throws Exception {
         Equipment initial = equipment("snapshot");
-        ReplayTimeline timeline = timeline(initial, EquipmentChanges.none());
+        PlaybackTimeline timeline = timeline(initial, EquipmentChanges.none());
 
         assertEquals(0, timeline.getEquipmentChangeCount());
         assertTrue(timeline.getEquipmentWarnings().isEmpty());
@@ -178,7 +178,7 @@ class ReplayEquipmentTimelineTest {
         Equipment initial = equipment("snapshot");
         EquipmentChanges corrupt = new EquipmentChanges(
             EquipmentChanges.CURRENT_VERSION, "not base64!");
-        ReplayTimeline timeline = timeline(initial, corrupt);
+        PlaybackTimeline timeline = timeline(initial, corrupt);
 
         assertFalse(timeline.getEquipmentWarnings().isEmpty());
         assertEquals(initial, timeline.sampleAt(1.5).equipment());
@@ -189,7 +189,7 @@ class ReplayEquipmentTimelineTest {
         Equipment initial = equipment("snapshot");
         EquipmentChanges unsupported = new EquipmentChanges(
             EquipmentChanges.CURRENT_VERSION + 1, "AQ==");
-        ReplayTimeline timeline = timeline(initial, unsupported);
+        PlaybackTimeline timeline = timeline(initial, unsupported);
 
         assertFalse(timeline.getEquipmentWarnings().isEmpty());
         assertTrue(timeline.getEquipmentWarnings().get(0).contains("unsupported"));
@@ -207,7 +207,7 @@ class ReplayEquipmentTimelineTest {
             new EquipmentChange(2L, 1.0f, primaryOnly),
             new EquipmentChange(3L, 2.0f, both),
             new EquipmentChange(4L, 3.0f, secondaryOnly)));
-        ReplayTimeline timeline = timeline(initial, changes);
+        PlaybackTimeline timeline = timeline(initial, changes);
 
         assertEquals(initial, timeline.sampleAt(0.5).equipment());
         assertEquals(primaryOnly, timeline.sampleAt(1.0).equipment());

@@ -11,24 +11,24 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayGapCodec {
+public final class TimelineGapCodec {
     public static final int CURRENT_VERSION = 1;
     public static final int MAX_GAPS = 128;
     public static final int MAX_GAP_BYTES = 33;
     private static final int MAX_WARNINGS = 8;
     private static final float TIME_EPSILON = 0.0001f;
 
-    public record Result(List<ReplayGap> gaps, List<String> warnings) {
+    public record Result(List<TimelineGap> gaps, List<String> warnings) {
         public Result {
             gaps = List.copyOf(gaps);
             warnings = List.copyOf(warnings);
         }
     }
 
-    private ReplayGapCodec() {
+    private TimelineGapCodec() {
     }
 
-    public static byte[] encode(List<ReplayGap> gaps) throws ReplayFormatException {
+    public static byte[] encode(List<TimelineGap> gaps) throws ReplayFormatException {
         if (gaps == null) {
             throw new ReplayFormatException("timeline gap data is missing");
         }
@@ -41,7 +41,7 @@ public final class ReplayGapCodec {
             out.writeInt(gaps.size());
             float previousEnd = 0.0f;
             for (int index = 0; index < gaps.size(); index++) {
-                ReplayGap gap = gaps.get(index);
+                TimelineGap gap = gaps.get(index);
                 if (gap == null) {
                     throw new ReplayFormatException("timeline gap " + index + " is missing");
                 }
@@ -81,7 +81,7 @@ public final class ReplayGapCodec {
             if (count < 0 || count > MAX_GAPS) {
                 throw new ReplayFormatException("timeline gap count is invalid: " + count);
             }
-            List<ReplayGap> gaps = new ArrayList<>(count);
+            List<TimelineGap> gaps = new ArrayList<>(count);
             float previousEnd = 0.0f;
             for (int index = 0; index < count; index++) {
                 if (in.available() < MAX_GAP_BYTES) {
@@ -96,7 +96,7 @@ public final class ReplayGapCodec {
                 float nextX = in.readFloat();
                 float nextY = in.readFloat();
                 float nextZ = in.readFloat();
-                ReplayGap.Reason reason = ReplayGap.Reason.fromId(reasonId);
+                TimelineGap.Reason reason = TimelineGap.Reason.fromId(reasonId);
                 if (reason == null) {
                     addWarning(warnings, "unknown timeline gap reason " + reasonId
                         + " was ignored");
@@ -115,7 +115,7 @@ public final class ReplayGapCodec {
                     continue;
                 }
                 previousEnd = end;
-                gaps.add(new ReplayGap(start, end, reason, lastX, lastY, lastZ,
+                gaps.add(new TimelineGap(start, end, reason, lastX, lastY, lastZ,
                     nextX, nextY, nextZ));
             }
             if (in.available() > 0) {

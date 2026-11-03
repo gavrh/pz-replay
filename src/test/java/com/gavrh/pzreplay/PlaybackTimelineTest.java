@@ -10,14 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayTimelineTest {
+class PlaybackTimelineTest {
     private static CaptureSample frame(float time, float x, float y, float z, float angle,
         CaptureSample.Locomotion locomotion, CaptureSample.Stance stance) {
         return new CaptureSample(0L, time, 0f, x, y, z, angle, 0f, locomotion, stance, 0);
     }
 
-    private static ReplayTimeline timeline() throws ReplayFormatException {
-        return new ReplayTimeline(List.of(
+    private static PlaybackTimeline timeline() throws ReplayFormatException {
+        return new PlaybackTimeline(List.of(
             frame(10f, 100f, 200f, 0f, 170f, CaptureSample.Locomotion.WALK,
                 CaptureSample.Stance.STAND),
             frame(11f, 110f, 220f, 0.5f, -170f, CaptureSample.Locomotion.RUN,
@@ -29,7 +29,7 @@ class ReplayTimelineTest {
 
     @Test
     void samplesExactFramesByRelativeTime() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
 
         assertSample(timeline.sampleAt(0.0), 0.0, 100f, 200f, 0f, 170f,
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
@@ -41,32 +41,32 @@ class ReplayTimelineTest {
 
     @Test
     void derivesTheRecordedMovementDirectionForAnimationBlending() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.WALK,
                 CaptureSample.Stance.STAND),
             frame(1f, 3f, 4f, 0f, 0f, CaptureSample.Locomotion.WALK,
                 CaptureSample.Stance.STAND)
         ));
 
-        ReplayTimeline.Movement movement = timeline.movementAt(0.5);
+        PlaybackTimeline.Movement movement = timeline.movementAt(0.5);
 
         assertTrue(movement.isMoving());
         assertEquals(0.6f, movement.x(), 0.0001f);
         assertEquals(0.8f, movement.y(), 0.0001f);
         assertFalse(timeline.movementAt(0.5).equals(
-            new ReplayTimeline.Movement(0f, 0f)));
+            new PlaybackTimeline.Movement(0f, 0f)));
     }
 
     @Test
     void stationaryReplaysHaveNoMovementDirection() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             frame(0f, 5f, 5f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND),
             frame(1f, 5f, 5f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND)
         ));
 
-        ReplayTimeline.Movement movement = timeline.movementAt(0.5);
+        PlaybackTimeline.Movement movement = timeline.movementAt(0.5);
 
         assertFalse(movement.isMoving());
         assertEquals(0.0f, movement.x(), 0.0001f);
@@ -75,7 +75,7 @@ class ReplayTimelineTest {
 
     @Test
     void exposesTheRecordedMovingFlagFromTheActiveFrame() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             new CaptureSample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                 CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH,
                 CaptureSample.flags(false, true, false, false, false, false)),
@@ -91,7 +91,7 @@ class ReplayTimelineTest {
 
     @Test
     void exposesAimingFromTheActiveFrame() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             new CaptureSample(0L, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
                 CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND,
                 CaptureSample.flags(true, false, false, false, false, true)),
@@ -126,7 +126,7 @@ class ReplayTimelineTest {
             new Appearance(Appearance.CURRENT_VERSION, "AQ=="),
             equipment
         );
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata,
             List.of(frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND))));
 
@@ -136,7 +136,7 @@ class ReplayTimelineTest {
 
     @Test
     void interpolatesPositionOnTheShortestFacingArc() throws Exception {
-        ReplayTimeline.Sample sample = timeline().sampleAt(0.5);
+        PlaybackTimeline.Sample sample = timeline().sampleAt(0.5);
 
         assertSample(sample, 0.5, 105f, 210f, 0.25f, 180f,
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
@@ -144,7 +144,7 @@ class ReplayTimelineTest {
 
     @Test
     void interpolatesFacingAcrossZero() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             frame(0f, 0f, 0f, 0f, 350f, CaptureSample.Locomotion.WALK,
                 CaptureSample.Stance.STAND),
             frame(1f, 0f, 0f, 0f, 10f, CaptureSample.Locomotion.WALK,
@@ -156,7 +156,7 @@ class ReplayTimelineTest {
 
     @Test
     void clampsToFirstAndLastFrame() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
 
         assertSample(timeline.sampleAt(-5.0), 0.0, 100f, 200f, 0f, 170f,
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND);
@@ -166,7 +166,7 @@ class ReplayTimelineTest {
 
     @Test
     void startPauseResumeStopAndEndAreDistinct() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
 
         assertTrue(timeline.start());
         assertTrue(timeline.isPlaying());
@@ -194,7 +194,7 @@ class ReplayTimelineTest {
 
     @Test
     void stopResetsTimeAndState() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.5);
 
@@ -206,7 +206,7 @@ class ReplayTimelineTest {
 
     @Test
     void emptyTimelineHasNoPlayableFrames() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of());
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of());
 
         assertTrue(timeline.isEmpty());
         assertEquals(0.0, timeline.getDuration(), 0.0001);
@@ -218,7 +218,7 @@ class ReplayTimelineTest {
 
     @Test
     void singleFrameTimelineHoldsItsPoseAndEndsImmediately() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of(
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of(
             frame(5f, 7f, 8f, 9f, 45f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.CROUCH)
         ));
@@ -233,42 +233,42 @@ class ReplayTimelineTest {
 
     @Test
     void rejectsInvalidFrames() {
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(
             (List<CaptureSample>) null));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(
             Arrays.asList((CaptureSample) null)));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(Arrays.asList(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(Arrays.asList(
             frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND),
             null
         )));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(List.of(
             frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND),
             frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND)
         )));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(List.of(
             frame(1f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND),
             frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND)
         )));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(List.of(
             frame(Float.NaN, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE,
                 CaptureSample.Stance.STAND)
         )));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(List.of(
             frame(0f, 0f, 0f, 0f, 0f, null, CaptureSample.Stance.STAND)
         )));
-        assertThrows(ReplayFormatException.class, () -> new ReplayTimeline(List.of(
+        assertThrows(ReplayFormatException.class, () -> new PlaybackTimeline(List.of(
             frame(0f, 0f, 0f, 0f, 0f, CaptureSample.Locomotion.IDLE, null)
         )));
     }
 
     @Test
     void seekClampsToBoundsAndPreservesPlaybackState() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.5);
 
@@ -292,7 +292,7 @@ class ReplayTimelineTest {
 
     @Test
     void seekWhilePausedStaysPausedAtTheSampledFrame() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.2);
         assertTrue(timeline.pause());
@@ -308,7 +308,7 @@ class ReplayTimelineTest {
 
     @Test
     void seekingAtEndStopsOnlyWhenPlaybackAdvances() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
 
         assertTrue(timeline.seek(2.0));
@@ -322,7 +322,7 @@ class ReplayTimelineTest {
 
     @Test
     void resumeContinuesFromASeekWhileStopped() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
 
         assertTrue(timeline.seek(0.75));
         assertFalse(timeline.isActive());
@@ -333,12 +333,12 @@ class ReplayTimelineTest {
 
     @Test
     void speedValidationAcceptsOnlyTheTransportRange() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
 
         assertEquals(1.0, timeline.getSpeed(), 0.0001);
-        assertTrue(timeline.setSpeed(ReplayTimeline.MIN_SPEED));
+        assertTrue(timeline.setSpeed(PlaybackTimeline.MIN_SPEED));
         assertEquals(0.25, timeline.getSpeed(), 0.0001);
-        assertTrue(timeline.setSpeed(ReplayTimeline.MAX_SPEED));
+        assertTrue(timeline.setSpeed(PlaybackTimeline.MAX_SPEED));
         assertEquals(4.0, timeline.getSpeed(), 0.0001);
         assertTrue(timeline.setSpeed(1.0));
 
@@ -353,7 +353,7 @@ class ReplayTimelineTest {
 
     @Test
     void speedScalesAdvanceWithoutChangingTheRecordedPath() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         assertTrue(timeline.setSpeed(2.0));
         assertEquals(0.0, timeline.getCurrentTime(), 0.0001);
@@ -373,7 +373,7 @@ class ReplayTimelineTest {
 
     @Test
     void speedChangesPreserveTheCurrentPosition() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.4);
 
@@ -385,7 +385,7 @@ class ReplayTimelineTest {
 
     @Test
     void restartFromPlayingAndEndReturnsToTheFirstFrame() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.5);
 
@@ -403,7 +403,7 @@ class ReplayTimelineTest {
 
     @Test
     void restartWhilePausedStaysPausedAtTheStart() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(1.2);
         timeline.pause();
@@ -419,7 +419,7 @@ class ReplayTimelineTest {
 
     @Test
     void stopClearsTimeAndSpeed() throws Exception {
-        ReplayTimeline timeline = timeline();
+        PlaybackTimeline timeline = timeline();
         timeline.start();
         timeline.advance(0.5);
         timeline.setSpeed(2.0);
@@ -433,7 +433,7 @@ class ReplayTimelineTest {
 
     @Test
     void emptyTimelineRejectsTransportOperations() throws Exception {
-        ReplayTimeline timeline = new ReplayTimeline(List.of());
+        PlaybackTimeline timeline = new PlaybackTimeline(List.of());
 
         assertFalse(timeline.seek(1.0));
         assertFalse(timeline.restart());
@@ -443,7 +443,7 @@ class ReplayTimelineTest {
         assertEquals(2.0, timeline.getSpeed(), 0.0001);
     }
 
-    private static void assertSample(ReplayTimeline.Sample sample, double time, float x, float y,
+    private static void assertSample(PlaybackTimeline.Sample sample, double time, float x, float y,
         float z, float facing, CaptureSample.Locomotion locomotion, CaptureSample.Stance stance) {
         assertEquals(time, sample.time(), 0.0001);
         assertEquals(x, sample.x(), 0.0001f);

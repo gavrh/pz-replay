@@ -10,19 +10,19 @@ import zombie.scripting.ScriptManager;
 import zombie.scripting.objects.VehicleScript;
 import zombie.vehicles.BaseVehicle;
 
-final class ReplayVehicleVisual {
+final class VehicleVisual {
     private static Method updateTransform;
 
     private final BaseVehicle vehicle;
     private final String key;
     private IsoGridSquare square;
 
-    private ReplayVehicleVisual(BaseVehicle vehicle, String key) {
+    private VehicleVisual(BaseVehicle vehicle, String key) {
         this.vehicle = vehicle;
         this.key = key;
     }
 
-    static ReplayVehicleVisual spawn(VehicleSegment segment, Consumer<String> warning) {
+    static VehicleVisual spawn(VehicleSegment segment, Consumer<String> warning) {
         if (segment == null || segment.scriptName().isBlank()) {
             warn(warning, "recorded vehicle type is missing");
             return null;
@@ -54,7 +54,7 @@ final class ReplayVehicleVisual {
             vehicle.setDoRender(true);
             vehicle.savedRot.set(0.0f, 0.0f, 0.0f, 1.0f);
             vehicle.jniTransform.setRotation(vehicle.savedRot);
-            ReplayVehicleVisual visual = new ReplayVehicleVisual(vehicle, segment.key());
+            VehicleVisual visual = new VehicleVisual(vehicle, segment.key());
             if (!visual.attachToSquare(cell, segment.samples().get(0).x(),
                 segment.samples().get(0).y(), segment.samples().get(0).z())) {
                 warn(warning, "recorded vehicle position is not loaded");
@@ -85,7 +85,7 @@ final class ReplayVehicleVisual {
         return segment != null && key.equals(segment.key());
     }
 
-    void apply(ReplayVehicleTimeline.State state) {
+    void apply(VehicleTimeline.State state) {
         vehicle.setX(state.x());
         vehicle.setY(state.y());
         vehicle.setZ(state.z());

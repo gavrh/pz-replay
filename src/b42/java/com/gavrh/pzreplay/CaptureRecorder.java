@@ -269,7 +269,7 @@ final class CaptureRecorder {
         if (!session.isRecording()) {
             return false;
         }
-        ReplayEvent.Kind kind = ReplayEvent.Kind.fromId(kindId);
+        ActionEvent.Kind kind = ActionEvent.Kind.fromId(kindId);
         if (kind == null) {
             return false;
         }
@@ -278,7 +278,7 @@ final class CaptureRecorder {
             return false;
         }
         String resolvedDetail = detailFor(kind, detail, player);
-        ReplayActionContext context = actionContext(kind, player, resolvedDetail);
+        ActionEventContext context = actionContext(kind, player, resolvedDetail);
         boolean recorded = session.recordEvent(kind, false, resolvedDetail, direction,
             duration, context);
         if (recorded) {
@@ -422,23 +422,23 @@ final class CaptureRecorder {
         if (sitting != captureSitting) {
             String detail = sitting
                 ? (player.isSitOnGround() ? "ground" : "furniture") : "";
-            boolean recorded = session.recordEvent(ReplayEvent.Kind.SIT, !sitting, detail,
+            boolean recorded = session.recordEvent(ActionEvent.Kind.SIT, !sitting, detail,
                 player.getDirectionAngle(), 0f);
             if (recorded) {
-                logEvent(ReplayEvent.Kind.SIT, !sitting, detail);
+                logEvent(ActionEvent.Kind.SIT, !sitting, detail);
             }
             captureSitting = sitting;
         }
     }
 
-    private static ReplayActionContext actionContext(ReplayEvent.Kind kind, IsoPlayer player,
+    private static ActionEventContext actionContext(ActionEvent.Kind kind, IsoPlayer player,
         String detail) {
-        if (kind != ReplayEvent.Kind.MELEE_ATTACK
-            && kind != ReplayEvent.Kind.RANGED_ATTACK) {
-            return ReplayActionContext.none();
+        if (kind != ActionEvent.Kind.MELEE_ATTACK
+            && kind != ActionEvent.Kind.RANGED_ATTACK) {
+            return ActionEventContext.none();
         }
         try {
-            return new ReplayActionContext(
+            return new ActionEventContext(
                 detail,
                 player.getAttackType() == null ? "" : player.getAttackType().toString(),
                 player.getFireMode(),
@@ -452,16 +452,16 @@ final class CaptureRecorder {
             );
         } catch (RuntimeException exception) {
             System.out.println("[pz-replay] action context capture failed: " + exception);
-            return ReplayActionContext.none();
+            return ActionEventContext.none();
         }
     }
 
-    private static String detailFor(ReplayEvent.Kind kind, String detail, IsoPlayer player) {
-        if (kind == ReplayEvent.Kind.MELEE_ATTACK
-            || kind == ReplayEvent.Kind.RANGED_ATTACK) {
+    private static String detailFor(ActionEvent.Kind kind, String detail, IsoPlayer player) {
+        if (kind == ActionEvent.Kind.MELEE_ATTACK
+            || kind == ActionEvent.Kind.RANGED_ATTACK) {
             return weaponStyle(player);
         }
-        if (kind == ReplayEvent.Kind.RELOAD) {
+        if (kind == ActionEvent.Kind.RELOAD) {
             String type = reloadType(player);
             return detail != null && detail.startsWith("rack")
                 ? "rack:" + type : type;
@@ -496,12 +496,12 @@ final class CaptureRecorder {
         return "handgun";
     }
 
-    private void logEvent(ReplayEvent.Kind kind, boolean end, String detail) {
-        logEvent(kind, end, detail, ReplayActionContext.none());
+    private void logEvent(ActionEvent.Kind kind, boolean end, String detail) {
+        logEvent(kind, end, detail, ActionEventContext.none());
     }
 
-    private void logEvent(ReplayEvent.Kind kind, boolean end, String detail,
-        ReplayActionContext context) {
+    private void logEvent(ActionEvent.Kind kind, boolean end, String detail,
+        ActionEventContext context) {
         System.out.println("[pz-replay] capture action kind=" + kind.id()
             + " phase=" + (end ? "end" : "start")
             + " time=" + String.format(Locale.ROOT, "%.3f", session.currentTimeSeconds())
@@ -608,9 +608,9 @@ final class CaptureRecorder {
         }
     }
 
-    private ReplayEvents encodeEvents() {
+    private ActionEvents encodeEvents() {
         try {
-            ReplayEvents events = ReplayEvents.encode(session.events());
+            ActionEvents events = ActionEvents.encode(session.events());
             eventsDropped = false;
             System.out.println("[pz-replay] capture actions events=" + session.events().size()
                 + " bytes=" + events.data().length());
@@ -619,24 +619,24 @@ final class CaptureRecorder {
             eventsDropped = true;
             lastError = "action events could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] action events could not be written: " + exception);
-            return ReplayEvents.none();
+            return ActionEvents.none();
         }
     }
 
-    private ReplayGaps encodeGaps() {
-        List<ReplayGap> gaps = session.gaps();
+    private TimelineGaps encodeGaps() {
+        List<TimelineGap> gaps = session.gaps();
         if (gaps.isEmpty()) {
-            return ReplayGaps.none();
+            return TimelineGaps.none();
         }
         try {
-            ReplayGaps encoded = ReplayGaps.encode(gaps);
+            TimelineGaps encoded = TimelineGaps.encode(gaps);
             System.out.println("[pz-replay] capture gaps count=" + gaps.size()
                 + " bytes=" + encoded.data().length());
             return encoded;
         } catch (ReplayFormatException exception) {
             lastError = "timeline gaps could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] timeline gaps could not be written: " + exception);
-            return ReplayGaps.none();
+            return TimelineGaps.none();
         }
     }
 

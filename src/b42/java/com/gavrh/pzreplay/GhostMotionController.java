@@ -16,7 +16,7 @@ public final class GhostMotionController {
     }
 
     private final ScriptedGhostPath path;
-    private final ReplayTimeline replay;
+    private final PlaybackTimeline replay;
     private final Consumer<String> warning;
     private final ReplayCameraController camera = new ReplayCameraController();
     private final GhostActionController actions;
@@ -25,7 +25,7 @@ public final class GhostMotionController {
     private long lastReplayUpdateNanos;
     private Equipment appliedEquipment;
     private Appearance appliedAppearance;
-    private ReplayVehicleVisual vehicleVisual;
+    private VehicleVisual vehicleVisual;
     private String vehicleFailureKey = "";
     private boolean holdingGap;
 
@@ -43,11 +43,11 @@ public final class GhostMotionController {
         this.actions = null;
     }
 
-    public GhostMotionController(ReplayTimeline replay) {
+    public GhostMotionController(PlaybackTimeline replay) {
         this(replay, null);
     }
 
-    public GhostMotionController(ReplayTimeline replay, Consumer<String> warning) {
+    public GhostMotionController(PlaybackTimeline replay, Consumer<String> warning) {
         if (replay == null) {
             throw new IllegalArgumentException("replay is required");
         }
@@ -356,21 +356,21 @@ public final class GhostMotionController {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             CaptureSample.Stance.STAND, sample.locomotion() != CaptureSample.Locomotion.IDLE,
             false, Equipment.none(), Appearance.none(),
-            new ReplayTimeline.Movement(0.0f, 0.0f));
+            new PlaybackTimeline.Movement(0.0f, 0.0f));
     }
 
-    private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
+    private void apply(ReplayGhost ghost, PlaybackTimeline.Sample sample) {
         double time = replay.getCurrentTime();
-        ReplayTimeline.Movement movement = replay.movementAt(time);
+        PlaybackTimeline.Movement movement = replay.movementAt(time);
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             sample.stance(), sample.moving(), sample.aiming(), sample.equipment(),
             replay.appearanceAt(time), movement);
-        ReplayVehicleTimeline.State vehicleState = replay.vehicleAt(time);
+        VehicleTimeline.State vehicleState = replay.vehicleAt(time);
         boolean gapHold = replay.isGapHold(time);
         applyVehicle(ghost, vehicleState, !gapHold && (sample.inVehicle() || vehicleState != null));
     }
 
-    private void applyVehicle(ReplayGhost ghost, ReplayVehicleTimeline.State state,
+    private void applyVehicle(ReplayGhost ghost, VehicleTimeline.State state,
         boolean inVehicle) {
         if (ghost == null) {
             return;
@@ -384,7 +384,7 @@ public final class GhostMotionController {
             despawnVehicle();
             String key = state.segment().key();
             if (!key.equals(vehicleFailureKey)) {
-                vehicleVisual = ReplayVehicleVisual.spawn(state.segment(), this::warn);
+                vehicleVisual = VehicleVisual.spawn(state.segment(), this::warn);
                 if (vehicleVisual == null) {
                     vehicleFailureKey = key;
                 } else {
@@ -420,7 +420,7 @@ public final class GhostMotionController {
     private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
         CaptureSample.Locomotion locomotion, CaptureSample.Stance stance,
         boolean recordedMoving, boolean aiming, Equipment equipment,
-        Appearance appearance, ReplayTimeline.Movement movement) {
+        Appearance appearance, PlaybackTimeline.Movement movement) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);

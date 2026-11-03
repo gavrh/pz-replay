@@ -2,7 +2,7 @@ package com.gavrh.pzreplay;
 
 import java.util.Locale;
 
-public record ReplayEvent(
+public record ActionEvent(
     long sequence,
     float timeSeconds,
     Kind kind,
@@ -10,7 +10,7 @@ public record ReplayEvent(
     String detail,
     float direction,
     float durationSeconds,
-    ReplayActionContext context
+    ActionEventContext context
 ) {
     public static final int MAX_DETAIL_LENGTH = 64;
     public static final float MAX_DURATION_SECONDS = 10.0f;
@@ -73,16 +73,16 @@ public record ReplayEvent(
         }
     }
 
-    public ReplayEvent(long sequence, float timeSeconds, Kind kind, boolean end,
+    public ActionEvent(long sequence, float timeSeconds, Kind kind, boolean end,
         String detail, float direction, float durationSeconds) {
         this(sequence, timeSeconds, kind, end, detail, direction, durationSeconds,
-            ReplayActionContext.none());
+            ActionEventContext.none());
     }
 
-    public ReplayEvent {
+    public ActionEvent {
         kind = kind == null ? Kind.MELEE_ATTACK : kind;
         detail = safeDetail(detail);
-        context = context == null ? ReplayActionContext.none() : context;
+        context = context == null ? ActionEventContext.none() : context;
         if (!Float.isFinite(timeSeconds) || timeSeconds < 0.0f) {
             timeSeconds = 0.0f;
         }

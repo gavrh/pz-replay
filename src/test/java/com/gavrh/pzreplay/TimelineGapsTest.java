@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayGapsTest {
+class TimelineGapsTest {
     @TempDir
     Path tempDir;
 
@@ -24,12 +24,12 @@ class ReplayGapsTest {
             CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0);
     }
 
-    private static ReplayGap gap(float start, float end, ReplayGap.Reason reason,
+    private static TimelineGap gap(float start, float end, TimelineGap.Reason reason,
         float lastX, float nextX) {
-        return new ReplayGap(start, end, reason, lastX, 20f, 0f, nextX, 20f, 0f);
+        return new TimelineGap(start, end, reason, lastX, 20f, 0f, nextX, 20f, 0f);
     }
 
-    private static ReplayMetadata metadata(ReplayGaps gaps) {
+    private static ReplayMetadata metadata(TimelineGaps gaps) {
         return new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
             "0.0.0-dev",
@@ -47,7 +47,7 @@ class ReplayGapsTest {
             Appearance.none(),
             AppearanceChanges.none(),
             Equipment.none(),
-            ReplayEvents.none(),
+            ActionEvents.none(),
             Vehicles.none(),
             gaps
         );
@@ -55,18 +55,18 @@ class ReplayGapsTest {
 
     @Test
     void roundTripsEveryGapReasonThroughTheBinaryReplayFormat() throws Exception {
-        List<ReplayGap> source = new ArrayList<>();
-        ReplayGap.Reason[] reasons = ReplayGap.Reason.values();
+        List<TimelineGap> source = new ArrayList<>();
+        TimelineGap.Reason[] reasons = TimelineGap.Reason.values();
         for (int index = 0; index < reasons.length; index++) {
             source.add(gap(index, index + 0.5f, reasons[index], index, index + 10f));
         }
-        ReplayGaps gaps = ReplayGaps.encode(source);
+        TimelineGaps gaps = TimelineGaps.encode(source);
         Path path = tempDir.resolve("gaps.pzrp.gz");
 
         BinaryReplayCodec.write(path, metadata(gaps),
             List.of(frame(0f, 0f), frame(1f, 1f), frame(8f, 8f)), true);
         ReplayData data = ReplayReader.read(path);
-        ReplayTimeline timeline = new ReplayTimeline(data);
+        PlaybackTimeline timeline = new PlaybackTimeline(data);
 
         assertEquals(gaps, data.metadata().gaps());
         assertEquals(reasons.length, timeline.getGapCount());
@@ -79,7 +79,7 @@ class ReplayGapsTest {
 
     @Test
     void oldReplaysWithoutGapDataRemainReadable() throws Exception {
-        ReplayGaps gaps = ReplayGaps.none();
+        TimelineGaps gaps = TimelineGaps.none();
         ReplayMetadata metadata = metadata(gaps);
 
         assertFalse(gaps.isPresent());
@@ -87,7 +87,7 @@ class ReplayGapsTest {
         assertFalse(metadata.toValues().containsKey("gaps_version"));
         assertFalse(metadata.toValues().containsKey("gaps_data"));
 
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata,
             List.of(frame(0f, 0f), frame(1f, 1f))));
         assertEquals(0, timeline.getGapCount());
         assertFalse(timeline.isGapHold(0.5));
@@ -97,17 +97,17 @@ class ReplayGapsTest {
 
     @Test
     void corruptUnsupportedAndMissingDataDegradeWithWarnings() throws Exception {
-        ReplayGaps corrupt = new ReplayGaps(ReplayGaps.CURRENT_VERSION, "not base64!");
-        ReplayGaps unsupported = new ReplayGaps(
-            ReplayGaps.CURRENT_VERSION + 1, "AQ==");
-        ReplayGaps missingPayload = new ReplayGaps(
-            ReplayGaps.CURRENT_VERSION, "");
+        TimelineGaps corrupt = new TimelineGaps(TimelineGaps.CURRENT_VERSION, "not base64!");
+        TimelineGaps unsupported = new TimelineGaps(
+            TimelineGaps.CURRENT_VERSION + 1, "AQ==");
+        TimelineGaps missingPayload = new TimelineGaps(
+            TimelineGaps.CURRENT_VERSION, "");
 
         assertTrue(corrupt.warnings().get(0).contains("corrupt or incomplete"));
         assertTrue(unsupported.warnings().get(0).contains("version is unsupported"));
         assertFalse(missingPayload.warnings().isEmpty());
 
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata(corrupt),
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata(corrupt),
             List.of(frame(0f, 0f), frame(1f, 10f))));
         assertEquals(2, timeline.getFrameCount());
         assertEquals(0, timeline.getGapCount());
@@ -118,69 +118,69 @@ class ReplayGapsTest {
     @Test
     void invalidAndOverlappingGapsAreSkippedWithoutBreakingOtherGaps()
         throws Exception {
-        List<ReplayGap> gaps = new ArrayList<>();
+        List<TimelineGap> gaps = new ArrayList<>();
         gaps.add(null);
-        gaps.add(gap(0.2f, 0.4f, ReplayGap.Reason.TELEPORT, 1f, 2f));
-        gaps.add(gap(0.3f, 0.5f, ReplayGap.Reason.LOADING, 3f, 4f));
+        gaps.add(gap(0.2f, 0.4f, TimelineGap.Reason.TELEPORT, 1f, 2f));
+        gaps.add(gap(0.3f, 0.5f, TimelineGap.Reason.LOADING, 3f, 4f));
         gaps.add(gap(1.0f, 2.0f, null, 5f, 6f));
 
-        ReplayGapTimeline timeline = new ReplayGapTimeline(gaps, 3.0);
+        TimelineGapPlayback timeline = new TimelineGapPlayback(gaps, 3.0);
 
         assertFalse(timeline.warnings().isEmpty());
         assertFalse(timeline.gaps().isEmpty());
-        for (ReplayGap gap : timeline.gaps()) {
+        for (TimelineGap gap : timeline.gaps()) {
             assertNotNull(gap.reason());
         }
     }
 
     @Test
     void codecRejectsTooManyGapsAndOverlappingInput() throws Exception {
-        List<ReplayGap> tooMany = new ArrayList<>();
-        for (int index = 0; index < ReplayGapCodec.MAX_GAPS + 1; index++) {
-            tooMany.add(gap(index, index + 0.5f, ReplayGap.Reason.LONG_TICK, 0f, 1f));
+        List<TimelineGap> tooMany = new ArrayList<>();
+        for (int index = 0; index < TimelineGapCodec.MAX_GAPS + 1; index++) {
+            tooMany.add(gap(index, index + 0.5f, TimelineGap.Reason.LONG_TICK, 0f, 1f));
         }
-        assertThrows(ReplayFormatException.class, () -> ReplayGapCodec.encode(tooMany));
+        assertThrows(ReplayFormatException.class, () -> TimelineGapCodec.encode(tooMany));
 
-        assertThrows(ReplayFormatException.class, () -> ReplayGapCodec.encode(List.of(
-            gap(0.0f, 1.0f, ReplayGap.Reason.TELEPORT, 0f, 1f),
-            gap(0.5f, 2.0f, ReplayGap.Reason.LOADING, 0f, 1f))));
+        assertThrows(ReplayFormatException.class, () -> TimelineGapCodec.encode(List.of(
+            gap(0.0f, 1.0f, TimelineGap.Reason.TELEPORT, 0f, 1f),
+            gap(0.5f, 2.0f, TimelineGap.Reason.LOADING, 0f, 1f))));
     }
 
     @Test
     void decodeSkipsUnknownReasonsAndInvalidRows() throws Exception {
-        byte[] valid = ReplayGapCodec.encode(List.of(
-            gap(0.0f, 1.0f, ReplayGap.Reason.TELEPORT, 0f, 1f),
-            gap(2.0f, 3.0f, ReplayGap.Reason.DEATH, 0f, 1f)));
+        byte[] valid = TimelineGapCodec.encode(List.of(
+            gap(0.0f, 1.0f, TimelineGap.Reason.TELEPORT, 0f, 1f),
+            gap(2.0f, 3.0f, TimelineGap.Reason.DEATH, 0f, 1f)));
         valid[14] = (byte) 99;
 
-        ReplayGapCodec.Result result = ReplayGapCodec.decode(valid);
+        TimelineGapCodec.Result result = TimelineGapCodec.decode(valid);
 
         assertEquals(1, result.gaps().size());
-        assertEquals(ReplayGap.Reason.DEATH, result.gaps().get(0).reason());
+        assertEquals(TimelineGap.Reason.DEATH, result.gaps().get(0).reason());
         assertFalse(result.warnings().isEmpty());
     }
 
     @Test
     void metadataOmitsGapKeysWhenMissingAndPreservesThemOnUpdates()
         throws Exception {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(
-            gap(0f, 1f, ReplayGap.Reason.TELEPORT, 0f, 1f)));
+        TimelineGaps gaps = TimelineGaps.encode(List.of(
+            gap(0f, 1f, TimelineGap.Reason.TELEPORT, 0f, 1f)));
         ReplayMetadata present = metadata(gaps);
 
         assertEquals(gaps, present.withEnd(99L).gaps());
         assertEquals(gaps, present.withVehicles(Vehicles.none()).gaps());
         assertEquals(gaps, ReplayMetadata.fromValues(present.toValues()).gaps());
-        assertEquals(ReplayGaps.none(),
-            ReplayMetadata.fromValues(metadata(ReplayGaps.none()).toValues()).gaps());
+        assertEquals(TimelineGaps.none(),
+            ReplayMetadata.fromValues(metadata(TimelineGaps.none()).toValues()).gaps());
     }
 
     @Test
     void metadataParsesGapValuesFromTheHeader() throws Exception {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(
-            gap(0f, 1f, ReplayGap.Reason.RECORDING_PAUSE, 0f, 1f)));
+        TimelineGaps gaps = TimelineGaps.encode(List.of(
+            gap(0f, 1f, TimelineGap.Reason.RECORDING_PAUSE, 0f, 1f)));
         Map<String, String> values = metadata(gaps).toValues();
 
-        assertEquals(Integer.toString(ReplayGaps.CURRENT_VERSION),
+        assertEquals(Integer.toString(TimelineGaps.CURRENT_VERSION),
             values.get("gaps_version"));
         assertEquals(gaps.data(), values.get("gaps_data"));
         assertEquals(Base64.getEncoder().encodeToString(
@@ -192,31 +192,31 @@ class ReplayGapsTest {
         ReplayCompatibility.Context context = new ReplayCompatibility.Context(
             "42.21.0", "save", "map", "Sandbox");
 
-        assertFalse(ReplayCompatibility.check(metadata(ReplayGaps.none()), context)
+        assertFalse(ReplayCompatibility.check(metadata(TimelineGaps.none()), context)
             .warnings().stream().anyMatch(warning -> warning.contains("timeline gap")));
-        assertTrue(ReplayCompatibility.check(metadata(new ReplayGaps(
-            ReplayGaps.CURRENT_VERSION, "not base64!")), context)
+        assertTrue(ReplayCompatibility.check(metadata(new TimelineGaps(
+            TimelineGaps.CURRENT_VERSION, "not base64!")), context)
             .warnings().stream().anyMatch(warning -> warning.contains("timeline gap")));
     }
 
     @Test
     void endBoundaryGapSurvivesFractionalFrameTimes() throws Exception {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(
-            gap(1.974f, 1.974f, ReplayGap.Reason.DEATH, 10f, 10f)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata(gaps),
+        TimelineGaps gaps = TimelineGaps.encode(List.of(
+            gap(1.974f, 1.974f, TimelineGap.Reason.DEATH, 10f, 10f)));
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata(gaps),
             List.of(frame(0.007f, 0f), frame(1.974f, 10f))));
 
         assertEquals(1, timeline.getGapCount());
         assertTrue(timeline.getGapWarnings().isEmpty());
-        assertEquals(ReplayGap.Reason.DEATH, timeline.getGaps().get(0).reason());
+        assertEquals(TimelineGap.Reason.DEATH, timeline.getGaps().get(0).reason());
         assertFalse(timeline.isGapHold(1.0));
     }
 
     @Test
     void boundaryOnlyGapDoesNotHoldOrInterpolate() throws Exception {
-        ReplayGaps gaps = ReplayGaps.encode(List.of(
-            gap(1.0f, 1.0f, ReplayGap.Reason.DEATH, 10f, 10f)));
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata(gaps),
+        TimelineGaps gaps = TimelineGaps.encode(List.of(
+            gap(1.0f, 1.0f, TimelineGap.Reason.DEATH, 10f, 10f)));
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata(gaps),
             List.of(frame(0f, 0f), frame(1f, 10f))));
 
         assertEquals(1, timeline.getGapCount());

@@ -2,7 +2,7 @@ package com.gavrh.pzreplay;
 
 import java.util.Locale;
 
-public record ReplayActionContext(
+public record ActionEventContext(
     String weaponStyle,
     String attackType,
     String fireMode,
@@ -29,14 +29,14 @@ public record ReplayActionContext(
         | FLAG_RANGED | FLAG_RANGED_WEAPON_EMPTY | FLAG_CRITICAL
         | FLAG_ATTACK_FROM_BEHIND;
 
-    public ReplayActionContext {
+    public ActionEventContext {
         weaponStyle = safeToken(weaponStyle, MAX_WEAPON_STYLE_LENGTH);
         attackType = safeToken(attackType, MAX_ATTACK_TYPE_LENGTH);
         fireMode = safeTokenPreservingCase(fireMode, MAX_FIRE_MODE_LENGTH);
     }
 
-    public static ReplayActionContext none() {
-        return new ReplayActionContext("", "", "", false, false, false, false, false,
+    public static ActionEventContext none() {
+        return new ActionEventContext("", "", "", false, false, false, false, false,
             false, false);
     }
 
@@ -81,9 +81,9 @@ public record ReplayActionContext(
         return value;
     }
 
-    public static ReplayActionContext fromFlags(String weaponStyle, String attackType,
+    public static ActionEventContext fromFlags(String weaponStyle, String attackType,
         String fireMode, int flags) {
-        return new ReplayActionContext(
+        return new ActionEventContext(
             weaponStyle,
             attackType,
             fireMode,

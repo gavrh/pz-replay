@@ -170,7 +170,7 @@ class AppearanceChangesTest {
             appearance("initial"),
             changes,
             Equipment.none(),
-            ReplayEvents.none()
+            ActionEvents.none()
         );
     }
 

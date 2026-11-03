@@ -53,7 +53,7 @@ class VehiclesTest {
             Appearance.none(),
             AppearanceChanges.none(),
             Equipment.none(),
-            ReplayEvents.none(),
+            ActionEvents.none(),
             vehicles
         );
     }
@@ -69,7 +69,7 @@ class VehiclesTest {
         BinaryReplayCodec.write(path, metadata(vehicles),
             List.of(frame(0f, true), frame(3f, true)), true);
         ReplayData data = ReplayReader.read(path);
-        ReplayTimeline timeline = new ReplayTimeline(data);
+        PlaybackTimeline timeline = new PlaybackTimeline(data);
 
         assertEquals(vehicles, data.metadata().vehicles());
         assertEquals(2, timeline.getVehicleCount());
@@ -90,7 +90,7 @@ class VehiclesTest {
         assertFalse(metadata.toValues().containsKey("vehicles_version"));
         assertFalse(metadata.toValues().containsKey("vehicles_data"));
 
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata,
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata,
             List.of(frame(0f, false), frame(1f, false))));
         assertEquals(0, timeline.getVehicleCount());
         assertNull(timeline.vehicleAt(0.5));
@@ -110,7 +110,7 @@ class VehiclesTest {
         assertTrue(unsupported.warnings().get(0).contains("version is unsupported"));
         assertFalse(missingPayload.warnings().isEmpty());
 
-        ReplayTimeline timeline = new ReplayTimeline(new ReplayData(metadata(corrupt),
+        PlaybackTimeline timeline = new PlaybackTimeline(new ReplayData(metadata(corrupt),
             List.of(frame(0f, true), frame(1f, true))));
         assertEquals(2, timeline.getFrameCount());
         assertEquals(0, timeline.getVehicleCount());
@@ -127,7 +127,7 @@ class VehiclesTest {
         segments.add(segment(2f, 3f, "Base.Car", 0, sample(2f, 30f), sample(1.5f, 20f)));
         segments.add(segment(3f, 4f, "Base.Car", 0, sample(3f, 40f)));
 
-        ReplayVehicleTimeline timeline = new ReplayVehicleTimeline(segments, 4.0);
+        VehicleTimeline timeline = new VehicleTimeline(segments, 4.0);
 
         assertEquals(1, timeline.getSegmentCount());
         assertEquals(40f, timeline.vehicleAt(3.5).x(), 0.0001f);
@@ -136,7 +136,7 @@ class VehiclesTest {
 
     @Test
     void timelineClampsAndSelectsTheCorrectSegment() throws Exception {
-        ReplayVehicleTimeline timeline = new ReplayVehicleTimeline(List.of(
+        VehicleTimeline timeline = new VehicleTimeline(List.of(
             segment(0f, 1f, "Base.First", 0, sample(0f, 0f), sample(1f, 10f)),
             segment(2f, 3f, "Base.Second", 2, sample(2f, 20f), sample(3f, 30f))
         ), 3.0);

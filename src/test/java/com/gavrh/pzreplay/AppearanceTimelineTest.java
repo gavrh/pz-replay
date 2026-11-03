@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayAppearanceTimelineTest {
+class AppearanceTimelineTest {
     private static Appearance appearance(String value) {
         return new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8)));
@@ -30,7 +30,7 @@ class ReplayAppearanceTimelineTest {
         return frames;
     }
 
-    private static ReplayTimeline timeline(Appearance initial, AppearanceChanges changes)
+    private static PlaybackTimeline timeline(Appearance initial, AppearanceChanges changes)
         throws ReplayFormatException {
         ReplayMetadata metadata = new ReplayMetadata(
             ReplayMetadata.CURRENT_FORMAT_VERSION,
@@ -49,9 +49,9 @@ class ReplayAppearanceTimelineTest {
             initial,
             changes,
             Equipment.none(),
-            ReplayEvents.none()
+            ActionEvents.none()
         );
-        return new ReplayTimeline(new ReplayData(metadata, frames(10)));
+        return new PlaybackTimeline(new ReplayData(metadata, frames(10)));
     }
 
     @Test
@@ -59,7 +59,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         Appearance first = appearance("first");
         Appearance second = appearance("second");
-        ReplayTimeline timeline = timeline(initial, changes(
+        PlaybackTimeline timeline = timeline(initial, changes(
             new AppearanceChange(1L, 2.0f, first),
             new AppearanceChange(2L, 6.0f, second)));
 
@@ -76,7 +76,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         Appearance first = appearance("first");
         Appearance second = appearance("second");
-        ReplayTimeline timeline = timeline(initial, changes(
+        PlaybackTimeline timeline = timeline(initial, changes(
             new AppearanceChange(2L, 2.0f, second),
             new AppearanceChange(1L, 2.0f, first)));
 
@@ -88,7 +88,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         Appearance first = appearance("first");
         Appearance second = appearance("second");
-        ReplayTimeline timeline = timeline(initial, changes(
+        PlaybackTimeline timeline = timeline(initial, changes(
             new AppearanceChange(2L, 6.0f, second),
             new AppearanceChange(1L, 2.0f, first)));
 
@@ -101,7 +101,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         Appearance tail = appearance("tail");
         Appearance late = appearance("late");
-        ReplayTimeline timeline = timeline(initial, changes(
+        PlaybackTimeline timeline = timeline(initial, changes(
             new AppearanceChange(1L, 10.1f, tail),
             new AppearanceChange(2L, 20.0f, late)));
 
@@ -117,7 +117,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         Appearance first = appearance("first");
         Appearance second = appearance("second");
-        ReplayTimeline timeline = timeline(initial, changes(
+        PlaybackTimeline timeline = timeline(initial, changes(
             new AppearanceChange(1L, 2.0f, first),
             new AppearanceChange(2L, 6.0f, second)));
 
@@ -140,7 +140,7 @@ class ReplayAppearanceTimelineTest {
     @Test
     void oldReplayWithoutTimelineUsesInitialAppearanceForWholeReplay() throws Exception {
         Appearance initial = appearance("initial");
-        ReplayTimeline timeline = timeline(initial, AppearanceChanges.none());
+        PlaybackTimeline timeline = timeline(initial, AppearanceChanges.none());
 
         assertEquals(0, timeline.getAppearanceChangeCount());
         assertEquals(initial, timeline.appearanceAt(0.0));
@@ -154,7 +154,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         AppearanceChanges corrupt = new AppearanceChanges(
             AppearanceChanges.CURRENT_VERSION, "not base64!");
-        ReplayTimeline timeline = timeline(initial, corrupt);
+        PlaybackTimeline timeline = timeline(initial, corrupt);
 
         assertEquals(0, timeline.getAppearanceChangeCount());
         assertEquals(initial, timeline.appearanceAt(5.0));
@@ -167,7 +167,7 @@ class ReplayAppearanceTimelineTest {
         Appearance initial = appearance("initial");
         AppearanceChange unsupported = new AppearanceChange(1L, 2.0f,
             new Appearance(Appearance.CURRENT_VERSION + 1, "AQ=="));
-        ReplayAppearanceTimeline timeline = new ReplayAppearanceTimeline(initial,
+        AppearanceTimeline timeline = new AppearanceTimeline(initial,
             List.of(unsupported), 10.0);
 
         assertEquals(0, timeline.getChangeCount());

@@ -5,35 +5,35 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayEventScheduler {
-    private final ReplayEventTimeline timeline;
+public final class ActionEventScheduler {
+    private final ActionEventTimeline timeline;
     private final Set<Long> fired = new HashSet<>();
     private double time;
 
-    public ReplayEventScheduler(ReplayEventTimeline timeline) {
+    public ActionEventScheduler(ActionEventTimeline timeline) {
         if (timeline == null) {
             throw new IllegalArgumentException("event timeline is required");
         }
         this.timeline = timeline;
     }
 
-    public List<ReplayEvent> start() {
+    public List<ActionEvent> start() {
         time = 0.0;
         fired.clear();
         return markFired(timeline.eventsAt(0.0));
     }
 
-    public List<ReplayEvent> advance(double toSeconds) {
+    public List<ActionEvent> advance(double toSeconds) {
         if (!Double.isFinite(toSeconds)) {
             return List.of();
         }
         double target = Math.max(0.0, toSeconds);
-        List<ReplayEvent> crossed = markFired(timeline.eventsBetween(time, target));
+        List<ActionEvent> crossed = markFired(timeline.eventsBetween(time, target));
         time = target;
         return crossed;
     }
 
-    public List<ReplayEvent> seek(double seconds) {
+    public List<ActionEvent> seek(double seconds) {
         if (!Double.isFinite(seconds)) {
             return List.of();
         }
@@ -51,9 +51,9 @@ public final class ReplayEventScheduler {
         return time;
     }
 
-    private List<ReplayEvent> markFired(List<ReplayEvent> events) {
-        List<ReplayEvent> result = new ArrayList<>(events.size());
-        for (ReplayEvent event : events) {
+    private List<ActionEvent> markFired(List<ActionEvent> events) {
+        List<ActionEvent> result = new ArrayList<>(events.size());
+        for (ActionEvent event : events) {
             if (fired.add(event.sequence())) {
                 result.add(event);
             }

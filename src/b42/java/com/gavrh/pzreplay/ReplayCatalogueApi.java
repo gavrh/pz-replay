@@ -332,7 +332,7 @@ public final class ReplayCatalogueApi {
     }
 
     private static boolean isActive(String path) {
-        String active = ReplayPlaybackApi.getCurrentPath();
+        String active = PlaybackApi.getCurrentPath();
         return !active.isBlank() && samePath(active, path);
     }
 

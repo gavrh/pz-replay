@@ -4,26 +4,26 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-public record ReplayEvents(int version, String data) {
+public record ActionEvents(int version, String data) {
     public static final int NONE_VERSION = 0;
-    public static final int CURRENT_VERSION = ReplayEventCodec.CURRENT_VERSION;
+    public static final int CURRENT_VERSION = ActionEventCodec.CURRENT_VERSION;
 
     private static final String CORRUPT_WARNING = "action event data is corrupt or incomplete";
 
-    public ReplayEvents {
+    public ActionEvents {
         data = data == null ? "" : data;
     }
 
-    public static ReplayEvents none() {
-        return new ReplayEvents(NONE_VERSION, "");
+    public static ActionEvents none() {
+        return new ActionEvents(NONE_VERSION, "");
     }
 
-    public static ReplayEvents encode(List<ReplayEvent> events) throws ReplayFormatException {
+    public static ActionEvents encode(List<ActionEvent> events) throws ReplayFormatException {
         if (events == null || events.isEmpty()) {
             return none();
         }
-        byte[] bytes = ReplayEventCodec.encode(events);
-        return new ReplayEvents(CURRENT_VERSION,
+        byte[] bytes = ActionEventCodec.encode(events);
+        return new ActionEvents(CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
     }
 
@@ -32,11 +32,11 @@ public record ReplayEvents(int version, String data) {
     }
 
     public boolean isCurrent() {
-        return version >= ReplayEventCodec.MIN_SUPPORTED_VERSION
+        return version >= ActionEventCodec.MIN_SUPPORTED_VERSION
             && version <= CURRENT_VERSION;
     }
 
-    public ReplayEventCodec.Result decode() throws ReplayFormatException {
+    public ActionEventCodec.Result decode() throws ReplayFormatException {
         if (!isCurrent()) {
             throw new ReplayFormatException(
                 "action event data version is unsupported: " + version);
@@ -50,7 +50,7 @@ public record ReplayEvents(int version, String data) {
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException(CORRUPT_WARNING, exception);
         }
-        return ReplayEventCodec.decode(bytes);
+        return ActionEventCodec.decode(bytes);
     }
 
     public List<String> warnings() {
@@ -64,7 +64,7 @@ public record ReplayEvents(int version, String data) {
             return List.of("action event data version is unsupported: " + version);
         }
         try {
-            ReplayEventCodec.Result result = decode();
+            ActionEventCodec.Result result = decode();
             if (result.events().isEmpty() && result.warnings().isEmpty()) {
                 return List.of(CORRUPT_WARNING);
             }
@@ -74,16 +74,16 @@ public record ReplayEvents(int version, String data) {
         }
     }
 
-    static ReplayEvents fromValues(Map<String, String> values) {
+    static ActionEvents fromValues(Map<String, String> values) {
         String versionValue = values.get("events_version");
         String data = values.getOrDefault("events_data", "");
         if (versionValue == null) {
-            return data.isEmpty() ? none() : new ReplayEvents(-1, data);
+            return data.isEmpty() ? none() : new ActionEvents(-1, data);
         }
         try {
-            return new ReplayEvents(Integer.parseInt(versionValue), data);
+            return new ActionEvents(Integer.parseInt(versionValue), data);
         } catch (NumberFormatException exception) {
-            return new ReplayEvents(-1, data);
+            return new ActionEvents(-1, data);
         }
     }
 }

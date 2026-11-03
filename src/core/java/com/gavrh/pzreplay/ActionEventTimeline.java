@@ -8,28 +8,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class ReplayEventTimeline {
+public final class ActionEventTimeline {
     private static final double TIME_EPSILON = 0.0001;
     private static final double MAX_EVENT_TAIL_SECONDS = 0.25;
     private static final int MAX_WARNINGS = 8;
 
-    private final List<ReplayEvent> events;
+    private final List<ActionEvent> events;
     private final List<String> warnings;
 
-    public ReplayEventTimeline(List<ReplayEvent> events, double duration)
+    public ActionEventTimeline(List<ActionEvent> events, double duration)
         throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {
             throw new ReplayFormatException("replay duration is invalid");
         }
-        List<ReplayEvent> valid = new ArrayList<>();
+        List<ActionEvent> valid = new ArrayList<>();
         Set<String> collectedWarnings = new LinkedHashSet<>();
         if (events != null) {
-            if (events.size() > ReplayEventCodec.MAX_EVENTS) {
+            if (events.size() > ActionEventCodec.MAX_EVENTS) {
                 throw new ReplayFormatException(
                     "too many action events: " + events.size());
             }
             for (int index = 0; index < events.size(); index++) {
-                ReplayEvent event = events.get(index);
+                ActionEvent event = events.get(index);
                 if (event == null) {
                     addWarning(collectedWarnings,
                         "action event " + index + " is missing and was ignored");
@@ -41,7 +41,7 @@ public final class ReplayEventTimeline {
                     continue;
                 }
                 if (event.timeSeconds() > duration) {
-                    valid.add(new ReplayEvent(event.sequence(), (float) duration,
+                    valid.add(new ActionEvent(event.sequence(), (float) duration,
                         event.kind(), event.end(), event.detail(), event.direction(),
                         event.durationSeconds(), event.context()));
                     continue;
@@ -49,12 +49,12 @@ public final class ReplayEventTimeline {
                 valid.add(event);
             }
         }
-        valid.sort(Comparator.comparingDouble(ReplayEvent::timeSeconds));
+        valid.sort(Comparator.comparingDouble(ActionEvent::timeSeconds));
         this.events = List.copyOf(valid);
         this.warnings = List.copyOf(collectedWarnings);
     }
 
-    public List<ReplayEvent> events() {
+    public List<ActionEvent> events() {
         return events;
     }
 
@@ -66,12 +66,12 @@ public final class ReplayEventTimeline {
         return events.size();
     }
 
-    public List<ReplayEvent> eventsAt(double time) {
+    public List<ActionEvent> eventsAt(double time) {
         if (events.isEmpty() || !Double.isFinite(time)) {
             return List.of();
         }
         double target = clamp(time);
-        List<ReplayEvent> result = new ArrayList<>();
+        List<ActionEvent> result = new ArrayList<>();
         int index = firstAfter(target - TIME_EPSILON);
         while (index < events.size()
             && events.get(index).timeSeconds() <= target + TIME_EPSILON) {
@@ -81,7 +81,7 @@ public final class ReplayEventTimeline {
         return List.copyOf(result);
     }
 
-    public List<ReplayEvent> eventsBetween(double fromExclusive, double toInclusive) {
+    public List<ActionEvent> eventsBetween(double fromExclusive, double toInclusive) {
         if (events.isEmpty() || !Double.isFinite(fromExclusive)
             || !Double.isFinite(toInclusive) || toInclusive <= fromExclusive) {
             return List.of();
@@ -91,7 +91,7 @@ public final class ReplayEventTimeline {
         if (to <= from) {
             return List.of();
         }
-        List<ReplayEvent> result = new ArrayList<>();
+        List<ActionEvent> result = new ArrayList<>();
         int index = firstAfter(from);
         while (index < events.size()
             && events.get(index).timeSeconds() <= to + TIME_EPSILON) {
@@ -101,14 +101,14 @@ public final class ReplayEventTimeline {
         return List.copyOf(result);
     }
 
-    public List<ReplayEvent> persistentAt(double time) {
+    public List<ActionEvent> persistentAt(double time) {
         if (events.isEmpty() || !Double.isFinite(time)) {
             return List.of();
         }
         double target = clamp(time);
-        Map<ReplayEvent.Kind, ReplayEvent> active =
-            new EnumMap<>(ReplayEvent.Kind.class);
-        for (ReplayEvent event : events) {
+        Map<ActionEvent.Kind, ActionEvent> active =
+            new EnumMap<>(ActionEvent.Kind.class);
+        for (ActionEvent event : events) {
             if (event.timeSeconds() > target + TIME_EPSILON) {
                 break;
             }

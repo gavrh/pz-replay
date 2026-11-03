@@ -12,30 +12,30 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayEventCodec {
+public final class ActionEventCodec {
     public static final int MIN_SUPPORTED_VERSION = 1;
     public static final int CURRENT_VERSION = 2;
     public static final int MAX_EVENTS = 2048;
     private static final int MAX_WARNINGS = 8;
     private static final int V1_RECORD_HEADER_BYTES = 4 + 4 + 1 + 1 + 4 + 4 + 2;
     private static final int V2_RECORD_HEADER_BYTES = V1_RECORD_HEADER_BYTES
-        + ReplayActionContext.MAX_WEAPON_STYLE_LENGTH
-        + ReplayActionContext.MAX_ATTACK_TYPE_LENGTH
-        + ReplayActionContext.MAX_FIRE_MODE_LENGTH + 4;
+        + ActionEventContext.MAX_WEAPON_STYLE_LENGTH
+        + ActionEventContext.MAX_ATTACK_TYPE_LENGTH
+        + ActionEventContext.MAX_FIRE_MODE_LENGTH + 4;
     private static final int MAX_RECORD_BYTES = Math.max(V1_RECORD_HEADER_BYTES,
-        V2_RECORD_HEADER_BYTES) + ReplayEvent.MAX_DETAIL_LENGTH;
+        V2_RECORD_HEADER_BYTES) + ActionEvent.MAX_DETAIL_LENGTH;
 
-    public record Result(List<ReplayEvent> events, List<String> warnings) {
+    public record Result(List<ActionEvent> events, List<String> warnings) {
         public Result {
             events = List.copyOf(events);
             warnings = List.copyOf(warnings);
         }
     }
 
-    private ReplayEventCodec() {
+    private ActionEventCodec() {
     }
 
-    public static byte[] encode(List<ReplayEvent> events) throws ReplayFormatException {
+    public static byte[] encode(List<ActionEvent> events) throws ReplayFormatException {
         if (events == null) {
             throw new ReplayFormatException("action events are missing");
         }
@@ -47,12 +47,12 @@ public final class ReplayEventCodec {
             out.writeShort(CURRENT_VERSION);
             out.writeInt(events.size());
             for (int index = 0; index < events.size(); index++) {
-                ReplayEvent event = events.get(index);
+                ActionEvent event = events.get(index);
                 if (event == null) {
                     throw new ReplayFormatException("action event " + index + " is missing");
                 }
                 byte[] detail = event.detail().getBytes(StandardCharsets.UTF_8);
-                if (detail.length > ReplayEvent.MAX_DETAIL_LENGTH) {
+                if (detail.length > ActionEvent.MAX_DETAIL_LENGTH) {
                     throw new ReplayFormatException("action event " + index
                         + " has an oversized payload");
                 }
@@ -93,7 +93,7 @@ public final class ReplayEventCodec {
             if (count < 0 || count > MAX_EVENTS) {
                 throw new ReplayFormatException("action event count is invalid: " + count);
             }
-            List<ReplayEvent> events = new ArrayList<>(count);
+            List<ActionEvent> events = new ArrayList<>(count);
             for (int index = 0; index < count; index++) {
                 if (in.available() < headerBytes) {
                     throw new ReplayFormatException(
@@ -106,16 +106,16 @@ public final class ReplayEventCodec {
                 float direction = in.readFloat();
                 float duration = in.readFloat();
                 int detailLength = in.readUnsignedShort();
-                if (detailLength > ReplayEvent.MAX_DETAIL_LENGTH
+                if (detailLength > ActionEvent.MAX_DETAIL_LENGTH
                     || in.available() < detailLength) {
                     throw new ReplayFormatException(
                         "action event data is corrupt or incomplete");
                 }
                 byte[] detailBytes = new byte[detailLength];
                 in.readFully(detailBytes);
-                ReplayActionContext context = version == 1
-                    ? ReplayActionContext.none() : readContext(in, warnings, index);
-                ReplayEvent.Kind kind = ReplayEvent.Kind.fromCode(kindCode);
+                ActionEventContext context = version == 1
+                    ? ActionEventContext.none() : readContext(in, warnings, index);
+                ActionEvent.Kind kind = ActionEvent.Kind.fromCode(kindCode);
                 if (kind == null) {
                     addWarning(warnings, "unknown action event type " + kindCode
                         + " was ignored");
@@ -128,7 +128,7 @@ public final class ReplayEventCodec {
                     addWarning(warnings, "invalid action event " + index + " was ignored");
                     continue;
                 }
-                events.add(new ReplayEvent(sequence, time, kind, end,
+                events.add(new ActionEvent(sequence, time, kind, end,
                     new String(detailBytes, StandardCharsets.UTF_8), direction,
                     duration, context));
             }
@@ -145,34 +145,34 @@ public final class ReplayEventCodec {
         }
     }
 
-    private static void writeContext(DataOutputStream out, ReplayActionContext context)
+    private static void writeContext(DataOutputStream out, ActionEventContext context)
         throws IOException {
-        ReplayActionContext safe = context == null ? ReplayActionContext.none() : context;
+        ActionEventContext safe = context == null ? ActionEventContext.none() : context;
         out.writeInt(safe.flags());
-        writeFixed(out, safe.weaponStyle(), ReplayActionContext.MAX_WEAPON_STYLE_LENGTH);
-        writeFixed(out, safe.attackType(), ReplayActionContext.MAX_ATTACK_TYPE_LENGTH);
-        writeFixed(out, safe.fireMode(), ReplayActionContext.MAX_FIRE_MODE_LENGTH);
+        writeFixed(out, safe.weaponStyle(), ActionEventContext.MAX_WEAPON_STYLE_LENGTH);
+        writeFixed(out, safe.attackType(), ActionEventContext.MAX_ATTACK_TYPE_LENGTH);
+        writeFixed(out, safe.fireMode(), ActionEventContext.MAX_FIRE_MODE_LENGTH);
     }
 
-    private static ReplayActionContext readContext(DataInputStream in, Set<String> warnings,
+    private static ActionEventContext readContext(DataInputStream in, Set<String> warnings,
         int index) throws IOException {
         int flags = in.readInt();
-        String weaponStyle = readFixed(in, ReplayActionContext.MAX_WEAPON_STYLE_LENGTH);
-        String attackType = readFixed(in, ReplayActionContext.MAX_ATTACK_TYPE_LENGTH);
-        String fireMode = readFixed(in, ReplayActionContext.MAX_FIRE_MODE_LENGTH);
-        if ((flags & ~ReplayActionContext.KNOWN_FLAGS) != 0) {
+        String weaponStyle = readFixed(in, ActionEventContext.MAX_WEAPON_STYLE_LENGTH);
+        String attackType = readFixed(in, ActionEventContext.MAX_ATTACK_TYPE_LENGTH);
+        String fireMode = readFixed(in, ActionEventContext.MAX_FIRE_MODE_LENGTH);
+        if ((flags & ~ActionEventContext.KNOWN_FLAGS) != 0) {
             addWarning(warnings, "action event " + index
                 + " has unknown animation context flags; known state was kept");
-            flags &= ReplayActionContext.KNOWN_FLAGS;
+            flags &= ActionEventContext.KNOWN_FLAGS;
         }
-        if (!ReplayActionContext.isSafeToken(weaponStyle)
-            || !ReplayActionContext.isSafeToken(attackType)
-            || !ReplayActionContext.isSafeToken(fireMode)) {
+        if (!ActionEventContext.isSafeToken(weaponStyle)
+            || !ActionEventContext.isSafeToken(attackType)
+            || !ActionEventContext.isSafeToken(fireMode)) {
             addWarning(warnings, "action event " + index
                 + " has an invalid animation context; it was ignored");
-            return ReplayActionContext.none();
+            return ActionEventContext.none();
         }
-        return ReplayActionContext.fromFlags(weaponStyle, attackType, fireMode, flags);
+        return ActionEventContext.fromFlags(weaponStyle, attackType, fireMode, flags);
     }
 
     private static void writeFixed(DataOutputStream out, String value, int length)

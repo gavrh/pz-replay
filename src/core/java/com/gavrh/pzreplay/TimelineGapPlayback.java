@@ -6,20 +6,20 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayGapTimeline {
+public final class TimelineGapPlayback {
     private static final double TIME_EPSILON = 0.0001;
     private static final double MAX_GAP_TAIL_SECONDS = 0.25;
     private static final int MAX_WARNINGS = 8;
 
-    private final List<ReplayGap> gaps;
+    private final List<TimelineGap> gaps;
     private final List<String> warnings;
 
-    public ReplayGapTimeline(List<ReplayGap> gaps, double duration)
+    public TimelineGapPlayback(List<TimelineGap> gaps, double duration)
         throws ReplayFormatException {
         this(gaps, duration, List.of());
     }
 
-    public ReplayGapTimeline(List<ReplayGap> gaps, double duration,
+    public TimelineGapPlayback(List<TimelineGap> gaps, double duration,
         List<String> extraWarnings) throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {
             throw new ReplayFormatException("replay duration is invalid");
@@ -32,13 +32,13 @@ public final class ReplayGapTimeline {
                 }
             }
         }
-        List<ReplayGap> valid = new ArrayList<>();
+        List<TimelineGap> valid = new ArrayList<>();
         if (gaps != null) {
-            if (gaps.size() > ReplayGapCodec.MAX_GAPS) {
+            if (gaps.size() > TimelineGapCodec.MAX_GAPS) {
                 throw new ReplayFormatException("too many timeline gaps: " + gaps.size());
             }
             for (int index = 0; index < gaps.size(); index++) {
-                ReplayGap gap = gaps.get(index);
+                TimelineGap gap = gaps.get(index);
                 if (gap == null) {
                     addWarning(collectedWarnings,
                         "timeline gap " + index + " is missing and was ignored");
@@ -59,15 +59,15 @@ public final class ReplayGapTimeline {
                 if (end < start) {
                     end = start;
                 }
-                valid.add(new ReplayGap((float) start, (float) end, gap.reason(),
+                valid.add(new TimelineGap((float) start, (float) end, gap.reason(),
                     gap.lastX(), gap.lastY(), gap.lastZ(), gap.nextX(), gap.nextY(),
                     gap.nextZ()));
             }
         }
-        valid.sort(Comparator.comparingDouble(ReplayGap::startTimeSeconds));
-        List<ReplayGap> nonOverlapping = new ArrayList<>();
+        valid.sort(Comparator.comparingDouble(TimelineGap::startTimeSeconds));
+        List<TimelineGap> nonOverlapping = new ArrayList<>();
         double previousEnd = 0.0;
-        for (ReplayGap gap : valid) {
+        for (TimelineGap gap : valid) {
             if (!nonOverlapping.isEmpty()
                 && gap.startTimeSeconds() < previousEnd - TIME_EPSILON) {
                 addWarning(collectedWarnings,
@@ -75,7 +75,7 @@ public final class ReplayGapTimeline {
                 if (gap.endTimeSeconds() <= previousEnd + TIME_EPSILON) {
                     continue;
                 }
-                gap = new ReplayGap((float) previousEnd, gap.endTimeSeconds(),
+                gap = new TimelineGap((float) previousEnd, gap.endTimeSeconds(),
                     gap.reason(), gap.lastX(), gap.lastY(), gap.lastZ(), gap.nextX(),
                     gap.nextY(), gap.nextZ());
             }
@@ -86,7 +86,7 @@ public final class ReplayGapTimeline {
         this.warnings = List.copyOf(collectedWarnings);
     }
 
-    public List<ReplayGap> gaps() {
+    public List<TimelineGap> gaps() {
         return gaps;
     }
 

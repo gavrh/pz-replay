@@ -11,13 +11,13 @@ import zombie.core.Core;
 import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayPlayback")
-public final class ReplayPlaybackApi {
-    private static ReplayTimeline timeline;
+public final class PlaybackApi {
+    private static PlaybackTimeline timeline;
     private static GhostMotionController controller;
     private static String lastPath = "";
     private static boolean reportedFinished;
 
-    private ReplayPlaybackApi() {
+    private PlaybackApi() {
     }
 
     public static boolean play(String path) {
@@ -59,9 +59,9 @@ public final class ReplayPlaybackApi {
             return false;
         }
 
-        ReplayTimeline loaded;
+        PlaybackTimeline loaded;
         try {
-            loaded = new ReplayTimeline(data);
+            loaded = new PlaybackTimeline(data);
         } catch (ReplayFormatException exception) {
             fail(requested, "invalid replay timeline: " + exception.getMessage());
             return false;
@@ -102,7 +102,7 @@ public final class ReplayPlaybackApi {
 
         GhostMotionController loadedController = new GhostMotionController(loaded,
             warning -> addPlayingWarning(warnings, warning));
-        ReplayTimeline.Sample first = loaded.sampleAt(0.0);
+        PlaybackTimeline.Sample first = loaded.sampleAt(0.0);
         ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
             first.z(), first.facing(), appearance,
             warning -> addPlayingWarning(warnings, warning));

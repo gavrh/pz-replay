@@ -122,7 +122,7 @@ public final class PZReplayLua {
         tickCountdown();
         CaptureRecorder.INSTANCE.tick();
         syncRecordingState();
-        ReplayPlaybackApi.tick();
+        PlaybackApi.tick();
     }
 
     public static void countdownTick() {
@@ -249,7 +249,7 @@ public final class PZReplayLua {
             if (CaptureRecorder.INSTANCE.isRecording()) {
                 stopRecording();
             }
-            ReplayPlaybackApi.stop();
+            PlaybackApi.stop();
             ReplayGhostApi.despawn();
             STATE.clearErrors();
         }
@@ -347,7 +347,7 @@ public final class PZReplayLua {
         if (settings.isKillSwitch()) {
             return "kill switch is enabled";
         }
-        if (ReplayPlaybackApi.isPlaying()) {
+        if (PlaybackApi.isPlaying()) {
             return "stop playback before recording";
         }
         return playerBlocker();

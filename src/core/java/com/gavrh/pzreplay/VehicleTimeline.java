@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplayVehicleTimeline {
+public final class VehicleTimeline {
     public record State(
         VehicleSegment segment,
         double time,
@@ -28,12 +28,12 @@ public final class ReplayVehicleTimeline {
     private final List<String> warnings;
     private final double duration;
 
-    public ReplayVehicleTimeline(List<VehicleSegment> segments, double duration)
+    public VehicleTimeline(List<VehicleSegment> segments, double duration)
         throws ReplayFormatException {
         this(segments, duration, List.of());
     }
 
-    public ReplayVehicleTimeline(List<VehicleSegment> segments, double duration,
+    public VehicleTimeline(List<VehicleSegment> segments, double duration,
         List<String> extraWarnings) throws ReplayFormatException {
         if (!Double.isFinite(duration) || duration < 0.0) {
             throw new ReplayFormatException("replay duration is invalid");

@@ -298,13 +298,13 @@ class CaptureSessionTest {
         session.start(0L);
         session.tick(1, 100L, player(0f, 0f, 0f), false);
 
-        assertTrue(session.recordEvent(ReplayEvent.Kind.DOOR, false, "door", 45f, 0f));
-        assertFalse(session.recordEvent(ReplayEvent.Kind.DOOR, false, "door", 45f, 0f));
+        assertTrue(session.recordEvent(ActionEvent.Kind.DOOR, false, "door", 45f, 0f));
+        assertFalse(session.recordEvent(ActionEvent.Kind.DOOR, false, "door", 45f, 0f));
 
         session.tick(2, 200L, player(0f, 0f, 0f), false);
-        assertTrue(session.recordEvent(ReplayEvent.Kind.DOOR, false, "door", 45f, 0f));
+        assertTrue(session.recordEvent(ActionEvent.Kind.DOOR, false, "door", 45f, 0f));
 
-        List<ReplayEvent> events = session.events();
+        List<ActionEvent> events = session.events();
         assertEquals(2, events.size());
         assertEquals(0.1f, events.get(0).timeSeconds(), 0.0001f);
         assertEquals(0.2f, events.get(1).timeSeconds(), 0.0001f);
@@ -317,15 +317,15 @@ class CaptureSessionTest {
         CaptureSession session = new CaptureSession(30.0);
         session.start(0L);
         session.tick(1, 100L, player(0f, 0f, 0f), false);
-        ReplayActionContext context = new ReplayActionContext("1handed", "miss", "",
+        ActionEventContext context = new ActionEventContext("1handed", "miss", "",
             false, false, false, false, false, false, false);
 
-        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+        assertTrue(session.recordEvent(ActionEvent.Kind.MELEE_ATTACK, false, "1handed",
             45f, 0f, context));
-        assertFalse(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+        assertFalse(session.recordEvent(ActionEvent.Kind.MELEE_ATTACK, false, "1handed",
             45f, 0f, context));
 
-        ReplayEvent event = session.events().get(0);
+        ActionEvent event = session.events().get(0);
         assertEquals(context, event.context());
         assertEquals("miss", event.context().attackType());
     }
@@ -335,14 +335,14 @@ class CaptureSessionTest {
         CaptureSession session = new CaptureSession(30.0);
         session.start(0L);
         session.tick(1, 100L, player(0f, 0f, 0f), false);
-        ReplayActionContext miss = new ReplayActionContext("1handed", "miss", "",
+        ActionEventContext miss = new ActionEventContext("1handed", "miss", "",
             false, false, false, false, false, false, false);
-        ReplayActionContext overhead = new ReplayActionContext("2handed", "overhead", "",
+        ActionEventContext overhead = new ActionEventContext("2handed", "overhead", "",
             false, false, false, false, false, false, false);
 
-        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "1handed",
+        assertTrue(session.recordEvent(ActionEvent.Kind.MELEE_ATTACK, false, "1handed",
             45f, 0f, miss));
-        assertTrue(session.recordEvent(ReplayEvent.Kind.MELEE_ATTACK, false, "2handed",
+        assertTrue(session.recordEvent(ActionEvent.Kind.MELEE_ATTACK, false, "2handed",
             45f, 0f, overhead));
 
         assertEquals(2, session.events().size());
@@ -354,24 +354,24 @@ class CaptureSessionTest {
         CaptureSession session = new CaptureSession(30.0);
         session.start(0L);
         session.tick(1, 10L, player(0f, 0f, 0f), false);
-        session.recordEvent(ReplayEvent.Kind.DOOR, false, "door", 0f, 0f);
+        session.recordEvent(ActionEvent.Kind.DOOR, false, "door", 0f, 0f);
         session.stop(CaptureSession.StopReason.REQUESTED);
         assertEquals(1, session.events().size());
 
         session.start(1_000L);
         assertTrue(session.events().isEmpty());
         for (int index = 0; index < CaptureSession.MAX_EVENTS + 10; index++) {
-            session.recordEvent(ReplayEvent.Kind.DOOR, false, Integer.toString(index), 0f, 0f);
+            session.recordEvent(ActionEvent.Kind.DOOR, false, Integer.toString(index), 0f, 0f);
         }
         assertEquals(CaptureSession.MAX_EVENTS, session.events().size());
-        assertFalse(session.recordEvent(ReplayEvent.Kind.DOOR, false, "overflow", 0f, 0f));
+        assertFalse(session.recordEvent(ActionEvent.Kind.DOOR, false, "overflow", 0f, 0f));
     }
 
     @Test
     void actionEventsAreIgnoredWhileNotRecording() {
         CaptureSession session = new CaptureSession(30.0);
 
-        assertFalse(session.recordEvent(ReplayEvent.Kind.FALL, false, "", 0f, 0f));
+        assertFalse(session.recordEvent(ActionEvent.Kind.FALL, false, "", 0f, 0f));
         assertTrue(session.events().isEmpty());
     }
 
