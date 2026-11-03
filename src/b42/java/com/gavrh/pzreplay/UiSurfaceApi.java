@@ -3,10 +3,10 @@ package com.gavrh.pzreplay;
 import me.zed_0xff.zombie_buddy.Exposer;
 
 @Exposer.LuaClass(name = "PZReplaySurface")
-public final class ReplaySurfaceApi {
-    private static final ReplaySurfaceModel MODEL = new ReplaySurfaceModel();
+public final class UiSurfaceApi {
+    private static final UiSurfaceModel MODEL = new UiSurfaceModel();
 
-    private ReplaySurfaceApi() {
+    private UiSurfaceApi() {
     }
 
     public static boolean open(String surface) {

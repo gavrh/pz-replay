@@ -1,6 +1,6 @@
 package com.gavrh.pzreplay;
 
-public final class ReplaySurfaceModel {
+public final class UiSurfaceModel {
     public static final String HUD = "hud";
     public static final String PANEL = "panel";
     public static final String LIBRARY = "library";
