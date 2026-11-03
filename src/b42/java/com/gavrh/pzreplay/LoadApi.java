@@ -12,16 +12,16 @@ import me.zed_0xff.zombie_buddy.Exposer;
 import zombie.core.Core;
 
 @Exposer.LuaClass(name = "PZReplayLoadApi")
-public final class ReplayLoadApi {
-    private static final List<ReplaySaveResolver.SaveDescriptor> SAVES = new ArrayList<>();
-    private static ReplaySaveResolver.Result result =
-        ReplaySaveResolver.Result.error("not-resolved", "");
+public final class LoadApi {
+    private static final List<SaveResolver.SaveDescriptor> SAVES = new ArrayList<>();
+    private static SaveResolver.Result result =
+        SaveResolver.Result.error("not-resolved", "");
     private static String lastReplayPath = "";
     private static boolean pending;
     private static String pendingPath = "";
     private static long pendingStartedMillis;
 
-    private ReplayLoadApi() {
+    private LoadApi() {
     }
 
     public static void beginSaves() {
@@ -30,7 +30,7 @@ public final class ReplayLoadApi {
 
     public static void addSave(String folder, String saveName, String gameMode, String mapName,
         String playerNames, String deadPlayerNames) {
-        SAVES.add(new ReplaySaveResolver.SaveDescriptor(
+        SAVES.add(new SaveResolver.SaveDescriptor(
             folder, saveName, gameMode, mapName,
             splitLines(playerNames), splitLines(deadPlayerNames),
             saveModifiedMillis(folder)));
@@ -60,7 +60,7 @@ public final class ReplayLoadApi {
             return fail("replay-invalid", "The replay has no frames.", requested);
         }
 
-        result = ReplaySaveResolver.resolve(data.metadata(), SAVES, gameVersion());
+        result = SaveResolver.resolve(data.metadata(), SAVES, gameVersion());
         System.out.println("[pz-replay] load-play resolve path=" + requested
             + " saves=" + SAVES.size()
             + " resolved=" + result.resolved()
@@ -195,7 +195,7 @@ public final class ReplayLoadApi {
     }
 
     private static boolean fail(String code, String message, String path) {
-        result = ReplaySaveResolver.Result.error(code, message);
+        result = SaveResolver.Result.error(code, message);
         System.out.println("[pz-replay] load-play error path=" + path
             + " code=" + code + " message=" + message);
         return false;

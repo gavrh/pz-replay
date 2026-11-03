@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplaySaveResolverTest {
+class SaveResolverTest {
     private static final String GAME_VERSION = "42.21.0";
     private static final String SAVE_NAME = "pz-replay-test";
     private static final String MAP_NAME = "Muldraugh, KY";
@@ -36,19 +36,19 @@ class ReplaySaveResolverTest {
         );
     }
 
-    private static ReplaySaveResolver.SaveDescriptor save(String folder, String gameMode,
+    private static SaveResolver.SaveDescriptor save(String folder, String gameMode,
         String mapName, List<String> players, long modifiedMillis) {
-        return new ReplaySaveResolver.SaveDescriptor(folder, SAVE_NAME, gameMode, mapName,
+        return new SaveResolver.SaveDescriptor(folder, SAVE_NAME, gameMode, mapName,
             players, modifiedMillis);
     }
 
-    private static ReplaySaveResolver.SaveDescriptor save(String folder, String gameMode) {
+    private static SaveResolver.SaveDescriptor save(String folder, String gameMode) {
         return save(folder, gameMode, MAP_NAME, List.of(PLAYER_NAME), 0L);
     }
 
     @Test
     void resolvesSaveByNameAndGameMode() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
 
         assertTrue(result.resolved());
@@ -63,7 +63,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void resolvesOlderReplayWithoutGameModeWhenOnlyOneSaveMatches() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata(""),
+        SaveResolver.Result result = SaveResolver.resolve(metadata(""),
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
 
         assertTrue(result.resolved());
@@ -72,7 +72,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsOlderReplayWithoutGameModeWhenMultipleSavesMatch() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata(""),
+        SaveResolver.Result result = SaveResolver.resolve(metadata(""),
             List.of(save("Sandbox/pz-replay-test", "Sandbox"),
                 save("Apocalypse/pz-replay-test", "Apocalypse")), GAME_VERSION);
 
@@ -83,11 +83,11 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsMissingSaveWithoutFallingBackToSimilarName() {
-        ReplaySaveResolver.SaveDescriptor similar = new ReplaySaveResolver.SaveDescriptor(
+        SaveResolver.SaveDescriptor similar = new SaveResolver.SaveDescriptor(
             "Sandbox/pz-replay-test-2", SAVE_NAME + "-2", "Sandbox", MAP_NAME,
             List.of(PLAYER_NAME), 0L);
 
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(similar), GAME_VERSION);
 
         assertFalse(result.resolved());
@@ -97,7 +97,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsDuplicateSaveDirectories() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox"),
                 save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
 
@@ -107,11 +107,11 @@ class ReplaySaveResolverTest {
 
     @Test
     void ignoresStructurallyInvalidSaveEntries() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(
-                new ReplaySaveResolver.SaveDescriptor("", SAVE_NAME, "Sandbox", MAP_NAME,
+                new SaveResolver.SaveDescriptor("", SAVE_NAME, "Sandbox", MAP_NAME,
                     List.of(PLAYER_NAME), 0L),
-                new ReplaySaveResolver.SaveDescriptor("Sandbox/empty", "", "Sandbox", MAP_NAME,
+                new SaveResolver.SaveDescriptor("Sandbox/empty", "", "Sandbox", MAP_NAME,
                     List.of(PLAYER_NAME), 0L),
                 save("Sandbox/pz-replay-test", "Sandbox")
             ), GAME_VERSION);
@@ -122,7 +122,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsSaveInADifferentGameMode() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Apocalypse/pz-replay-test", "Apocalypse")), GAME_VERSION);
 
         assertFalse(result.resolved());
@@ -133,7 +133,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsMapMismatch() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox", "West Point, KY",
                 List.of(PLAYER_NAME), 0L)), GAME_VERSION);
 
@@ -143,7 +143,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void acceptsReplayMapWhenSaveListsMultipleMaps() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox",
                 "Muldraugh, KY;West Point, KY", List.of(PLAYER_NAME), 0L)), GAME_VERSION);
 
@@ -152,7 +152,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsPlayerMismatch() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox", MAP_NAME,
                 List.of("Someone Else"), 0L)), GAME_VERSION);
 
@@ -163,7 +163,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsSaveWithoutPlayers() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox", MAP_NAME, List.of(), 0L)),
             GAME_VERSION);
 
@@ -174,11 +174,11 @@ class ReplaySaveResolverTest {
 
     @Test
     void rejectsDeadRecordedPlayer() {
-        ReplaySaveResolver.SaveDescriptor save = new ReplaySaveResolver.SaveDescriptor(
+        SaveResolver.SaveDescriptor save = new SaveResolver.SaveDescriptor(
             "Sandbox/pz-replay-test", SAVE_NAME, "Sandbox", MAP_NAME,
             List.of(PLAYER_NAME, "Other"), List.of(PLAYER_NAME), 0L);
 
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save), GAME_VERSION);
 
         assertFalse(result.resolved());
@@ -187,7 +187,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void warnsWhenGameVersionDiffers() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), "42.20.0");
 
         assertTrue(result.resolved());
@@ -197,7 +197,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void warnsWhenSaveHasAdvancedSinceRecording() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox", MAP_NAME,
                 List.of(PLAYER_NAME), RECORDING_END_MILLIS + 10_000L)), GAME_VERSION);
 
@@ -207,7 +207,7 @@ class ReplaySaveResolverTest {
 
     @Test
     void reportsWarningsWithoutBlockingPlayback() {
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata("Sandbox"),
+        SaveResolver.Result result = SaveResolver.resolve(metadata("Sandbox"),
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), "42.20.0");
 
         assertTrue(result.resolved());
@@ -233,7 +233,7 @@ class ReplaySaveResolverTest {
             RECORDING_END_MILLIS,
             APPEARANCE,
             Equipment.none());
-        ReplaySaveResolver.Result result = ReplaySaveResolver.resolve(metadata,
+        SaveResolver.Result result = SaveResolver.resolve(metadata,
             List.of(save("Sandbox/pz-replay-test", "Sandbox")), GAME_VERSION);
 
         assertTrue(result.resolved());
@@ -253,10 +253,10 @@ class ReplaySaveResolverTest {
             "Sandbox", MAP_NAME, "", 0f, 0f, 0f, 30.0, 0L, RECORDING_END_MILLIS, APPEARANCE);
 
         assertEquals("replay-invalid",
-            ReplaySaveResolver.resolve(missingSave, List.of(), GAME_VERSION).errorCode());
+            SaveResolver.resolve(missingSave, List.of(), GAME_VERSION).errorCode());
         assertEquals("replay-invalid",
-            ReplaySaveResolver.resolve(missingMap, List.of(), GAME_VERSION).errorCode());
+            SaveResolver.resolve(missingMap, List.of(), GAME_VERSION).errorCode());
         assertEquals("replay-invalid",
-            ReplaySaveResolver.resolve(missingPlayer, List.of(), GAME_VERSION).errorCode());
+            SaveResolver.resolve(missingPlayer, List.of(), GAME_VERSION).errorCode());
     }
 }

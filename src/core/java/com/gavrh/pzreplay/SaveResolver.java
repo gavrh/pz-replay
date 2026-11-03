@@ -5,7 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-public final class ReplaySaveResolver {
+public final class SaveResolver {
     private static final long SAVE_PROGRESS_TOLERANCE_MILLIS = 5000L;
 
     public record SaveDescriptor(
@@ -59,7 +59,7 @@ public final class ReplaySaveResolver {
         }
     }
 
-    private ReplaySaveResolver() {
+    private SaveResolver() {
     }
 
     public static Result resolve(ReplayMetadata metadata, List<SaveDescriptor> saves,
