@@ -66,27 +66,27 @@ public final class ScriptedGhostPath {
         float down = originY + 3.0f;
         List<Point> points = new ArrayList<>();
         points.add(new Point(0.0, originX, originY, originZ, 0.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(1.0, originX, originY, originZ, 0.0f,
-            ReplaySample.Locomotion.WALK));
+            CaptureSample.Locomotion.WALK));
         points.add(new Point(4.0, right, originY, originZ, 0.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(4.4, right, originY, originZ, 90.0f,
-            ReplaySample.Locomotion.RUN));
+            CaptureSample.Locomotion.RUN));
         points.add(new Point(6.2, right, down, originZ, 90.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(6.6, right, down, originZ, 180.0f,
-            ReplaySample.Locomotion.SPRINT));
+            CaptureSample.Locomotion.SPRINT));
         points.add(new Point(7.7, originX, down, originZ, 180.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(8.1, originX, down, originZ, -90.0f,
-            ReplaySample.Locomotion.SNEAK));
+            CaptureSample.Locomotion.SNEAK));
         points.add(new Point(11.7, originX, originY, originZ, -90.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(12.1, originX, originY, originZ, 0.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         points.add(new Point(13.1, originX, originY, originZ, 0.0f,
-            ReplaySample.Locomotion.IDLE));
+            CaptureSample.Locomotion.IDLE));
         return new ScriptedGhostPath(points, true);
     }
 
@@ -111,7 +111,7 @@ public final class ScriptedGhostPath {
         float y,
         float z,
         float facing,
-        ReplaySample.Locomotion locomotion
+        CaptureSample.Locomotion locomotion
     ) {
         public Point {
             if (!Double.isFinite(time)) {
@@ -135,7 +135,7 @@ public final class ScriptedGhostPath {
         float y,
         float z,
         float facing,
-        ReplaySample.Locomotion locomotion
+        CaptureSample.Locomotion locomotion
     ) {
     }
 }

@@ -35,7 +35,7 @@ public final class BinaryReplayCodec {
     private BinaryReplayCodec() {
     }
 
-    public static void write(Path target, ReplayMetadata metadata, List<ReplaySample> frames,
+    public static void write(Path target, ReplayMetadata metadata, List<CaptureSample> frames,
         boolean gzip) throws IOException, ReplayFormatException {
         if (metadata.formatVersion() != ReplayMetadata.CURRENT_FORMAT_VERSION) {
             throw new ReplayFormatException("cannot write format version "
@@ -61,7 +61,7 @@ public final class BinaryReplayCodec {
         CRC32 crc = new CRC32();
         crc.update(metadataBytes);
         byte[] record = new byte[RECORD_BYTES];
-        for (ReplaySample frame : frames) {
+        for (CaptureSample frame : frames) {
             ByteBuffer buffer = ByteBuffer.wrap(record).order(ByteOrder.BIG_ENDIAN);
             buffer.putLong(frame.tick());
             buffer.putFloat(frame.timeSeconds());
@@ -135,17 +135,17 @@ public final class BinaryReplayCodec {
 
             CRC32 crc = new CRC32();
             crc.update(metadataBytes);
-            List<ReplaySample> frames = keepFrames ? new ArrayList<>(frameCount) : List.of();
+            List<CaptureSample> frames = keepFrames ? new ArrayList<>(frameCount) : List.of();
             byte[] record = new byte[RECORD_BYTES];
             for (int frame = 0; frame < frameCount; frame++) {
                 in.readFully(record);
                 crc.update(record);
-                ReplaySample.Locomotion locomotion =
+                CaptureSample.Locomotion locomotion =
                     locomotion(record[LOCOMOTION_OFFSET] & 0xFF, frame);
-                ReplaySample.Stance stance = stance(record[STANCE_OFFSET] & 0xFF, frame);
+                CaptureSample.Stance stance = stance(record[STANCE_OFFSET] & 0xFF, frame);
                 if (keepFrames) {
                     ByteBuffer buffer = ByteBuffer.wrap(record).order(ByteOrder.BIG_ENDIAN);
-                    frames.add(new ReplaySample(
+                    frames.add(new CaptureSample(
                         buffer.getLong(),
                         buffer.getFloat(),
                         buffer.getFloat(),
@@ -208,20 +208,20 @@ public final class BinaryReplayCodec {
         return bytes;
     }
 
-    private static ReplaySample.Locomotion locomotion(int id, int frame)
+    private static CaptureSample.Locomotion locomotion(int id, int frame)
         throws ReplayFormatException {
         try {
-            return ReplaySample.Locomotion.fromId(id);
+            return CaptureSample.Locomotion.fromId(id);
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException("corrupt frame " + frame
                 + ": invalid locomotion id " + id, exception);
         }
     }
 
-    private static ReplaySample.Stance stance(int id, int frame)
+    private static CaptureSample.Stance stance(int id, int frame)
         throws ReplayFormatException {
         try {
-            return ReplaySample.Stance.fromId(id);
+            return CaptureSample.Stance.fromId(id);
         } catch (IllegalArgumentException exception) {
             throw new ReplayFormatException("corrupt frame " + frame
                 + ": invalid stance id " + id, exception);

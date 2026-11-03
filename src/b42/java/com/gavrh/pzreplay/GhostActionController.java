@@ -22,13 +22,13 @@ final class GhostActionController {
         "climbwall", "climbrope", "climbdownrope");
     private static final Set<String> FALL_STATES = Set.of("falling", "falldown");
 
-    private record Pending(long sequence, ReplayEvent.Kind kind, double clearAt,
+    private record Pending(long sequence, ActionEvent.Kind kind, double clearAt,
         boolean releaseOnly) {
     }
 
-    private final ReplayEventScheduler scheduler;
-    private final Map<ReplayEvent.Kind, ReplayEvent> persistent =
-        new EnumMap<>(ReplayEvent.Kind.class);
+    private final ActionEventScheduler scheduler;
+    private final Map<ActionEvent.Kind, ActionEvent> persistent =
+        new EnumMap<>(ActionEvent.Kind.class);
     private final List<Pending> pending = new ArrayList<>();
     private boolean directionOverride;
     private float direction;
@@ -41,10 +41,10 @@ final class GhostActionController {
     private boolean injected;
     private boolean attackActive;
     private boolean attackAiming;
-    private ReplayActionContext activeAttackContext;
+    private ActionEventContext activeAttackContext;
 
-    GhostActionController(ReplayEventTimeline timeline) {
-        scheduler = new ReplayEventScheduler(timeline);
+    GhostActionController(ActionEventTimeline timeline) {
+        scheduler = new ActionEventScheduler(timeline);
     }
 
     Boolean aimOverride() {
@@ -55,11 +55,11 @@ final class GhostActionController {
         return attackActive;
     }
 
-    void applyActiveAttack(ReplayGhost ghost) {
+    void applyActiveAttack(GhostActor ghost) {
         if (ghost == null || !attackActive || activeAttackContext == null) {
             return;
         }
-        ReplayActionContext context = activeAttackContext;
+        ActionEventContext context = activeAttackContext;
         ghost.setIsAiming(context.aiming() || context.ranged());
         ghost.setDoShove(context.shove());
         ghost.setAimAtFloor(context.aimAtFloor());
@@ -72,35 +72,35 @@ final class GhostActionController {
         ghost.setAttackType(attackType == null ? AttackType.NONE : attackType);
     }
 
-    void start(ReplayGhost ghost) {
+    void start(GhostActor ghost) {
         clear(ghost);
-        List<ReplayEvent> events = scheduler.start();
+        List<ActionEvent> events = scheduler.start();
         apply(ghost, events, 0.0);
         expire(ghost, 0.0);
     }
 
-    void restart(ReplayGhost ghost) {
+    void restart(GhostActor ghost) {
         start(ghost);
     }
 
-    void advance(ReplayGhost ghost, double timeSeconds) {
-        List<ReplayEvent> events = scheduler.advance(timeSeconds);
+    void advance(GhostActor ghost, double timeSeconds) {
+        List<ActionEvent> events = scheduler.advance(timeSeconds);
         apply(ghost, events, timeSeconds);
         applyDirection(ghost, timeSeconds);
         applyFallOffset(ghost, timeSeconds);
         expire(ghost, timeSeconds);
     }
 
-    void seek(ReplayGhost ghost, double timeSeconds) {
+    void seek(GhostActor ghost, double timeSeconds) {
         clearActions(ghost);
-        List<ReplayEvent> active = scheduler.seek(timeSeconds);
-        for (ReplayEvent event : active) {
+        List<ActionEvent> active = scheduler.seek(timeSeconds);
+        for (ActionEvent event : active) {
             startPersistent(ghost, event);
         }
         expire(ghost, timeSeconds);
     }
 
-    void complete(ReplayGhost ghost) {
+    void complete(GhostActor ghost) {
         if (pending.isEmpty() && !attackActive && !directionOverride && !fallOffset) {
             return;
         }
@@ -120,18 +120,18 @@ final class GhostActionController {
         }
     }
 
-    void stop(ReplayGhost ghost) {
+    void stop(GhostActor ghost) {
         clear(ghost);
         scheduler.reset();
     }
 
-    void reset(ReplayGhost ghost) {
+    void reset(GhostActor ghost) {
         clear(ghost);
         scheduler.reset();
     }
 
-    private void apply(ReplayGhost ghost, List<ReplayEvent> events, double timeSeconds) {
-        for (ReplayEvent event : events) {
+    private void apply(GhostActor ghost, List<ActionEvent> events, double timeSeconds) {
+        for (ActionEvent event : events) {
             if (event.kind().persistent()) {
                 if (event.end()) {
                     endPersistent(ghost, event.kind());
@@ -144,10 +144,10 @@ final class GhostActionController {
         }
     }
 
-    private void startPersistent(ReplayGhost ghost, ReplayEvent event) {
+    private void startPersistent(GhostActor ghost, ActionEvent event) {
         persistent.put(event.kind(), event);
         injected = true;
-        if (event.kind() == ReplayEvent.Kind.SIT) {
+        if (event.kind() == ActionEvent.Kind.SIT) {
             boolean ground = event.detail().startsWith("ground");
             savedWeapon = ghost.GetVariable("Weapon");
             if (savedWeapon != null && !savedWeapon.isEmpty()) {
@@ -161,11 +161,11 @@ final class GhostActionController {
         }
     }
 
-    private void endPersistent(ReplayGhost ghost, ReplayEvent.Kind kind) {
+    private void endPersistent(GhostActor ghost, ActionEvent.Kind kind) {
         if (persistent.remove(kind) == null) {
             return;
         }
-        if (kind == ReplayEvent.Kind.SIT) {
+        if (kind == ActionEvent.Kind.SIT) {
             ghost.clearVariable("SitOnFurnitureDirection");
             ghost.clearVariable("forceGetUp");
             ghost.setSitOnGround(false);
@@ -177,7 +177,7 @@ final class GhostActionController {
         }
     }
 
-    private void trigger(ReplayGhost ghost, ReplayEvent event, double timeSeconds) {
+    private void trigger(GhostActor ghost, ActionEvent event, double timeSeconds) {
         injected = true;
         switch (event.kind()) {
             case MELEE_ATTACK -> {
@@ -227,8 +227,8 @@ final class GhostActionController {
         log("start", event, stateName(ghost));
     }
 
-    private void triggerAttack(ReplayGhost ghost, ReplayEvent event, boolean ranged) {
-        ReplayActionContext context = event.context();
+    private void triggerAttack(GhostActor ghost, ActionEvent event, boolean ranged) {
+        ActionEventContext context = event.context();
         boolean hasContext = context != null && context.isPresent();
         boolean rangedAttack = hasContext ? context.ranged() : ranged;
         String style = hasContext ? context.weaponStyle() : event.detail();
@@ -261,7 +261,7 @@ final class GhostActionController {
         attackActive = true;
     }
 
-    private void triggerReload(ReplayGhost ghost, ReplayEvent event) {
+    private void triggerReload(GhostActor ghost, ActionEvent event) {
         String detail = event.detail().isEmpty() ? "handgun" : event.detail();
         boolean rack = detail.startsWith("rack");
         String reloadType = detail.startsWith("rack:")
@@ -273,7 +273,7 @@ final class GhostActionController {
         ghost.setVariable("isRacking", rack);
     }
 
-    private static void applyFireMode(ReplayGhost ghost, String fireMode) {
+    private static void applyFireMode(GhostActor ghost, String fireMode) {
         if (fireMode == null || fireMode.isEmpty()) {
             return;
         }
@@ -287,7 +287,7 @@ final class GhostActionController {
         }
     }
 
-    private static AttackType resolvedAttackType(ReplayActionContext context) {
+    private static AttackType resolvedAttackType(ActionEventContext context) {
         AttackType resolved = attackType(context.attackType());
         if (resolved == null && context.ranged()) {
             return AttackType.SHOT;
@@ -320,7 +320,7 @@ final class GhostActionController {
         };
     }
 
-    private void expire(ReplayGhost ghost, double timeSeconds) {
+    private void expire(GhostActor ghost, double timeSeconds) {
         if (directionOverride && timeSeconds >= directionUntil) {
             directionOverride = false;
         }
@@ -332,8 +332,8 @@ final class GhostActionController {
             }
             iterator.remove();
             if (entry.releaseOnly()) {
-                if (entry.kind() == ReplayEvent.Kind.MELEE_ATTACK
-                    || entry.kind() == ReplayEvent.Kind.RANGED_ATTACK) {
+                if (entry.kind() == ActionEvent.Kind.MELEE_ATTACK
+                    || entry.kind() == ActionEvent.Kind.RANGED_ATTACK) {
                     ghost.setInitiateAttack(false);
                 }
                 continue;
@@ -342,7 +342,7 @@ final class GhostActionController {
         }
     }
 
-    private void finish(ReplayGhost ghost, ReplayEvent.Kind kind) {
+    private void finish(GhostActor ghost, ActionEvent.Kind kind) {
         switch (kind) {
             case MELEE_ATTACK, RANGED_ATTACK -> {
                 ghost.setInitiateAttack(false);
@@ -383,19 +383,19 @@ final class GhostActionController {
         log("end", kind, 0.0f, "", stateName(ghost));
     }
 
-    private void applyDirection(ReplayGhost ghost, double timeSeconds) {
+    private void applyDirection(GhostActor ghost, double timeSeconds) {
         if (directionOverride && timeSeconds < directionUntil) {
             ghost.setDirectionAngle(direction);
         }
     }
 
-    private void applyFallOffset(ReplayGhost ghost, double timeSeconds) {
+    private void applyFallOffset(GhostActor ghost, double timeSeconds) {
         if (fallOffset && timeSeconds < fallUntil) {
             ghost.setZ(fallBaseZ + 1.0f);
         }
     }
 
-    private static void clearAttackState(ReplayGhost ghost) {
+    private static void clearAttackState(GhostActor ghost) {
         ghost.setAttackType(AttackType.NONE);
         ghost.setDoShove(false);
         ghost.setAimAtFloor(false);
@@ -405,7 +405,7 @@ final class GhostActionController {
         ghost.clearVariable("rangedWeapon");
     }
 
-    private void restoreWeapon(ReplayGhost ghost) {
+    private void restoreWeapon(GhostActor ghost) {
         if (!weaponSuppressed) {
             return;
         }
@@ -416,16 +416,16 @@ final class GhostActionController {
         savedWeapon = null;
     }
 
-    private void clear(ReplayGhost ghost) {
+    private void clear(GhostActor ghost) {
         clearActions(ghost, true);
         scheduler.reset();
     }
 
-    private void clearActions(ReplayGhost ghost) {
+    private void clearActions(GhostActor ghost) {
         clearActions(ghost, false);
     }
 
-    private void clearActions(ReplayGhost ghost, boolean force) {
+    private void clearActions(GhostActor ghost, boolean force) {
         pending.clear();
         persistent.clear();
         directionOverride = false;
@@ -458,11 +458,11 @@ final class GhostActionController {
         injected = false;
     }
 
-    private static void forceIdle(ReplayGhost ghost) {
+    private static void forceIdle(GhostActor ghost) {
         forceState(ghost, "idle");
     }
 
-    private static void forceState(ReplayGhost ghost, String state) {
+    private static void forceState(GhostActor ghost, String state) {
         try {
             ActionContext context = ghost.getActionContext();
             if (context == null) {
@@ -478,7 +478,7 @@ final class GhostActionController {
         }
     }
 
-    private static String stateName(ReplayGhost ghost) {
+    private static String stateName(GhostActor ghost) {
         try {
             String name = ghost.getCurrentActionContextStateName();
             return name == null ? "" : name;
@@ -503,11 +503,11 @@ final class GhostActionController {
         return "EventClimbFence";
     }
 
-    private static void log(String phase, ReplayEvent event, String state) {
+    private static void log(String phase, ActionEvent event, String state) {
         log(phase, event.kind(), event.timeSeconds(), event.detail(), state);
     }
 
-    private static void log(String phase, ReplayEvent.Kind kind, float time, String detail,
+    private static void log(String phase, ActionEvent.Kind kind, float time, String detail,
         String state) {
         System.out.println("[pz-replay] action event phase=" + phase
             + " kind=" + kind.id()

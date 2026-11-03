@@ -158,12 +158,12 @@ class ReplayCatalogueTest {
         );
     }
 
-    private static List<ReplaySample> frames() {
-        List<ReplaySample> frames = new ArrayList<>();
-        frames.add(new ReplaySample(1L, 0f, 0f, 1f, 2f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.IDLE, ReplaySample.Stance.STAND, 0));
-        frames.add(new ReplaySample(2L, 1f, 1f, 1.1f, 2f, 0f, 0f, 0f,
-            ReplaySample.Locomotion.WALK, ReplaySample.Stance.STAND, 0));
+    private static List<CaptureSample> frames() {
+        List<CaptureSample> frames = new ArrayList<>();
+        frames.add(new CaptureSample(1L, 0f, 0f, 1f, 2f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, 0));
+        frames.add(new CaptureSample(2L, 1f, 1f, 1.1f, 2f, 0f, 0f, 0f,
+            CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, 0));
         return frames;
     }
 }

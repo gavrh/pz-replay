@@ -16,16 +16,16 @@ public final class GhostMotionController {
     }
 
     private final ScriptedGhostPath path;
-    private final ReplayTimeline replay;
+    private final PlaybackTimeline replay;
     private final Consumer<String> warning;
-    private final ReplayCameraController camera = new ReplayCameraController();
+    private final CameraController camera = new CameraController();
     private final GhostActionController actions;
     private State state = State.STOPPED;
     private double elapsed;
     private long lastReplayUpdateNanos;
-    private ReplayEquipment appliedEquipment;
-    private ReplayAppearance appliedAppearance;
-    private ReplayVehicleVisual vehicleVisual;
+    private Equipment appliedEquipment;
+    private Appearance appliedAppearance;
+    private VehicleVisual vehicleVisual;
     private String vehicleFailureKey = "";
     private boolean holdingGap;
 
@@ -43,11 +43,11 @@ public final class GhostMotionController {
         this.actions = null;
     }
 
-    public GhostMotionController(ReplayTimeline replay) {
+    public GhostMotionController(PlaybackTimeline replay) {
         this(replay, null);
     }
 
-    public GhostMotionController(ReplayTimeline replay, Consumer<String> warning) {
+    public GhostMotionController(PlaybackTimeline replay, Consumer<String> warning) {
         if (replay == null) {
             throw new IllegalArgumentException("replay is required");
         }
@@ -57,7 +57,7 @@ public final class GhostMotionController {
         this.actions = new GhostActionController(replay.getEventTimeline());
     }
 
-    public void start(ReplayGhost ghost) {
+    public void start(GhostActor ghost) {
         if (replay != null) {
             if (!replay.start()) {
                 return;
@@ -83,7 +83,7 @@ public final class GhostMotionController {
             + String.format("%.2f", path.getDuration()));
     }
 
-    public boolean pause(ReplayGhost ghost) {
+    public boolean pause(GhostActor ghost) {
         if (replay != null) {
             if (!replay.pause()) {
                 return false;
@@ -104,7 +104,7 @@ public final class GhostMotionController {
         return true;
     }
 
-    public boolean resume(ReplayGhost ghost) {
+    public boolean resume(GhostActor ghost) {
         if (replay != null) {
             if (!replay.resume()) {
                 return false;
@@ -128,7 +128,7 @@ public final class GhostMotionController {
         return true;
     }
 
-    public boolean seek(ReplayGhost ghost, double seconds) {
+    public boolean seek(GhostActor ghost, double seconds) {
         if (replay == null || ghost == null || !replay.seek(seconds)) {
             return false;
         }
@@ -151,7 +151,7 @@ public final class GhostMotionController {
         return true;
     }
 
-    public boolean setSpeed(ReplayGhost ghost, double multiplier) {
+    public boolean setSpeed(GhostActor ghost, double multiplier) {
         if (replay == null || !replay.setSpeed(multiplier)) {
             return false;
         }
@@ -162,7 +162,7 @@ public final class GhostMotionController {
         return true;
     }
 
-    public boolean restart(ReplayGhost ghost) {
+    public boolean restart(GhostActor ghost) {
         if (replay == null || ghost == null || !replay.restart()) {
             return false;
         }
@@ -180,7 +180,7 @@ public final class GhostMotionController {
         return true;
     }
 
-    public void stop(ReplayGhost ghost) {
+    public void stop(GhostActor ghost) {
         boolean wasActive = isActive();
         if (replay != null) {
             replay.stop();
@@ -205,7 +205,7 @@ public final class GhostMotionController {
         }
     }
 
-    public void reset(ReplayGhost ghost) {
+    public void reset(GhostActor ghost) {
         camera.restore();
         despawnVehicle();
         setVehiclePose(ghost, false);
@@ -230,7 +230,7 @@ public final class GhostMotionController {
         System.out.println("[pz-replay] replay ghost motion reset");
     }
 
-    public void update(ReplayGhost ghost) {
+    public void update(GhostActor ghost) {
         if (replay != null) {
             long nowNanos = System.nanoTime();
             double delta = (nowNanos - lastReplayUpdateNanos) / 1_000_000_000.0;
@@ -284,19 +284,19 @@ public final class GhostMotionController {
         camera.update(ghost, delta);
     }
 
-    public boolean setCameraMode(ReplayCameraMode mode, ReplayGhost ghost) {
+    public boolean setCameraMode(CameraMode mode, GhostActor ghost) {
         return camera.setMode(mode, ghost);
     }
 
-    public boolean setCameraFollow(boolean enabled, ReplayGhost ghost) {
+    public boolean setCameraFollow(boolean enabled, GhostActor ghost) {
         return camera.setFollow(enabled, ghost);
     }
 
-    public boolean exitFreeCamera(ReplayGhost ghost) {
+    public boolean exitFreeCamera(GhostActor ghost) {
         return camera.exitFree(ghost);
     }
 
-    public ReplayCameraMode getCameraMode() {
+    public CameraMode getCameraMode() {
         return camera.getMode();
     }
 
@@ -306,7 +306,7 @@ public final class GhostMotionController {
 
     void markSpawnAppearanceApplied() {
         appliedAppearance = replay == null
-            ? ReplayAppearance.none() : replay.getInitialAppearance();
+            ? Appearance.none() : replay.getInitialAppearance();
     }
 
     public boolean isCameraFree() {
@@ -352,25 +352,25 @@ public final class GhostMotionController {
         return delta;
     }
 
-    private void apply(ReplayGhost ghost, ScriptedGhostPath.Sample sample) {
+    private void apply(GhostActor ghost, ScriptedGhostPath.Sample sample) {
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
-            ReplaySample.Stance.STAND, sample.locomotion() != ReplaySample.Locomotion.IDLE,
-            false, ReplayEquipment.none(), ReplayAppearance.none(),
-            new ReplayTimeline.Movement(0.0f, 0.0f));
+            CaptureSample.Stance.STAND, sample.locomotion() != CaptureSample.Locomotion.IDLE,
+            false, Equipment.none(), Appearance.none(),
+            new PlaybackTimeline.Movement(0.0f, 0.0f));
     }
 
-    private void apply(ReplayGhost ghost, ReplayTimeline.Sample sample) {
+    private void apply(GhostActor ghost, PlaybackTimeline.Sample sample) {
         double time = replay.getCurrentTime();
-        ReplayTimeline.Movement movement = replay.movementAt(time);
+        PlaybackTimeline.Movement movement = replay.movementAt(time);
         apply(ghost, sample.x(), sample.y(), sample.z(), sample.facing(), sample.locomotion(),
             sample.stance(), sample.moving(), sample.aiming(), sample.equipment(),
             replay.appearanceAt(time), movement);
-        ReplayVehicleTimeline.State vehicleState = replay.vehicleAt(time);
+        VehicleTimeline.State vehicleState = replay.vehicleAt(time);
         boolean gapHold = replay.isGapHold(time);
         applyVehicle(ghost, vehicleState, !gapHold && (sample.inVehicle() || vehicleState != null));
     }
 
-    private void applyVehicle(ReplayGhost ghost, ReplayVehicleTimeline.State state,
+    private void applyVehicle(GhostActor ghost, VehicleTimeline.State state,
         boolean inVehicle) {
         if (ghost == null) {
             return;
@@ -384,7 +384,7 @@ public final class GhostMotionController {
             despawnVehicle();
             String key = state.segment().key();
             if (!key.equals(vehicleFailureKey)) {
-                vehicleVisual = ReplayVehicleVisual.spawn(state.segment(), this::warn);
+                vehicleVisual = VehicleVisual.spawn(state.segment(), this::warn);
                 if (vehicleVisual == null) {
                     vehicleFailureKey = key;
                 } else {
@@ -411,16 +411,16 @@ public final class GhostMotionController {
         System.out.println("[pz-replay] replay vehicle despawned script=" + script);
     }
 
-    private void setVehiclePose(ReplayGhost ghost, boolean inVehicle) {
+    private void setVehiclePose(GhostActor ghost, boolean inVehicle) {
         if (ghost != null) {
             ghost.setVehiclePose(inVehicle);
         }
     }
 
-    private void apply(ReplayGhost ghost, float x, float y, float z, float facing,
-        ReplaySample.Locomotion locomotion, ReplaySample.Stance stance,
-        boolean recordedMoving, boolean aiming, ReplayEquipment equipment,
-        ReplayAppearance appearance, ReplayTimeline.Movement movement) {
+    private void apply(GhostActor ghost, float x, float y, float z, float facing,
+        CaptureSample.Locomotion locomotion, CaptureSample.Stance stance,
+        boolean recordedMoving, boolean aiming, Equipment equipment,
+        Appearance appearance, PlaybackTimeline.Movement movement) {
         ghost.setForceX(x);
         ghost.setForceY(y);
         ghost.setZ(z);
@@ -434,7 +434,7 @@ public final class GhostMotionController {
         float forwardY = ghost.getForwardDirectionY();
         float deltaY = movement.x() * forwardX + movement.y() * forwardY;
         float deltaX = movement.x() * -forwardY + movement.y() * forwardX;
-        applyLocomotion(ghost, ReplayAnimationState.compose(locomotion, stance,
+        applyLocomotion(ghost, GhostAnimationState.compose(locomotion, stance,
             recordedMoving, animationAiming, deltaX, deltaY, actionActive));
         applyEquipment(ghost, equipment);
         applyAppearance(ghost, appearance);
@@ -443,7 +443,7 @@ public final class GhostMotionController {
         }
     }
 
-    private static void applyLocomotion(ReplayGhost ghost, ReplayAnimationState animation) {
+    private static void applyLocomotion(GhostActor ghost, GhostAnimationState animation) {
         ghost.setScriptedMovement(animation.moving());
         ghost.setRunning(animation.running());
         ghost.setSprinting(animation.sprinting());
@@ -457,8 +457,8 @@ public final class GhostMotionController {
         ghost.setIsAiming(animation.aiming());
     }
 
-    private void applyEquipment(ReplayGhost ghost, ReplayEquipment equipment) {
-        ReplayEquipment next = equipment == null ? ReplayEquipment.none() : equipment;
+    private void applyEquipment(GhostActor ghost, Equipment equipment) {
+        Equipment next = equipment == null ? Equipment.none() : equipment;
         if (next.equals(appliedEquipment)) {
             return;
         }
@@ -478,7 +478,7 @@ public final class GhostMotionController {
         }
     }
 
-    private static void applyWeaponStyle(ReplayGhost ghost) {
+    private static void applyWeaponStyle(GhostActor ghost) {
         try {
             WeaponType type = WeaponType.getWeaponType(ghost);
             String style = type == null || type == WeaponType.UNARMED
@@ -489,8 +489,8 @@ public final class GhostMotionController {
         }
     }
 
-    private void applyAppearance(ReplayGhost ghost, ReplayAppearance appearance) {
-        ReplayAppearance next = appearance == null ? ReplayAppearance.none() : appearance;
+    private void applyAppearance(GhostActor ghost, Appearance appearance) {
+        Appearance next = appearance == null ? Appearance.none() : appearance;
         if (next.equals(appliedAppearance)) {
             return;
         }
@@ -518,7 +518,7 @@ public final class GhostMotionController {
         }
     }
 
-    private static void clearHeldItems(ReplayGhost ghost) {
+    private static void clearHeldItems(GhostActor ghost) {
         if (ghost == null) {
             return;
         }
@@ -526,7 +526,7 @@ public final class GhostMotionController {
         ghost.setSecondaryHandItem(null);
     }
 
-    private static void clearReplayState(ReplayGhost ghost) {
+    private static void clearReplayState(GhostActor ghost) {
         if (ghost == null) {
             return;
         }
@@ -539,7 +539,7 @@ public final class GhostMotionController {
         clearHeldItems(ghost);
     }
 
-    private static void applyPausedPose(ReplayGhost ghost) {
+    private static void applyPausedPose(GhostActor ghost) {
         if (ghost == null) {
             return;
         }
@@ -547,7 +547,7 @@ public final class GhostMotionController {
         ghost.setVariable("StrafeSpeed", 0.0f);
     }
 
-    private static void resetLocomotion(ReplayGhost ghost) {
+    private static void resetLocomotion(GhostActor ghost) {
         ghost.setScriptedMovement(false);
         ghost.setRunning(false);
         ghost.setSprinting(false);
@@ -560,7 +560,7 @@ public final class GhostMotionController {
         ghost.setVariable("StrafeSpeed", 0.0f);
     }
 
-    void refreshCamera(ReplayGhost ghost) {
+    void refreshCamera(GhostActor ghost) {
         camera.refresh(ghost);
     }
 }

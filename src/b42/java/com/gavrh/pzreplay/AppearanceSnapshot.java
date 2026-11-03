@@ -26,10 +26,10 @@ final class AppearanceSnapshot {
         this.wornVisuals = wornVisuals;
     }
 
-    record Captured(byte[] payload, ReplayAppearance appearance) {
+    record Captured(byte[] payload, Appearance appearance) {
     }
 
-    static ReplayAppearance capture(IsoPlayer player) throws IOException {
+    static Appearance capture(IsoPlayer player) throws IOException {
         return captureWithPayload(player).appearance();
     }
 
@@ -59,12 +59,12 @@ final class AppearanceSnapshot {
         payload.flip();
         byte[] bytes = new byte[payload.remaining()];
         payload.get(bytes);
-        ReplayAppearance appearance = new ReplayAppearance(ReplayAppearance.CURRENT_VERSION,
+        Appearance appearance = new Appearance(Appearance.CURRENT_VERSION,
             Base64.getEncoder().encodeToString(bytes));
         return new Captured(bytes, appearance);
     }
 
-    static AppearanceSnapshot decode(ReplayAppearance appearance) throws ReplayFormatException {
+    static AppearanceSnapshot decode(Appearance appearance) throws ReplayFormatException {
         ByteBuffer payload = ByteBuffer.wrap(appearance.decode()).order(ByteOrder.BIG_ENDIAN);
         try {
             int flags = payload.get() & 0xFF;
@@ -100,7 +100,7 @@ final class AppearanceSnapshot {
         desc.getWornItems().setFromItemVisuals(visuals);
     }
 
-    void applyTo(ReplayGhost ghost) throws IOException {
+    void applyTo(GhostActor ghost) throws IOException {
         SurvivorDesc desc = ghost.getDescriptor();
         if (desc == null) {
             throw new IOException("no character descriptor");
