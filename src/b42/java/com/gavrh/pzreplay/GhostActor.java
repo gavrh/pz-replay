@@ -8,13 +8,13 @@ import zombie.characters.action.ActionGroup;
 import zombie.characters.action.ActionState;
 import zombie.iso.IsoCell;
 
-public final class ReplayGhost extends IsoPlayer {
+public final class GhostActor extends IsoPlayer {
     private final String identity;
     private GhostMotionController motion;
     private boolean scriptedStrafing;
     private boolean vehiclePose;
 
-    public ReplayGhost(IsoCell cell, SurvivorDesc desc, int x, int y, int z) {
+    public GhostActor(IsoCell cell, SurvivorDesc desc, int x, int y, int z) {
         super(cell, desc, x, y, z);
         identity = UUID.randomUUID().toString();
         setCollidable(false);

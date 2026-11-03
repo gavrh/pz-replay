@@ -8,10 +8,10 @@ import zombie.iso.IsoCell;
 import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayGhost")
-public final class ReplayGhostApi {
-    private static ReplayGhost ghost;
+public final class GhostApi {
+    private static GhostActor ghost;
 
-    private ReplayGhostApi() {
+    private GhostApi() {
     }
 
     public static boolean spawn() {
@@ -30,7 +30,7 @@ public final class ReplayGhostApi {
         return spawnWithMotion(motion, x, y, z, player.getDirectionAngle(), null, null) != null;
     }
 
-    static ReplayGhost spawnWithMotion(GhostMotionController motion, float x, float y, float z,
+    static GhostActor spawnWithMotion(GhostMotionController motion, float x, float y, float z,
         float facing, AppearanceSnapshot appearance, Consumer<String> warning) {
         if (ghost != null || motion == null || killSwitchEnabled()) {
             return null;
@@ -59,7 +59,7 @@ public final class ReplayGhostApi {
                 desc.getHumanVisual().copyFrom(player.getHumanVisual());
                 desc.getWornItems().copyFrom(player.getWornItems());
             }
-            ReplayGhost created = new ReplayGhost(cell, desc, (int) Math.floor(x),
+            GhostActor created = new GhostActor(cell, desc, (int) Math.floor(x),
                 (int) Math.floor(y), (int) Math.floor(z));
             ghost = created;
             created.setX(x);
@@ -76,7 +76,7 @@ public final class ReplayGhostApi {
                 + " appearance=" + (appearanceApplied ? "recorded" : "current"));
             return created;
         } catch (Throwable t) {
-            ReplayGhost failed = ghost;
+            GhostActor failed = ghost;
             ghost = null;
             removeGhost(failed);
             return null;
@@ -89,7 +89,7 @@ public final class ReplayGhostApi {
         }
     }
 
-    private static void removeGhost(ReplayGhost current) {
+    private static void removeGhost(GhostActor current) {
         if (current == null) {
             return;
         }
@@ -105,7 +105,7 @@ public final class ReplayGhostApi {
     }
 
     public static boolean despawn() {
-        ReplayGhost current = ghost;
+        GhostActor current = ghost;
         if (current == null) {
             return false;
         }
@@ -164,7 +164,7 @@ public final class ReplayGhostApi {
         return PZReplayLua.isDebugEnabled();
     }
 
-    static ReplayGhost getGhost() {
+    static GhostActor getGhost() {
         return ghost;
     }
 

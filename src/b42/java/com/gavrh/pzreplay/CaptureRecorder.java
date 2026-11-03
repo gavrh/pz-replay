@@ -154,7 +154,7 @@ final class CaptureRecorder {
         tickCounter++;
 
         IsoPlayer player = IsoPlayer.getInstance();
-        if (player instanceof ReplayGhost) {
+        if (player instanceof GhostActor) {
             lastError = "ghost is the global player";
             recordCost(tickStartNanos);
             stopWithReason(CaptureSession.StopReason.PLAYER_UNAVAILABLE);
@@ -274,7 +274,7 @@ final class CaptureRecorder {
             return false;
         }
         IsoPlayer player = IsoPlayer.getInstance();
-        if (player == null || player instanceof ReplayGhost) {
+        if (player == null || player instanceof GhostActor) {
             return false;
         }
         String resolvedDetail = detailFor(kind, detail, player);
@@ -292,7 +292,7 @@ final class CaptureRecorder {
             return false;
         }
         IsoPlayer player = IsoPlayer.getInstance();
-        if (player == null || player instanceof ReplayGhost || player.isDead()) {
+        if (player == null || player instanceof GhostActor || player.isDead()) {
             return false;
         }
         if (GameTime.isGamePaused()) {

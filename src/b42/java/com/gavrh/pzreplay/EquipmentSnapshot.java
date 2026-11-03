@@ -122,7 +122,7 @@ final class EquipmentSnapshot {
         }
     }
 
-    void applyTo(ReplayGhost ghost, Consumer<String> warning) {
+    void applyTo(GhostActor ghost, Consumer<String> warning) {
         InventoryItem primaryItem = build(primary, warning);
         InventoryItem secondaryItem = shared ? primaryItem : build(secondary, warning);
         try {

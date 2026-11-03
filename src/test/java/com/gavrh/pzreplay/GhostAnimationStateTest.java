@@ -6,10 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReplayAnimationStateTest {
+class GhostAnimationStateTest {
     @Test
     void walkingWhileAimingKeepsTheWalkAnimationAndAimBlend() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
 
@@ -19,15 +19,15 @@ class ReplayAnimationStateTest {
         assertFalse(state.running());
         assertFalse(state.sprinting());
         assertEquals(1.0f, state.deltaY(), 0.0001f);
-        assertEquals(ReplayAnimationState.WALK_SPEED, state.walkSpeed(), 0.0001f);
+        assertEquals(GhostAnimationState.WALK_SPEED, state.walkSpeed(), 0.0001f);
     }
 
     @Test
     void runningAndSprintingKeepTheirLocomotionClipsWhileAiming() {
-        ReplayAnimationState run = ReplayAnimationState.compose(
+        GhostAnimationState run = GhostAnimationState.compose(
             CaptureSample.Locomotion.RUN, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
-        ReplayAnimationState sprint = ReplayAnimationState.compose(
+        GhostAnimationState sprint = GhostAnimationState.compose(
             CaptureSample.Locomotion.SPRINT, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, false);
 
@@ -41,7 +41,7 @@ class ReplayAnimationStateTest {
 
     @Test
     void sneakingWhileMovingKeepsTheSneakWalkState() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, true, true,
             0.0f, 1.0f, false);
 
@@ -49,12 +49,12 @@ class ReplayAnimationStateTest {
         assertTrue(state.sneaking());
         assertFalse(state.aiming());
         assertFalse(state.strafing());
-        assertEquals(ReplayAnimationState.SNEAK_SPEED, state.walkSpeed(), 0.0001f);
+        assertEquals(GhostAnimationState.SNEAK_SPEED, state.walkSpeed(), 0.0001f);
     }
 
     @Test
     void crouchedIdleDoesNotUseTheSneakWalkAnimation() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, false, true,
             0.0f, 1.0f, false);
 
@@ -69,7 +69,7 @@ class ReplayAnimationStateTest {
 
     @Test
     void crouchedIdleWithoutAimAlsoStaysStill() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.SNEAK, CaptureSample.Stance.CROUCH, false, false,
             0.0f, 1.0f, false);
 
@@ -81,17 +81,17 @@ class ReplayAnimationStateTest {
 
     @Test
     void legacyWalkingFramesStillMoveWithoutTheMovingFlag() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, false, false,
             0.0f, 0.0f, false);
 
         assertTrue(state.moving());
-        assertEquals(ReplayAnimationState.WALK_SPEED, state.walkSpeed(), 0.0001f);
+        assertEquals(GhostAnimationState.WALK_SPEED, state.walkSpeed(), 0.0001f);
     }
 
     @Test
     void idleAimingKeepsTheAimPoseWithoutStrafing() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.IDLE, CaptureSample.Stance.STAND, false, true,
             0.0f, 1.0f, false);
 
@@ -104,7 +104,7 @@ class ReplayAnimationStateTest {
 
     @Test
     void activeActionsPreserveTheRecordedAimForAttackVariants() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.RUN, CaptureSample.Stance.STAND, true, true,
             0.0f, 1.0f, true);
 
@@ -115,7 +115,7 @@ class ReplayAnimationStateTest {
 
     @Test
     void sidewaysMovementBlendsIntoTheStrafeAnimation() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             1.0f, 0.0f, false);
 
@@ -126,7 +126,7 @@ class ReplayAnimationStateTest {
 
     @Test
     void missingMovementFallsBackToForwardWalkWhileAiming() {
-        ReplayAnimationState state = ReplayAnimationState.compose(
+        GhostAnimationState state = GhostAnimationState.compose(
             CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, true, true,
             0.0f, 0.0f, false);
 
@@ -152,13 +152,13 @@ class ReplayAnimationStateTest {
 
     @Test
     void stanceAndNullInputsAreNormalised() {
-        ReplayAnimationState crouch = ReplayAnimationState.compose(
+        GhostAnimationState crouch = GhostAnimationState.compose(
             CaptureSample.Locomotion.IDLE, CaptureSample.Stance.CROUCH, false, false,
             0.0f, 0.0f, false);
-        ReplayAnimationState prone = ReplayAnimationState.compose(
+        GhostAnimationState prone = GhostAnimationState.compose(
             CaptureSample.Locomotion.IDLE, CaptureSample.Stance.PRONE, false, false,
             0.0f, 0.0f, false);
-        ReplayAnimationState empty = ReplayAnimationState.compose(null, null, false, false,
+        GhostAnimationState empty = GhostAnimationState.compose(null, null, false, false,
             0.0f, 0.0f, false);
 
         assertTrue(crouch.sneaking());

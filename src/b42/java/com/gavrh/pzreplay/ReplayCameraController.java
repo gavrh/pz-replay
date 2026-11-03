@@ -21,7 +21,7 @@ public final class ReplayCameraController {
     private ReplayCameraMode modeBeforeFree = ReplayCameraMode.PLAYER;
     private boolean returningToPlayer;
 
-    public boolean setMode(ReplayCameraMode requested, ReplayGhost ghost) {
+    public boolean setMode(ReplayCameraMode requested, GhostActor ghost) {
         if (requested == null) {
             return false;
         }
@@ -67,11 +67,11 @@ public final class ReplayCameraController {
         }
     }
 
-    public boolean setFollow(boolean enabled, ReplayGhost ghost) {
+    public boolean setFollow(boolean enabled, GhostActor ghost) {
         return setMode(enabled ? ReplayCameraMode.FOLLOW_GHOST : ReplayCameraMode.PLAYER, ghost);
     }
 
-    public boolean exitFree(ReplayGhost ghost) {
+    public boolean exitFree(GhostActor ghost) {
         if (mode != ReplayCameraMode.FREE) {
             return false;
         }
@@ -82,7 +82,7 @@ public final class ReplayCameraController {
         return setMode(target, ghost);
     }
 
-    public void update(ReplayGhost ghost, double deltaSeconds) {
+    public void update(GhostActor ghost, double deltaSeconds) {
         IsoPlayer player = localPlayer();
         PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
         if (player == null || camera == null) {
@@ -108,7 +108,7 @@ public final class ReplayCameraController {
         clearCameraOffsets();
     }
 
-    public void refresh(ReplayGhost ghost) {
+    public void refresh(GhostActor ghost) {
         IsoPlayer player = localPlayer();
         PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
         if (player == null || camera == null) {
@@ -135,7 +135,7 @@ public final class ReplayCameraController {
         clearCameraOffsets();
     }
 
-    public void resetSmoothing(ReplayGhost ghost) {
+    public void resetSmoothing(GhostActor ghost) {
         if (mode != ReplayCameraMode.FOLLOW_GHOST || ghost == null) {
             return;
         }
@@ -170,7 +170,7 @@ public final class ReplayCameraController {
         return mode == ReplayCameraMode.FREE;
     }
 
-    public String status(ReplayGhost ghost) {
+    public String status(GhostActor ghost) {
         IsoPlayer player = localPlayer();
         PlayerCamera camera = player == null ? null : cameraAt(player.getIndex());
         if (player == null || camera == null) {
@@ -241,7 +241,7 @@ public final class ReplayCameraController {
         applyFreeCamera(player, camera);
     }
 
-    private void beginFollow(ReplayGhost ghost, IsoPlayer player, PlayerCamera camera) {
+    private void beginFollow(GhostActor ghost, IsoPlayer player, PlayerCamera camera) {
         returningToPlayer = false;
         smoothing.resetTo(camera.deferedX, camera.deferedY);
         smoothing.setTarget(ghost.getX() - player.getX(), ghost.getY() - player.getY());
@@ -311,17 +311,17 @@ public final class ReplayCameraController {
         camera.deferedY = smoothing.getY();
     }
 
-    private void snapFollow(ReplayGhost ghost, IsoPlayer player, PlayerCamera camera) {
+    private void snapFollow(GhostActor ghost, IsoPlayer player, PlayerCamera camera) {
         smoothing.resetTo(ghost.getX() - player.getX(), ghost.getY() - player.getY());
         applySmoothing(camera);
     }
 
-    private void logMode(String action, ReplayGhost ghost) {
+    private void logMode(String action, GhostActor ghost) {
         System.out.println("[pz-replay] replay camera " + action + " "
             + status(ghost));
     }
 
-    private static String modelState(ReplayGhost ghost) {
+    private static String modelState(GhostActor ghost) {
         try {
             return ModelManager.instance != null && ModelManager.instance.ContainsChar(ghost)
                 ? "true" : "false";
@@ -351,11 +351,11 @@ public final class ReplayCameraController {
 
     private static IsoPlayer localPlayer() {
         IsoPlayer player = IsoPlayer.getInstance();
-        if (player == null || player instanceof ReplayGhost) {
+        if (player == null || player instanceof GhostActor) {
             IsoPlayer[] players = IsoPlayer.players;
             player = players == null || players.length == 0 ? null : players[0];
         }
-        return player instanceof ReplayGhost ? null : player;
+        return player instanceof GhostActor ? null : player;
     }
 
     private static PlayerCamera cameraAt(int index) {

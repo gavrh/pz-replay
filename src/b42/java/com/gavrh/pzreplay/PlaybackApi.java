@@ -34,7 +34,7 @@ public final class PlaybackApi {
             fail(path, "playback already active");
             return false;
         }
-        if (ReplayGhostApi.isSpawned()) {
+        if (GhostApi.isSpawned()) {
             fail(path, "a ghost is already spawned");
             return false;
         }
@@ -103,7 +103,7 @@ public final class PlaybackApi {
         GhostMotionController loadedController = new GhostMotionController(loaded,
             warning -> addPlayingWarning(warnings, warning));
         PlaybackTimeline.Sample first = loaded.sampleAt(0.0);
-        ReplayGhost ghost = ReplayGhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
+        GhostActor ghost = GhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
             first.z(), first.facing(), appearance,
             warning -> addPlayingWarning(warnings, warning));
         if (ghost == null) {
@@ -111,7 +111,7 @@ public final class PlaybackApi {
             return false;
         }
         if (!ghost.startMotion()) {
-            ReplayGhostApi.despawn();
+            GhostApi.despawn();
             fail(requested, "ghost motion start failed");
             return false;
         }
@@ -119,7 +119,7 @@ public final class PlaybackApi {
 
         ReplayControlState state = PZReplayLua.state();
         if (!state.playbackStarted(loaded.getDuration())) {
-            ReplayGhostApi.despawn();
+            GhostApi.despawn();
             fail(requested, "playback already active");
             return false;
         }
@@ -161,7 +161,7 @@ public final class PlaybackApi {
             lastPath = "";
             reportedFinished = false;
             state.playbackStopped();
-            ReplayGhostApi.despawn();
+            GhostApi.despawn();
             System.out.println("[pz-replay] replay playback stopped path=" + path
                 + " time=" + format(currentTime) + "s");
         } else {
@@ -174,7 +174,7 @@ public final class PlaybackApi {
     }
 
     public static boolean pause() {
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (controller == null || ghost == null || !controller.pause(ghost)) {
             return false;
         }
@@ -183,7 +183,7 @@ public final class PlaybackApi {
     }
 
     public static boolean resume() {
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (controller == null || ghost == null || !controller.resume(ghost)) {
             return false;
         }
@@ -203,7 +203,7 @@ public final class PlaybackApi {
     }
 
     public static boolean seek(double seconds) {
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (controller == null || ghost == null || !controller.seek(ghost, seconds)) {
             return false;
         }
@@ -215,7 +215,7 @@ public final class PlaybackApi {
     }
 
     public static boolean restart() {
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (controller == null || ghost == null || !controller.restart(ghost)) {
             return false;
         }
@@ -225,7 +225,7 @@ public final class PlaybackApi {
     }
 
     public static boolean setSpeed(double multiplier) {
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (controller == null || ghost == null
             || !controller.setSpeed(ghost, multiplier)) {
             return false;
@@ -235,19 +235,19 @@ public final class PlaybackApi {
     }
 
     public static boolean isPlaying() {
-        return controller != null && controller.isPlaying() && ReplayGhostApi.isSpawned();
+        return controller != null && controller.isPlaying() && GhostApi.isSpawned();
     }
 
     public static boolean isActive() {
-        return controller != null && ReplayGhostApi.isSpawned();
+        return controller != null && GhostApi.isSpawned();
     }
 
     public static boolean isPaused() {
-        return controller != null && controller.isPaused() && ReplayGhostApi.isSpawned();
+        return controller != null && controller.isPaused() && GhostApi.isSpawned();
     }
 
     public static boolean isFinished() {
-        return controller != null && controller.isFinished() && ReplayGhostApi.isSpawned();
+        return controller != null && controller.isFinished() && GhostApi.isSpawned();
     }
 
     public static double getSpeed() {
@@ -272,7 +272,7 @@ public final class PlaybackApi {
         if (mode == null || controller == null) {
             return false;
         }
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (ghost == null) {
             return false;
         }
@@ -288,7 +288,7 @@ public final class PlaybackApi {
         if (controller == null) {
             return false;
         }
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (ghost == null) {
             return false;
         }
@@ -304,7 +304,7 @@ public final class PlaybackApi {
         if (controller == null) {
             return false;
         }
-        ReplayGhost ghost = ReplayGhostApi.getGhost();
+        GhostActor ghost = GhostApi.getGhost();
         if (ghost == null || !controller.exitFreeCamera(ghost)) {
             return false;
         }
@@ -352,7 +352,7 @@ public final class PlaybackApi {
         if (controller == null) {
             return;
         }
-        if (!ReplayGhostApi.isSpawned()) {
+        if (!GhostApi.isSpawned()) {
             controller = null;
             timeline = null;
             lastPath = "";
@@ -362,7 +362,7 @@ public final class PlaybackApi {
             return;
         }
         if (controller.isCameraFollow()) {
-            ReplayGhost ghost = ReplayGhostApi.getGhost();
+            GhostActor ghost = GhostApi.getGhost();
             if (ghost != null) {
                 controller.refreshCamera(ghost);
             }

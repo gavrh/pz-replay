@@ -100,7 +100,7 @@ final class AppearanceSnapshot {
         desc.getWornItems().setFromItemVisuals(visuals);
     }
 
-    void applyTo(ReplayGhost ghost) throws IOException {
+    void applyTo(GhostActor ghost) throws IOException {
         SurvivorDesc desc = ghost.getDescriptor();
         if (desc == null) {
             throw new IOException("no character descriptor");

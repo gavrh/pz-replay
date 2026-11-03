@@ -1,6 +1,6 @@
 package com.gavrh.pzreplay;
 
-public record ReplayAnimationState(
+public record GhostAnimationState(
     boolean moving,
     boolean running,
     boolean sprinting,
@@ -18,7 +18,7 @@ public record ReplayAnimationState(
     public static final float SNEAK_SPEED = 0.8f;
     public static final float MIN_MOVEMENT = 0.01f;
 
-    public static ReplayAnimationState compose(CaptureSample.Locomotion locomotion,
+    public static GhostAnimationState compose(CaptureSample.Locomotion locomotion,
         CaptureSample.Stance stance, boolean recordedMoving, boolean aiming, float deltaX,
         float deltaY, boolean actionActive) {
         CaptureSample.Locomotion movement = locomotion == null
@@ -48,7 +48,7 @@ public record ReplayAnimationState(
                 localY = 1.0f;
             }
         }
-        return new ReplayAnimationState(
+        return new GhostAnimationState(
             moving,
             running,
             sprinting,

@@ -250,7 +250,7 @@ public final class PZReplayLua {
                 stopRecording();
             }
             PlaybackApi.stop();
-            ReplayGhostApi.despawn();
+            GhostApi.despawn();
             STATE.clearErrors();
         }
         settings.setKillSwitch(enabled);
@@ -358,7 +358,7 @@ public final class PZReplayLua {
         if (player == null) {
             return "no local player is loaded";
         }
-        if (player instanceof ReplayGhost) {
+        if (player instanceof GhostActor) {
             return "ghost is the global player";
         }
         if (!player.isLocalPlayer()) {
