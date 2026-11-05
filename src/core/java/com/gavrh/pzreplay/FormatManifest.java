@@ -89,6 +89,13 @@ final class FormatManifest {
 
     static FormatManifest fromMetadata(ReplayMetadata metadata, int frameCount,
         boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent) {
+        return fromMetadata(metadata, frameCount, actorMetaPresent, modsCount, modsVersion,
+            modsPresent, null);
+    }
+
+    static FormatManifest fromMetadata(ReplayMetadata metadata, int frameCount,
+        boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent,
+        WorldPackage world) {
         FormatManifest manifest = new FormatManifest();
         manifest.manifestVersion = 1;
         manifest.minReaderFormat = 1;
@@ -121,6 +128,22 @@ final class FormatManifest {
         manifest.modsSection = modsPresent ? "mods" : "";
         manifest.worldIssue = "";
         manifest.warnings = List.of();
+        if (world != null && world.base().length > 0) {
+            manifest.worldMode = "padded";
+            manifest.worldPaddingTiles = world.paddingTiles();
+            manifest.worldSampleRateHz = world.sampleRateHz();
+            manifest.worldCoverageStatus = world.coverageStatus();
+            manifest.worldCoverageSquares = world.coverageSquares();
+            manifest.worldCoverageObjects = world.coverageObjects();
+            manifest.worldLogChanges = world.logChanges();
+            manifest.worldLogBytes = world.logBytes();
+            manifest.worldBaseBytes = world.baseBytes();
+            manifest.worldBaseFormat = "zip-store-1";
+            manifest.worldLogFormat = "pzwlog-1";
+            manifest.worldFirstSample = "full";
+            manifest.worldIndexFormat = "";
+            manifest.sourceWorldVersion = Integer.toString(world.worldVersion());
+        }
         return manifest;
     }
 

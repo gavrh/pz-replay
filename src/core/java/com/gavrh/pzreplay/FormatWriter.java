@@ -39,6 +39,8 @@ public final class FormatWriter {
     static final int MAX_PREVIEW_PAYLOAD = 2 * 1024 * 1024;
     static final int MAX_MODS_PAYLOAD = 1024 * 1024;
     static final int MAX_MODS = 1024;
+    static final int MAX_WORLD_BASE_PAYLOAD = 768 * 1024 * 1024;
+    static final int MAX_WORLD_LOG_PAYLOAD = 256 * 1024 * 1024;
     static final long ORPHAN_AGE_MILLIS = 24L * 60 * 60 * 1000;
 
     private static final byte[] PNG_SIGNATURE = {
@@ -55,6 +57,12 @@ public final class FormatWriter {
 
     public static void write(Path target, ReplayMetadata metadata, List<CaptureSample> frames,
         List<FormatMod> mods, byte[] preview) throws IOException, ReplayFormatException {
+        write(target, metadata, frames, mods, preview, null);
+    }
+
+    public static void write(Path target, ReplayMetadata metadata, List<CaptureSample> frames,
+        List<FormatMod> mods, byte[] preview, WorldPackage world)
+        throws IOException, ReplayFormatException {
         if (metadata.formatVersion() != 1) {
             throw new FormatException(FormatReason.UNSUPPORTED_VERSION,
                 "cannot write format version " + metadata.formatVersion());
@@ -89,8 +97,14 @@ public final class FormatWriter {
             sections.add(new FormatSection("preview", false, 1, preview));
         }
 
+        if (world != null) {
+            validateWorldPackage(world);
+            sections.add(new FormatSection("world_base", true, 1, world.base()));
+            sections.add(new FormatSection("world_log", true, 1, world.log()));
+        }
+
         FormatManifest manifest = FormatManifest.fromMetadata(metadata, frames.size(),
-            hasActorMetadata, resolvedMods.size(), hasMods ? "1" : "", hasMods);
+            hasActorMetadata, resolvedMods.size(), hasMods ? "1" : "", hasMods, world);
         byte[] container = encodeContainer(manifest, sections);
 
         Path absoluteTarget = target.toAbsolutePath().normalize();
@@ -175,6 +189,50 @@ public final class FormatWriter {
             buffer.putShort((short) frame.flags());
         }
         return payload;
+    }
+
+    private static void validateWorldPackage(WorldPackage world) throws FormatException {
+        byte[] base = world.base();
+        byte[] log = world.log();
+        if (base.length < 1 || base.length > MAX_WORLD_BASE_PAYLOAD) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID,
+                "world base is outside the cap");
+        }
+        if (log.length > MAX_WORLD_LOG_PAYLOAD) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world log is outside the cap");
+        }
+        if (world.paddingTiles() < 0 || world.paddingTiles() > 128) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID,
+                "world padding is outside the range");
+        }
+        if (world.sampleRateHz() < 1 || world.sampleRateHz() > 10) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world sample rate is outside the range");
+        }
+        if (!"complete".equals(world.coverageStatus())
+            && !"partial".equals(world.coverageStatus())
+            && !"truncated".equals(world.coverageStatus())) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world coverage status is invalid");
+        }
+        try {
+            WorldBaseArchive.validate(base);
+        } catch (ReplayFormatException exception) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID, exception.getMessage(),
+                exception);
+        }
+        try {
+            WorldLogCodec.validate(log, world.logChanges(), world.coverageObjects());
+        } catch (ReplayFormatException exception) {
+            String reason = exception.getMessage().contains("count")
+                ? FormatReason.WORLD_COUNT_MISMATCH : FormatReason.WORLD_LOG_INVALID;
+            throw new FormatException(reason, exception.getMessage(), exception);
+        }
+        if (world.logChanges() != world.coverageObjects()) {
+            throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
+                "world log changes do not equal the T0 object count");
+        }
     }
 
     private static byte[] encodeMods(List<FormatMod> mods) throws FormatException {

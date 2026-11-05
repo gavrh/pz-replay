@@ -74,6 +74,11 @@ public final class FormatReader {
             manifest.worldIssue, manifest.warnings);
     }
 
+    public static String readSourceWorldVersion(Path source)
+        throws IOException, ReplayFormatException {
+        return readCatalogueManifest(source).sourceWorldVersion;
+    }
+
     public static FormatReadResult readPackage(Path source)
         throws IOException, ReplayFormatException {
         Container container = readContainer(source);
@@ -223,12 +228,15 @@ public final class FormatReader {
             }
             return new WorldState("none", "");
         }
+        if (!"padded".equals(manifest.worldMode)) {
+            warnings.add("world playback unavailable: " + FormatReason.WORLD_UNSUPPORTED);
+            return new WorldState("unsupported", FormatReason.WORLD_UNSUPPORTED);
+        }
 
         String reason = manifest.worldIssue;
         Descriptor base = find(container.descriptors(), "world_base");
         Descriptor log = find(container.descriptors(), "world_log");
-        if (reason.isEmpty() && "padded".equals(manifest.worldMode)
-            && (base == null || log == null)) {
+        if (reason.isEmpty() && (base == null || log == null)) {
             reason = FormatReason.WORLD_SECTION_MISSING;
         }
         if (reason.isEmpty()) {
@@ -243,13 +251,17 @@ public final class FormatReader {
                 }
             }
         }
-        if (reason.isEmpty() && base != null
-            && base.length() != manifest.worldBaseBytes) {
-            reason = FormatReason.WORLD_COUNT_MISMATCH;
+        if (reason.isEmpty() && base != null) {
+            if (base.length() > FormatWriter.MAX_WORLD_BASE_PAYLOAD
+                || base.length() != manifest.worldBaseBytes) {
+                reason = FormatReason.WORLD_COUNT_MISMATCH;
+            }
         }
-        if (reason.isEmpty() && log != null
-            && log.length() != manifest.worldLogBytes) {
-            reason = FormatReason.WORLD_COUNT_MISMATCH;
+        if (reason.isEmpty() && log != null) {
+            if (log.length() > FormatWriter.MAX_WORLD_LOG_PAYLOAD
+                || log.length() != manifest.worldLogBytes) {
+                reason = FormatReason.WORLD_COUNT_MISMATCH;
+            }
         }
         if (reason.isEmpty()) {
             for (Descriptor descriptor : worldDescriptors) {
@@ -261,11 +273,68 @@ public final class FormatReader {
                 }
             }
         }
-        if (reason.isEmpty()) {
-            reason = FormatReason.WORLD_UNSUPPORTED;
+        if (reason.isEmpty() && base != null && log != null) {
+            byte[] baseBytes = payload(container, base);
+            byte[] logBytes = payload(container, log);
+            try {
+                WorldBaseArchive.validate(baseBytes);
+            } catch (ReplayFormatException exception) {
+                reason = FormatReason.WORLD_BASE_INVALID;
+            }
+            if (reason.isEmpty()) {
+                try {
+                    WorldLogCodec.validate(logBytes, manifest.worldLogChanges,
+                        manifest.worldCoverageObjects);
+                } catch (ReplayFormatException exception) {
+                    reason = exception.getMessage().contains("count")
+                        ? FormatReason.WORLD_COUNT_MISMATCH
+                        : FormatReason.WORLD_LOG_INVALID;
+                }
+            }
+            if (reason.isEmpty()) {
+                return new WorldState("padded", "");
+            }
         }
         warnings.add("world playback unavailable: " + reason);
         return new WorldState("unsupported", reason);
+    }
+
+    public static byte[] readWorldBase(Path source) throws IOException, ReplayFormatException {
+        return readWorldSection(source, "world_base");
+    }
+
+    public static byte[] readWorldLog(Path source) throws IOException, ReplayFormatException {
+        return readWorldSection(source, "world_log");
+    }
+
+    private static byte[] readWorldSection(Path source, String id)
+        throws IOException, ReplayFormatException {
+        Container container = readContainer(source);
+        Descriptor descriptor = find(container.descriptors(), id);
+        if (descriptor == null) {
+            throw new FormatException(FormatReason.WORLD_SECTION_MISSING,
+                "world section is missing: " + id);
+        }
+        if (!descriptor.flagsValid()) {
+            throw new FormatException(FormatReason.SECTION_FLAG,
+                "world section uses a reserved flag: " + id);
+        }
+        if (descriptor.schemaVersion() > 1) {
+            throw new FormatException(FormatReason.WORLD_SCHEMA_NEWER,
+                "world section schema is newer: " + id);
+        }
+        long cap = "world_base".equals(id)
+            ? FormatWriter.MAX_WORLD_BASE_PAYLOAD : FormatWriter.MAX_WORLD_LOG_PAYLOAD;
+        if (descriptor.length() > cap) {
+            throw new FormatException(FormatReason.TOO_LARGE,
+                "world section exceeds the cap: " + id);
+        }
+        byte[] payload = payload(container, descriptor);
+        if (!Arrays.equals(FormatWriter.sha256(payload), descriptor.hash())) {
+            throw new FormatException(FormatReason.WORLD_SECTION_HASH,
+                "world section hash does not match: " + id);
+        }
+        return payload;
     }
 
     private static byte[] validatePreview(Container container, List<String> warnings)
