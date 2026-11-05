@@ -20,6 +20,10 @@ public final class LoadApi {
     private static boolean pending;
     private static String pendingPath = "";
     private static long pendingStartedMillis;
+    private static boolean worldReplay;
+    private static boolean contextPrepared;
+    private static List<FormatMod> expectedMods = List.of();
+    private static String expectedWorldVersion = "";
 
     private LoadApi() {
     }
@@ -39,13 +43,20 @@ public final class LoadApi {
     public static boolean resolve(String path) {
         String requested = path == null ? "" : path.trim();
         lastReplayPath = requested;
+        if (contextPrepared) {
+            cleanupContext("new resolve");
+        }
+        worldReplay = false;
+        expectedMods = List.of();
+        expectedWorldVersion = "";
         if (requested.isEmpty()) {
             return fail("replay-invalid", "The replay path is empty.", requested);
         }
 
-        ReplayData data;
+        FormatReadResult data;
         try {
-            data = ReplayReader.read(Paths.get(requested));
+            data = FormatReader.readPackage(Paths.get(requested));
+            expectedWorldVersion = FormatReader.readSourceWorldVersion(Paths.get(requested));
         } catch (InvalidPathException exception) {
             return fail("replay-invalid", "The replay path is invalid.", requested);
         } catch (IOException exception) {
@@ -59,8 +70,21 @@ public final class LoadApi {
         if (data.frames().isEmpty()) {
             return fail("replay-invalid", "The replay has no frames.", requested);
         }
+        if ("unsupported".equals(data.worldStatus())) {
+            return fail("replay-world-unavailable",
+                "The replay world cannot be loaded: " + data.worldReason(), requested);
+        }
 
-        result = SaveResolver.resolve(data.metadata(), SAVES, gameVersion());
+        worldReplay = "padded".equals(data.worldStatus());
+        contextPrepared = false;
+        expectedMods = data.mods();
+        if (worldReplay) {
+            result = new SaveResolver.Result(true, "", "",
+                "", data.metadata().saveName(), data.metadata().gameMode(),
+                data.metadata().mapName(), data.metadata().playerName(), data.warnings());
+        } else {
+            result = SaveResolver.resolve(data.metadata(), SAVES, gameVersion());
+        }
         System.out.println("[pz-replay] load-play resolve path=" + requested
             + " saves=" + SAVES.size()
             + " resolved=" + result.resolved()
@@ -82,6 +106,101 @@ public final class LoadApi {
                 + " warning=" + warning);
         }
         return true;
+    }
+
+    public static boolean isWorldReplay() {
+        return worldReplay;
+    }
+
+    public static boolean prepareContext() {
+        if (!worldReplay || contextPrepared || !result.resolved()) {
+            return contextPrepared;
+        }
+        try {
+            FormatInfo info = FormatReader.readInfo(Paths.get(lastReplayPath));
+            WorldContextManager.prepare(lastReplayPath, info.metadata(), expectedWorldVersion);
+            contextPrepared = true;
+            System.out.println("[pz-replay] load-play context prepared replay=" + lastReplayPath
+                + " folder=" + WorldContextManager.getFolderName()
+                + " mode=" + WorldContextManager.getGameMode());
+            return true;
+        } catch (IOException | ReplayFormatException | RuntimeException exception) {
+            System.out.println("[pz-replay] load-play context failed replay=" + lastReplayPath
+                + " error=" + message(exception));
+            WorldContextManager.cleanup("prepare failed");
+            return false;
+        }
+    }
+
+    public static boolean isContextPrepared() {
+        return contextPrepared && WorldContextManager.isPrepared();
+    }
+
+    public static String getLoadSaveName() {
+        return isContextPrepared() ? WorldContextManager.getFolderName() : result.saveName();
+    }
+
+    public static String getLoadGameMode() {
+        return isContextPrepared() ? WorldContextManager.getGameMode() : result.gameMode();
+    }
+
+    public static String getContextFolder() {
+        return WorldContextManager.getFolderName();
+    }
+
+    public static String verifyContext() {
+        if (!isContextPrepared()) {
+            return "context is not prepared";
+        }
+        try {
+            FormatInfo info = FormatReader.readInfo(Paths.get(lastReplayPath));
+            List<String> warnings = new ArrayList<>(
+                WorldContextManager.verify(info.metadata(), expectedWorldVersion));
+            for (String warning : warnings) {
+                System.out.println("[pz-replay] load-play context warning " + warning);
+            }
+            return String.join("; ", warnings);
+        } catch (IOException | ReplayFormatException exception) {
+            return "context verification failed: " + message(exception);
+        }
+    }
+
+    public static void markContextLoaded() {
+        if (isContextPrepared()) {
+            WorldContextManager.markLoaded();
+        }
+    }
+
+    public static void cleanupContext(String reason) {
+        WorldContextManager.cleanup(reason == null ? "requested" : reason);
+        contextPrepared = false;
+    }
+
+    public static void cleanupStaleContexts() {
+        WorldContextManager.cleanupStale();
+    }
+
+    public static int getExpectedModCount() {
+        return expectedMods.size();
+    }
+
+    public static String getExpectedModId(int index) {
+        if (index < 0 || index >= expectedMods.size()) {
+            return "";
+        }
+        return expectedMods.get(index).id();
+    }
+
+    public static String getExpectedModVersion(int index) {
+        if (index < 0 || index >= expectedMods.size()) {
+            return "";
+        }
+        return expectedMods.get(index).version();
+    }
+
+    public static void installLifecycle() {
+        WorldContextManager.installShutdownHook();
+        WorldContextManager.cleanupStale();
     }
 
     public static boolean beginPending() {
@@ -120,15 +239,18 @@ public final class LoadApi {
     }
 
     public static boolean cancelPending(String reason) {
-        if (!pending) {
-            return false;
+        boolean hadPending = pending;
+        if (pending) {
+            System.out.println("[pz-replay] load-play pending cancelled path=" + pendingPath
+                + " reason=" + (reason == null ? "" : reason));
+            pending = false;
+            pendingPath = "";
+            pendingStartedMillis = 0L;
         }
-        System.out.println("[pz-replay] load-play pending cancelled path=" + pendingPath
-            + " reason=" + (reason == null ? "" : reason));
-        pending = false;
-        pendingPath = "";
-        pendingStartedMillis = 0L;
-        return true;
+        if (contextPrepared) {
+            cleanupContext(reason == null ? "cancelled" : reason);
+        }
+        return hadPending;
     }
 
     public static boolean isPending() {
