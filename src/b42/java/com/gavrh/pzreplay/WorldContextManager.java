@@ -63,7 +63,7 @@ final class WorldContextManager {
                 String id = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
                 contextId = id;
                 folderName = WorldContext.folderName(id);
-                gameMode = metadata.gameMode().isBlank() ? "Sandbox" : metadata.gameMode();
+                gameMode = safeGameMode(metadata.gameMode());
                 packageId = Long.toHexString(metadata.startTimeMillis());
                 saveRoot = Paths.get(Core.getMyDocumentFolder(), "Saves", gameMode);
                 contextPath = saveRoot.resolve(folderName).normalize();
@@ -224,6 +224,11 @@ final class WorldContextManager {
         WorldContext.Marker marker = WorldContext.parseMarker(text);
         if (marker == null) {
             System.out.println("[pz-replay] context marker is corrupt: "
+                + markerFile.getFileName());
+            return;
+        }
+        if (!isSafeGameMode(marker.gameMode())) {
+            System.out.println("[pz-replay] context marker game mode is invalid: "
                 + markerFile.getFileName());
             return;
         }
@@ -394,6 +399,33 @@ final class WorldContextManager {
                 Files.deleteIfExists(entry);
             }
         }
+    }
+
+    private static String safeGameMode(String value) throws IOException {
+        String mode = value == null ? "" : value;
+        if (mode.isBlank()) {
+            return "Sandbox";
+        }
+        if (!isSafeGameMode(mode)) {
+            throw new IOException("replay game mode is not a safe save directory name");
+        }
+        return mode;
+    }
+
+    private static boolean isSafeGameMode(String mode) {
+        if (mode == null || mode.isEmpty() || mode.length() > 32
+            || mode.equals(".") || mode.equals("..")
+            || !mode.equals(mode.trim())) {
+            return false;
+        }
+        for (int index = 0; index < mode.length(); index++) {
+            char character = mode.charAt(index);
+            if (character == '/' || character == '\\' || character == ':'
+                || character < 0x20) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Path contextsDirectory() {
