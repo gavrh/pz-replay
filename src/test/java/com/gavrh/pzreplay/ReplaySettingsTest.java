@@ -26,6 +26,9 @@ class ReplaySettingsTest {
         assertFalse(settings.isCameraFollowDefault());
         assertFalse(settings.isDebugControls());
         assertFalse(settings.isKillSwitch());
+        assertFalse(settings.isWorldCaptureEnabled());
+        assertEquals(ReplaySettings.DEFAULT_WORLD_PADDING_TILES,
+            settings.getWorldPaddingTiles());
         assertEquals(ReplaySettings.DEFAULT_KEY_RECORD,
             settings.key(ReplaySettings.ACTION_RECORD));
         assertEquals(ReplaySettings.DEFAULT_KEY_PLAY, settings.key(ReplaySettings.ACTION_PLAY));
@@ -77,6 +80,38 @@ class ReplaySettingsTest {
     }
 
     @Test
+    void worldPaddingAcceptsZeroThroughOneHundredTwentyEight() {
+        ReplaySettings settings = new ReplaySettings();
+
+        assertTrue(settings.setWorldPaddingTiles(0));
+        assertEquals(0, settings.getWorldPaddingTiles());
+        assertTrue(settings.setWorldPaddingTiles(128));
+        assertEquals(128, settings.getWorldPaddingTiles());
+        assertTrue(settings.setWorldPaddingTiles(16));
+        assertEquals(16, settings.getWorldPaddingTiles());
+
+        assertFalse(settings.setWorldPaddingTiles(-1));
+        assertFalse(settings.setWorldPaddingTiles(129));
+        assertEquals(16, settings.getWorldPaddingTiles());
+    }
+
+    @Test
+    void malformedWorldSettingsFallBackToSafeDefaults() throws Exception {
+        Path path = tempDir.resolve("world.properties");
+        Files.writeString(path, "world_capture=maybe\nworld_padding_tiles=999\n");
+        ReplaySettings settings = ReplaySettings.load(path);
+
+        assertFalse(settings.isWorldCaptureEnabled());
+        assertEquals(ReplaySettings.DEFAULT_WORLD_PADDING_TILES,
+            settings.getWorldPaddingTiles());
+
+        Files.writeString(path, "world_capture=true\nworld_padding_tiles=0\n");
+        ReplaySettings enabled = ReplaySettings.load(path);
+        assertTrue(enabled.isWorldCaptureEnabled());
+        assertEquals(0, enabled.getWorldPaddingTiles());
+    }
+
+    @Test
     void malformedCountdownFallsBackToDefault() throws Exception {
         Path path = tempDir.resolve("countdown.properties");
         Files.writeString(path, "countdown_seconds=abc\n");
@@ -104,6 +139,8 @@ class ReplaySettingsTest {
         settings.setCameraFollowDefault(true);
         settings.setDebugControls(true);
         settings.setKillSwitch(true);
+        settings.setWorldCaptureEnabled(true);
+        settings.setWorldPaddingTiles(24);
         assertTrue(settings.bind(ReplaySettings.ACTION_RECORD, 210));
         settings.save(path);
 
@@ -114,6 +151,8 @@ class ReplaySettingsTest {
         assertTrue(loaded.isCameraFollowDefault());
         assertTrue(loaded.isDebugControls());
         assertTrue(loaded.isKillSwitch());
+        assertTrue(loaded.isWorldCaptureEnabled());
+        assertEquals(24, loaded.getWorldPaddingTiles());
         assertEquals(210, loaded.key(ReplaySettings.ACTION_RECORD));
         assertEquals(ReplaySettings.DEFAULT_KEY_PLAY,
             loaded.key(ReplaySettings.ACTION_PLAY));

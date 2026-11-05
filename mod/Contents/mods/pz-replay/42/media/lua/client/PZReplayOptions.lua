@@ -77,6 +77,14 @@ function M.syncFromSettings()
     if killSwitch then
         killSwitch:setValue(javaValue("isKillSwitchEnabled", false))
     end
+    local worldCapture = options.dict.world_capture
+    if worldCapture then
+        worldCapture:setValue(javaValue("isWorldCaptureEnabled", false))
+    end
+    local worldPadding = options.dict.world_padding_tiles
+    if worldPadding then
+        worldPadding:setValue(javaValue("getWorldPaddingTiles", 16))
+    end
 end
 
 function M.register()
@@ -132,6 +140,24 @@ function M.register()
             "Disable recording, playback, and ghost controls."))
     killSwitch.onChangeApply = function(_, value)
         return apply("setKillSwitchEnabled", value == true)
+    end
+
+    local worldCapture = options:addTickBox("world_capture",
+        T.get("UI_pzreplay_panel_world_capture", "World capture"),
+        javaValue("isWorldCaptureEnabled", false),
+        T.get("UI_pzreplay_modoptions_world_capture_tooltip",
+            "Capture a padded world base with each recording."))
+    worldCapture.onChangeApply = function(_, value)
+        return apply("setWorldCaptureEnabled", value == true)
+    end
+
+    local worldPadding = options:addSlider("world_padding_tiles",
+        T.get("UI_pzreplay_panel_world_padding", "World padding"),
+        0, 128, 1, javaValue("getWorldPaddingTiles", 16),
+        T.get("UI_pzreplay_modoptions_world_padding_tooltip",
+            "Tiles of world captured around the player (0-128)."))
+    worldPadding.onChangeApply = function(_, value)
+        return apply("setWorldPaddingTiles", math.floor(tonumber(value) or 16))
     end
 
     registered = true

@@ -28,7 +28,9 @@ class ModOptionsContractTest {
         assertEquals("tickbox", options.get("camera_follow_default"));
         assertEquals("tickbox", options.get("debug_controls"));
         assertEquals("tickbox", options.get("kill_switch"));
-        assertEquals(5, options.size());
+        assertEquals("tickbox", options.get("world_capture"));
+        assertEquals("slider", options.get("world_padding_tiles"));
+        assertEquals(7, options.size());
     }
 
     @Test
@@ -64,6 +66,10 @@ class ModOptionsContractTest {
         assertTrue(lua.contains("setDebugControlsEnabled"));
         assertTrue(lua.contains("isKillSwitchEnabled"));
         assertTrue(lua.contains("setKillSwitchEnabled"));
+        assertTrue(lua.contains("isWorldCaptureEnabled"));
+        assertTrue(lua.contains("setWorldCaptureEnabled"));
+        assertTrue(lua.contains("getWorldPaddingTiles"));
+        assertTrue(lua.contains("setWorldPaddingTiles"));
     }
 
     private static Map<String, String> options() throws IOException {

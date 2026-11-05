@@ -235,6 +235,26 @@ public final class PZReplayLua {
         return ReplaySettingsStore.save();
     }
 
+    public static boolean isWorldCaptureEnabled() {
+        return ReplaySettingsStore.get().isWorldCaptureEnabled();
+    }
+
+    public static boolean setWorldCaptureEnabled(boolean enabled) {
+        ReplaySettingsStore.get().setWorldCaptureEnabled(enabled);
+        return ReplaySettingsStore.save();
+    }
+
+    public static int getWorldPaddingTiles() {
+        return ReplaySettingsStore.get().getWorldPaddingTiles();
+    }
+
+    public static boolean setWorldPaddingTiles(int tiles) {
+        if (!ReplaySettingsStore.get().setWorldPaddingTiles(tiles)) {
+            return false;
+        }
+        return ReplaySettingsStore.save();
+    }
+
     public static boolean isKillSwitchEnabled() {
         return ReplaySettingsStore.get().isKillSwitch();
     }
