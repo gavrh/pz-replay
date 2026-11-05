@@ -1,7 +1,9 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import java.util.zip.GZIPOutputStream;
@@ -22,105 +24,191 @@ final class FormatGzip {
     }
 
     static byte[] inflate(byte[] compressed) throws FormatException {
-        if (compressed.length < 18) {
-            throw new FormatException(FormatReason.TRUNCATED, "gzip stream is truncated");
-        }
-        if ((compressed[0] & 0xFF) != 0x1F || (compressed[1] & 0xFF) != 0x8B) {
-            throw new FormatException(FormatReason.NOT_CONTAINER,
-                "file does not start with a gzip member");
-        }
-        if ((compressed[2] & 0xFF) != 8) {
-            throw new FormatException(FormatReason.GZIP_CRC, "unsupported gzip method");
-        }
-        int flags = compressed[3] & 0xFF;
-        if ((flags & 0xE0) != 0) {
-            throw new FormatException(FormatReason.GZIP_CRC, "reserved gzip flags are set");
-        }
-
-        int position = 10;
-        if ((flags & 0x04) != 0) {
-            if (position + 2 > compressed.length) {
-                throw new FormatException(FormatReason.TRUNCATED, "gzip extra field is truncated");
-            }
-            int extra = u16(compressed, position);
-            position += 2 + extra;
-        }
-        if ((flags & 0x08) != 0) {
-            position = skipZeroTerminated(compressed, position);
-        }
-        if ((flags & 0x10) != 0) {
-            position = skipZeroTerminated(compressed, position);
-        }
-        if ((flags & 0x02) != 0) {
-            position += 2;
-        }
-        if (position < 0 || position >= compressed.length) {
-            throw new FormatException(FormatReason.TRUNCATED, "gzip header is truncated");
-        }
-
-        Inflater inflater = new Inflater(true);
-        inflater.setInput(compressed, position, compressed.length - position);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        long total = 0L;
-        try {
-            while (!inflater.finished()) {
-                int count = inflater.inflate(buffer);
-                if (count == 0) {
-                    if (inflater.needsDictionary()) {
-                        throw new FormatException(FormatReason.GZIP_CRC,
-                            "gzip stream needs a dictionary");
-                    }
-                    if (inflater.needsInput()) {
-                        throw new FormatException(FormatReason.TRUNCATED,
-                            "gzip stream is incomplete");
-                    }
-                    continue;
-                }
-                total += count;
-                if (total > MAX_DECOMPRESSED_BYTES) {
-                    throw new FormatException(FormatReason.TOO_LARGE,
-                        "decompressed replay exceeds the cap");
-                }
+        try (Stream stream = new Stream(new ByteArrayInputStream(compressed))) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = stream.read(buffer, 0, buffer.length)) >= 0) {
                 output.write(buffer, 0, count);
             }
-
-            long consumed = inflater.getBytesRead();
-            long trailerOffset = position + consumed;
-            if (trailerOffset + 8 > compressed.length) {
-                throw new FormatException(FormatReason.TRUNCATED,
-                    "gzip trailer is truncated");
-            }
-
-            byte[] decoded = output.toByteArray();
-            long storedCrc = u32LittleEndian(compressed, (int) trailerOffset);
-            long storedSize = u32LittleEndian(compressed, (int) trailerOffset + 4);
-            CRC32 crc = new CRC32();
-            crc.update(decoded);
-            if (crc.getValue() != storedCrc || (decoded.length & 0xFFFFFFFFL) != storedSize) {
-                throw new FormatException(FormatReason.GZIP_CRC,
-                    "gzip trailer checksum does not match");
-            }
-            if (trailerOffset + 8 < compressed.length) {
-                throw new FormatException(FormatReason.TRAILING_BYTES,
-                    "bytes follow the gzip member");
-            }
-            return decoded;
-        } catch (DataFormatException exception) {
+            return output.toByteArray();
+        } catch (IOException exception) {
             throw new FormatException(FormatReason.GZIP_CRC,
-                "gzip stream is corrupt", exception);
-        } finally {
-            inflater.end();
+                "gzip stream could not be read", exception);
         }
     }
 
-    private static int skipZeroTerminated(byte[] bytes, int position) throws FormatException {
-        while (position < bytes.length) {
-            if (bytes[position++] == 0) {
-                return position;
+    static Stream stream(InputStream input) throws IOException, FormatException {
+        return new Stream(input);
+    }
+
+    static final class Stream implements AutoCloseable {
+        private final InputStream input;
+        private final Inflater inflater = new Inflater(true);
+        private final byte[] inputBuffer = new byte[8192];
+        private final CRC32 crc = new CRC32();
+        private int inputLength;
+        private long total;
+        private boolean finished;
+        private boolean trailerChecked;
+
+        Stream(InputStream input) throws IOException, FormatException {
+            this.input = input;
+            readHeader();
+        }
+
+        int read(byte[] buffer, int offset, int length) throws IOException, FormatException {
+            if (length == 0) {
+                return 0;
+            }
+            if (finished) {
+                return -1;
+            }
+            while (true) {
+                if (inflater.needsInput()) {
+                    inputLength = input.read(inputBuffer);
+                    if (inputLength < 0) {
+                        throw new FormatException(FormatReason.TRUNCATED,
+                            "gzip stream is incomplete");
+                    }
+                    inflater.setInput(inputBuffer, 0, inputLength);
+                }
+                int count;
+                try {
+                    count = inflater.inflate(buffer, offset, length);
+                } catch (DataFormatException exception) {
+                    throw new FormatException(FormatReason.GZIP_CRC,
+                        "gzip stream is corrupt", exception);
+                }
+                if (count > 0) {
+                    total += count;
+                    if (total > MAX_DECOMPRESSED_BYTES) {
+                        throw new FormatException(FormatReason.TOO_LARGE,
+                            "decompressed replay exceeds the cap");
+                    }
+                    crc.update(buffer, offset, count);
+                    return count;
+                }
+                if (inflater.finished()) {
+                    finish();
+                    finished = true;
+                    return -1;
+                }
+                if (inflater.needsDictionary()) {
+                    throw new FormatException(FormatReason.GZIP_CRC,
+                        "gzip stream needs a dictionary");
+                }
+                if (!inflater.needsInput()) {
+                    throw new FormatException(FormatReason.GZIP_CRC,
+                        "gzip stream made no progress");
+                }
             }
         }
-        throw new FormatException(FormatReason.TRUNCATED, "gzip header string is truncated");
+
+        @Override
+        public void close() throws IOException {
+            inflater.end();
+            input.close();
+        }
+
+        private void readHeader() throws IOException, FormatException {
+            byte[] header = new byte[10];
+            readFully(input, header, 0, header.length);
+            if ((header[0] & 0xFF) != 0x1F || (header[1] & 0xFF) != 0x8B) {
+                throw new FormatException(FormatReason.NOT_CONTAINER,
+                    "file does not start with a gzip member");
+            }
+            if ((header[2] & 0xFF) != 8) {
+                throw new FormatException(FormatReason.GZIP_CRC,
+                    "unsupported gzip method");
+            }
+            int flags = header[3] & 0xFF;
+            if ((flags & 0xE0) != 0) {
+                throw new FormatException(FormatReason.GZIP_CRC,
+                    "reserved gzip flags are set");
+            }
+            if ((flags & 0x04) != 0) {
+                byte[] extraLength = new byte[2];
+                readFully(input, extraLength, 0, 2);
+                int extra = u16(extraLength, 0);
+                skipFully(input, extra);
+            }
+            if ((flags & 0x08) != 0) {
+                skipZeroTerminated(input);
+            }
+            if ((flags & 0x10) != 0) {
+                skipZeroTerminated(input);
+            }
+            if ((flags & 0x02) != 0) {
+                skipFully(input, 2);
+            }
+        }
+
+        private void finish() throws IOException, FormatException {
+            if (trailerChecked) {
+                return;
+            }
+            byte[] trailer = new byte[8];
+            int remaining = inflater.getRemaining();
+            int fromBuffer = Math.min(remaining, trailer.length);
+            int trailingFromBuffer = remaining - fromBuffer;
+            if (fromBuffer > 0) {
+                int offset = inputLength - remaining;
+                System.arraycopy(inputBuffer, offset, trailer, 0, fromBuffer);
+            }
+            readFully(input, trailer, fromBuffer, trailer.length - fromBuffer);
+
+            long storedCrc = u32LittleEndian(trailer, 0);
+            long storedSize = u32LittleEndian(trailer, 4);
+            if (crc.getValue() != storedCrc || (total & 0xFFFFFFFFL) != storedSize) {
+                throw new FormatException(FormatReason.GZIP_CRC,
+                    "gzip trailer checksum does not match");
+            }
+            if (trailingFromBuffer > 0 || input.read() != -1) {
+                throw new FormatException(FormatReason.TRAILING_BYTES,
+                    "bytes follow the gzip member");
+            }
+            trailerChecked = true;
+        }
+    }
+
+    private static void readFully(InputStream input, byte[] buffer, int offset, int length)
+        throws IOException, FormatException {
+        int position = 0;
+        while (position < length) {
+            int count = input.read(buffer, offset + position, length - position);
+            if (count < 0) {
+                throw new FormatException(FormatReason.TRUNCATED,
+                    "gzip stream is truncated");
+            }
+            position += count;
+        }
+    }
+
+    private static void skipFully(InputStream input, int length) throws IOException, FormatException {
+        byte[] buffer = new byte[Math.min(length, 8192)];
+        int remaining = length;
+        while (remaining > 0) {
+            int count = input.read(buffer, 0, Math.min(buffer.length, remaining));
+            if (count < 0) {
+                throw new FormatException(FormatReason.TRUNCATED,
+                    "gzip header is truncated");
+            }
+            remaining -= count;
+        }
+    }
+
+    private static void skipZeroTerminated(InputStream input) throws IOException, FormatException {
+        while (true) {
+            int value = input.read();
+            if (value < 0) {
+                throw new FormatException(FormatReason.TRUNCATED,
+                    "gzip header string is truncated");
+            }
+            if (value == 0) {
+                return;
+            }
+        }
     }
 
     private static int u16(byte[] bytes, int offset) {

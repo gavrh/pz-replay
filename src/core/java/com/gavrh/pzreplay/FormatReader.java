@@ -1,6 +1,8 @@
 package com.gavrh.pzreplay;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -10,8 +12,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.CRC32;
 
 public final class FormatReader {
@@ -63,11 +67,11 @@ public final class FormatReader {
     }
 
     public static FormatInfo readInfo(Path source) throws IOException, ReplayFormatException {
-        Container container = readContainer(source);
+        FormatManifest manifest = readCatalogueManifest(source);
         ReplayMetadata metadata = FormatMetadata.fromManifest(
-            container.manifest(), Map.of(), List.of());
-        return new FormatInfo(metadata, container.manifest().worldStatus(),
-            container.manifest().worldIssue, container.manifest().warnings);
+            manifest, Map.of(), List.of());
+        return new FormatInfo(metadata, manifest.worldStatus(),
+            manifest.worldIssue, manifest.warnings);
     }
 
     public static FormatReadResult readPackage(Path source)
@@ -351,6 +355,210 @@ public final class FormatReader {
                 warnings.add("meta section ignored: " + descriptor.id());
             }
         }
+    }
+
+    private static FormatManifest readCatalogueManifest(Path source)
+        throws IOException, ReplayFormatException {
+        if (Files.size(source) > FormatWriter.MAX_COMPRESSED_BYTES) {
+            throw new FormatException(FormatReason.TOO_LARGE,
+                "replay file exceeds the compressed cap");
+        }
+        try (InputStream file = Files.newInputStream(source);
+            BufferedInputStream input = new BufferedInputStream(file)) {
+            input.mark(OLD_MAGIC.length);
+            byte[] prefix = input.readNBytes(OLD_MAGIC.length);
+            input.reset();
+            if (prefix.length >= OLD_MAGIC.length
+                && Arrays.equals(prefix, OLD_MAGIC)) {
+                throw new FormatException(FormatReason.OLD_LAYOUT,
+                    "unsupported pre-release replay (old internal layout)");
+            }
+            if (prefix.length < 2
+                || (prefix[0] & 0xFF) != 0x1F || (prefix[1] & 0xFF) != 0x8B) {
+                throw new FormatException(FormatReason.NOT_CONTAINER,
+                    "not a replay container");
+            }
+            try (FormatGzip.Stream gzip = FormatGzip.stream(input)) {
+                return readCatalogueStream(gzip);
+            }
+        }
+    }
+
+    private static FormatManifest readCatalogueStream(FormatGzip.Stream gzip)
+        throws IOException, ReplayFormatException {
+        CrcInput input = new CrcInput(gzip);
+        byte[] magic = input.read(FormatWriter.MAGIC.length);
+        if (Arrays.equals(Arrays.copyOf(magic, OLD_MAGIC.length), OLD_MAGIC)) {
+            throw new FormatException(FormatReason.OLD_LAYOUT,
+                "unsupported pre-release replay (old internal layout)");
+        }
+        if (!Arrays.equals(magic, FormatWriter.MAGIC)) {
+            throw new FormatException(FormatReason.NOT_CONTAINER,
+                "container magic does not match");
+        }
+        byte[] headerFields = input.read(8);
+        int version = u16(headerFields, 0);
+        if (version != FormatWriter.CONTAINER_VERSION) {
+            throw new FormatException(FormatReason.UNSUPPORTED_VERSION,
+                "unsupported container version " + version);
+        }
+        int flags = u16(headerFields, 2);
+        if (flags != 0) {
+            throw new FormatException(FormatReason.UNSUPPORTED_FLAGS,
+                "unsupported container flags " + flags);
+        }
+        long manifestLength = u32(headerFields, 4);
+        if (manifestLength < 1 || manifestLength > FormatWriter.MAX_MANIFEST_BYTES) {
+            throw new FormatException(FormatReason.MANIFEST_LENGTH,
+                "manifest length is outside the cap");
+        }
+        byte[] manifestBytes = input.read((int) manifestLength);
+        FormatManifest manifest = FormatManifest.parse(manifestBytes);
+
+        byte[] countBytes = input.read(2);
+        int sectionCount = u16(countBytes, 0);
+        if (sectionCount > FormatWriter.MAX_SECTIONS) {
+            throw new FormatException(FormatReason.SECTION_TABLE,
+                "section count exceeds the cap");
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        long payloadBytes = 0L;
+        for (int index = 0; index < sectionCount; index++) {
+            int idLength = u16(input.read(2), 0);
+            if (idLength < 1 || idLength > FormatWriter.MAX_SECTION_ID) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "section id length is outside the cap");
+            }
+            String id = new String(input.read(idLength), StandardCharsets.US_ASCII);
+            if (!FormatManifest.isValidSectionId(id)) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "section id is invalid: " + id);
+            }
+            byte[] descriptor = input.read(44);
+            int sectionFlags = u16(descriptor, 0);
+            boolean required = (sectionFlags & 0x0001) != 0;
+            int schemaVersion = u16(descriptor, 2);
+            if (schemaVersion < 1) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "section schema version is below 1: " + id);
+            }
+            long length = longAt(descriptor, 4);
+            if (length < 0L) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "section length is negative: " + id);
+            }
+            if (!seen.add(id)) {
+                throw new FormatException(FormatReason.SECTION_DUPLICATE,
+                    "duplicate section id: " + id);
+            }
+            if ((id.startsWith("actor/") || isRequiredWorld(manifest, id)) && !required) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "required section is not marked required: " + id);
+            }
+            long newTotal = payloadBytes + length;
+            if (newTotal < payloadBytes || newTotal > FormatWriter.MAX_DECOMPRESSED_BYTES) {
+                throw new FormatException(FormatReason.TOO_LARGE,
+                    "section payloads exceed the container cap");
+            }
+            payloadBytes = newTotal;
+        }
+
+        input.skip(payloadBytes);
+        long packageCrc = input.crcValue();
+        byte[] footer = readExact(gzip, 44);
+        if (!Arrays.equals(Arrays.copyOfRange(footer, 36, 44),
+            FormatWriter.FOOTER_MAGIC)) {
+            throw new FormatException(FormatReason.FOOTER,
+                "footer magic does not match");
+        }
+        if (!Arrays.equals(Arrays.copyOfRange(footer, 0, 32),
+            FormatWriter.sha256(manifestBytes))) {
+            throw new FormatException(FormatReason.MANIFEST_HASH,
+                "manifest hash does not match");
+        }
+        if (u32(footer, 32) != packageCrc) {
+            throw new FormatException(FormatReason.FOOTER,
+                "package checksum does not match");
+        }
+        byte[] extra = new byte[1];
+        if (gzip.read(extra, 0, 1) >= 0) {
+            throw new FormatException(FormatReason.TRUNCATED,
+                "footer offset does not land at the end of the file");
+        }
+        return manifest;
+    }
+
+    private static final class CrcInput {
+        private final FormatGzip.Stream stream;
+        private final CRC32 crc = new CRC32();
+
+        private CrcInput(FormatGzip.Stream stream) {
+            this.stream = stream;
+        }
+
+        private byte[] read(int length) throws IOException, FormatException {
+            byte[] bytes = new byte[length];
+            int offset = 0;
+            while (offset < length) {
+                int count = stream.read(bytes, offset, length - offset);
+                if (count < 0) {
+                    throw new FormatException(FormatReason.TRUNCATED,
+                        "container is truncated");
+                }
+                crc.update(bytes, offset, count);
+                offset += count;
+            }
+            return bytes;
+        }
+
+        private void skip(long length) throws IOException, FormatException {
+            byte[] buffer = new byte[8192];
+            long remaining = length;
+            while (remaining > 0L) {
+                int count = stream.read(buffer, 0,
+                    (int) Math.min(buffer.length, remaining));
+                if (count < 0) {
+                    throw new FormatException(FormatReason.TRUNCATED,
+                        "container payload is truncated");
+                }
+                crc.update(buffer, 0, count);
+                remaining -= count;
+            }
+        }
+
+        private long crcValue() {
+            return crc.getValue();
+        }
+    }
+
+    private static byte[] readExact(FormatGzip.Stream stream, int length)
+        throws IOException, FormatException {
+        byte[] bytes = new byte[length];
+        int offset = 0;
+        while (offset < length) {
+            int count = stream.read(bytes, offset, length - offset);
+            if (count < 0) {
+                throw new FormatException(FormatReason.TRUNCATED,
+                    "footer is truncated");
+            }
+            offset += count;
+        }
+        return bytes;
+    }
+
+    private static int u16(byte[] bytes, int offset) {
+        return ((bytes[offset] & 0xFF) << 8) | (bytes[offset + 1] & 0xFF);
+    }
+
+    private static long u32(byte[] bytes, int offset) {
+        return ((long) (bytes[offset] & 0xFF) << 24)
+            | ((long) (bytes[offset + 1] & 0xFF) << 16)
+            | ((long) (bytes[offset + 2] & 0xFF) << 8)
+            | (bytes[offset + 3] & 0xFF);
+    }
+
+    private static long longAt(byte[] bytes, int offset) {
+        return ByteBuffer.wrap(bytes, offset, 8).order(ByteOrder.BIG_ENDIAN).getLong();
     }
 
     private static Kind kind(String id) {
