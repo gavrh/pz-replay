@@ -16,7 +16,7 @@ class ReplayDetailsTest {
         ReplayCatalogue.Entry entry = new ReplayCatalogue.Entry(
             "Morning Run.pzrp.gz", "/replays/Morning Run.pzrp.gz", MODIFIED, 2_097_152L,
             true, "", 90.0, 30.0, "Muldraugh, KY", "pz-replay-test", "Sandbox",
-            "Alice", true);
+            "Alice", "none", true);
 
         Map<String, String> rows = rows(ReplayDetails.rows(entry, true));
 
@@ -26,7 +26,7 @@ class ReplayDetailsTest {
         assertEquals("Alice", rows.get("Character"));
         assertEquals("pz-replay-test / Sandbox", rows.get("Save / mode"));
         assertEquals("2.0 MB / 30 Hz", rows.get("Size / rate"));
-        assertEquals("valid", rows.get("Status"));
+        assertEquals("unverified", rows.get("Status"));
         assertEquals("yes / yes", rows.get("Favorite / last"));
     }
 
@@ -44,7 +44,7 @@ class ReplayDetailsTest {
     void unreadableReplayShowsItsErrorAndUnknownMetadata() {
         ReplayCatalogue.Entry entry = new ReplayCatalogue.Entry(
             "broken.pzrp.gz", "/replays/broken.pzrp.gz", 0L, 12L, false, "checksum mismatch",
-            0.0, 0.0, "", "", "", "", false);
+            0.0, 0.0, "", "", "", "", "", false);
 
         Map<String, String> rows = rows(ReplayDetails.rows(entry, false));
 
@@ -79,7 +79,7 @@ class ReplayDetailsTest {
     private static ReplayCatalogue.Entry entry(boolean lastReplay) {
         return new ReplayCatalogue.Entry("run.pzrp.gz", "/replays/run.pzrp.gz", MODIFIED,
             1024L, true, "", 10.0, 30.0, "Riverside, KY", "save", "Survival", "Bob",
-            lastReplay);
+            "none", lastReplay);
     }
 
     private static Map<String, String> rows(List<ReplayDetails.Row> rows) {

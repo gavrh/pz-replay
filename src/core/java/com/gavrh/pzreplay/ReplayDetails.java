@@ -37,7 +37,7 @@ public final class ReplayDetails {
             new Row("Size / rate",
                 formatSize(entry.sizeBytes()) + " / " + formatRate(entry.sampleRateHz())),
             new Row("Status", entry.valid()
-                ? "valid"
+                ? "unverified"
                 : "unreadable: " + fallback(entry.error(), "unknown error")),
             new Row("Favorite / last",
                 (favorite ? "yes" : "no") + " / " + (entry.lastReplay() ? "yes" : "no"))

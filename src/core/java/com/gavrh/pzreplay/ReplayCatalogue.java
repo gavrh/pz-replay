@@ -24,6 +24,7 @@ public final class ReplayCatalogue {
         String saveName,
         String gameMode,
         String playerName,
+        String worldStatus,
         boolean lastReplay
     ) {
     }
@@ -83,7 +84,8 @@ public final class ReplayCatalogue {
 
         boolean lastReplay = !lastPath.isEmpty() && lastPath.equals(normalize(path));
         try {
-            ReplayMetadata metadata = BinaryReplayCodec.readMetadata(file);
+            FormatInfo info = FormatReader.readInfo(file);
+            ReplayMetadata metadata = info.metadata();
             long durationMillis = Math.max(0L,
                 metadata.endTimeMillis() - metadata.startTimeMillis());
             return new Entry(
@@ -99,6 +101,7 @@ public final class ReplayCatalogue {
                 metadata.saveName(),
                 metadata.gameMode(),
                 metadata.playerName(),
+                info.worldStatus(),
                 lastReplay
             );
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
@@ -108,9 +111,10 @@ public final class ReplayCatalogue {
                 modifiedMillis,
                 sizeBytes,
                 false,
-                message(exception),
+                reason(exception),
                 0.0,
                 0.0,
+                "",
                 "",
                 "",
                 "",
@@ -141,6 +145,16 @@ public final class ReplayCatalogue {
         } catch (RuntimeException exception) {
             return path;
         }
+    }
+
+    private static String reason(Exception exception) {
+        if (exception instanceof FormatException formatException) {
+            return formatException.reason();
+        }
+        if (exception instanceof ReplayFormatException) {
+            return "corrupt";
+        }
+        return "unreadable";
     }
 
     private static String message(Exception exception) {

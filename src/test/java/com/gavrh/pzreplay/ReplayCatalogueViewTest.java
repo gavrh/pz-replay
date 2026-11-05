@@ -136,7 +136,7 @@ class ReplayCatalogueViewTest {
         double duration, String map, String player, boolean lastReplay, boolean valid) {
         return new ReplayCatalogue.Entry(fileName, "/replays/" + fileName, modified,
             100L, valid, valid ? "" : "unreadable", duration, 30.0, map, "save",
-            "Sandbox", player, lastReplay);
+            "Sandbox", player, "none", lastReplay);
     }
 
     private static List<String> names(List<ReplayCatalogue.Entry> entries) {

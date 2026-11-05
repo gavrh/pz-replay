@@ -1,23 +1,18 @@
 package com.gavrh.pzreplay;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
-import java.util.zip.CRC32;
-import java.util.zip.GZIPOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,7 +24,7 @@ class ReplayFormatTest {
 
     private static ReplayMetadata metadata() {
         return new ReplayMetadata(
-            ReplayMetadata.CURRENT_FORMAT_VERSION,
+            1,
             "0.0.0-dev",
             "42.21.0",
             "pz-replay-test",
@@ -60,383 +55,459 @@ class ReplayFormatTest {
         return frames;
     }
 
-    @Test
-    void binaryRoundTripsUncompressedAndGzip() throws Exception {
-        Path plain = tempDir.resolve("roundtrip.pzrp");
-        Path gzip = tempDir.resolve("roundtrip.pzrp.gz");
-        BinaryReplayCodec.write(plain, metadata(), frames(), false);
-        BinaryReplayCodec.write(gzip, metadata(), frames(), true);
+    private static String manifestText() {
+        return FormatTestSupport.manifest(metadata(), frames().size(), true, 0);
+    }
 
-        assertBinaryRoundTrip(plain);
-        assertBinaryRoundTrip(gzip);
+    private static List<FormatTestSupport.Section> validSections() {
+        return FormatTestSupport.sections(FormatTestSupport.actorPayload(frames()),
+            FormatTestSupport.actorMetadata());
+    }
+
+    private static byte[] rawPackage() throws Exception {
+        return FormatTestSupport.raw(manifestText(), validSections());
+    }
+
+    private static void writeRaw(Path path, byte[] raw) throws Exception {
+        FormatTestSupport.write(path, raw);
     }
 
     @Test
-    void binaryRejectsMissingFile() {
-        Path missing = tempDir.resolve("missing.pzrp.gz");
+    void roundTripsEverySupportedSection() throws Exception {
+        Path file = tempDir.resolve("roundtrip.pzrp.gz");
+        byte[] png = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3};
+        FormatWriter.write(file, metadata(), frames(),
+            List.of(new FormatMod("mod.a", "1.0"), new FormatMod("mod.b", "2.0")), png);
 
-        assertThrows(IOException.class, () -> ReplayReader.read(missing));
+        FormatReadResult result = FormatReader.readPackage(file);
+
+        assertEquals(frames(), result.frames());
+        assertEquals(metadata().appearance(), result.metadata().appearance());
+        assertEquals(metadata().equipment(), result.metadata().equipment());
+        assertEquals(2, result.mods().size());
+        assertEquals("mod.b", result.mods().get(1).id());
+        assertArrayEquals(png, result.preview());
+        assertEquals("none", result.worldStatus());
+        assertTrue(result.warnings().isEmpty(), result.warnings().toString());
+        assertEquals(1_700_000_060_000L, result.metadata().endTimeMillis());
+        assertEquals(30, result.metadata().sampleRateHz(), 0.0001);
     }
 
     @Test
-    void binaryRejectsTruncatedFile() throws Exception {
-        Path file = tempDir.resolve("truncated.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        Files.write(file, java.util.Arrays.copyOf(bytes, bytes.length - 10));
+    void manifestAcceptsUnknownKeysWithAWarning() throws Exception {
+        byte[] bytes = (manifestText() + "future_key=ignored\n")
+            .getBytes(StandardCharsets.UTF_8);
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("truncated"));
+        FormatManifest manifest = FormatManifest.parse(bytes);
+
+        assertTrue(manifest.warnings.stream()
+            .anyMatch(warning -> warning.contains("future_key")));
     }
 
     @Test
-    void binaryRejectsCorruptFrame() throws Exception {
-        Path file = tempDir.resolve("corrupt.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        bytes[bytes.length - 20] ^= 0x01;
-        Files.write(file, bytes);
+    void manifestRejectsDuplicateKeys() {
+        byte[] bytes = (manifestText() + "game_version=42.21.0\n")
+            .getBytes(StandardCharsets.UTF_8);
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("checksum"));
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(bytes));
+        assertEquals(FormatReason.MANIFEST_DUPLICATE_KEY, exception.reason());
     }
 
     @Test
-    void binaryRejectsUnknownVersion() throws Exception {
-        Path file = tempDir.resolve("version.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).putInt(4, 99);
-        Files.write(file, bytes);
+    void manifestRejectsMissingRequiredFields() {
+        byte[] bytes = removeLine(manifestText(), "source_map_name")
+            .getBytes(StandardCharsets.UTF_8);
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("unsupported replay format version 99"));
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(bytes));
+        assertEquals(FormatReason.MANIFEST_MISSING_FIELD, exception.reason());
     }
 
     @Test
-    void binaryRejectsBadCrc() throws Exception {
-        Path file = tempDir.resolve("crc.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        bytes[bytes.length - 12] ^= 0x01;
-        Files.write(file, bytes);
+    void manifestRejectsBadEnumsAndNumbers() {
+        FormatException enumError = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(replace(manifestText(), "role=local", "role=captain")
+                .getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_FIELD_INVALID, enumError.reason());
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("checksum"));
+        FormatException numberError = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(replace(manifestText(),
+                "actor_sample_rate_hz=30", "actor_sample_rate_hz=030")
+                .getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_FIELD_INVALID, numberError.reason());
     }
 
     @Test
-    void binaryRejectsBadFooter() throws Exception {
-        Path file = tempDir.resolve("footer.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        bytes[bytes.length - 1] ^= 0x01;
-        Files.write(file, bytes);
+    void manifestRejectsBlankLinesAndControlCharacters() {
+        FormatException blank = assertThrows(FormatException.class,
+            () -> FormatManifest.parse((manifestText() + "\n").getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_GRAMMAR, blank.reason());
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("missing footer"));
+        FormatException control = assertThrows(FormatException.class,
+            () -> FormatManifest.parse((manifestText() + "bad=tab\there\n")
+                .getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_GRAMMAR, control.reason());
     }
 
     @Test
-    void binaryReadsVersionOneMetadataWithoutGameModeOrAppearance() throws Exception {
-        Map<String, String> values = metadata().toValues();
-        values.remove("game_mode");
-        values.remove("appearance_version");
-        values.remove("appearance_data");
-        values.remove("appearance_changes_version");
-        values.remove("appearance_changes_data");
-        values.remove("equipment_version");
-        values.remove("equipment_data");
-        Path file = tempDir.resolve("legacy.pzrp");
-        Files.write(file, rawPayload(values));
-
-        ReplayData data = BinaryReplayCodec.read(file);
-
-        assertEquals("", data.metadata().gameMode());
-        assertEquals(Appearance.none(), data.metadata().appearance());
-        assertEquals(AppearanceChanges.none(), data.metadata().appearanceChanges());
-        assertEquals(Equipment.none(), data.metadata().equipment());
-        assertEquals(metadata().saveName(), data.metadata().saveName());
-        assertEquals(metadata().mapName(), data.metadata().mapName());
-        assertEquals(metadata().playerName(), data.metadata().playerName());
-    }
-
-    @Test
-    void binaryIgnoresUnknownOptionalMetadata() throws Exception {
-        Map<String, String> values = metadata().toValues();
-        values.put("future_optional_key", "ignored");
-        Path file = tempDir.resolve("future.pzrp");
-        Files.write(file, rawPayload(values));
-
-        ReplayData data = BinaryReplayCodec.read(file);
-
-        assertEquals(metadata(), data.metadata());
-    }
-
-    @Test
-    void binaryRejectsMetadataAboveTheSizeLimit() {
-        ReplayMetadata oversized = new ReplayMetadata(
-            ReplayMetadata.CURRENT_FORMAT_VERSION,
-            "0.0.0-dev",
-            "42.21.0",
-            "pz-replay-test",
-            "Sandbox",
-            "Muldraugh, KY",
-            "Replay Tester",
-            1000f,
-            2000f,
-            0f,
-            30.0,
-            1L,
-            2L,
-            new Appearance(Appearance.CURRENT_VERSION, "A".repeat(2 * 1024 * 1024))
-        );
-
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.write(tempDir.resolve("oversized.pzrp"), oversized,
-                frames(), true));
-        assertTrue(exception.getMessage().contains("metadata is too large"));
-    }
-
-    @Test
-    void binaryRoundTripsAppearanceMetadataOnly() throws Exception {
-        Path file = tempDir.resolve("appearance.pzrp.gz");
-        BinaryReplayCodec.write(file, metadata(), frames(), true);
-
-        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
-
-        assertEquals(metadata().appearance(), metadataOnly.appearance());
-        assertEquals(Appearance.CURRENT_VERSION, metadataOnly.appearance().version());
-        assertEquals("snapshot",
-            new String(metadataOnly.appearance().decode(), StandardCharsets.UTF_8));
-    }
-
-    @Test
-    void binaryRoundTripsHeldItemMetadataOnly() throws Exception {
-        Path file = tempDir.resolve("equipment.pzrp.gz");
-        BinaryReplayCodec.write(file, metadata(), frames(), true);
-
-        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
-
-        assertEquals(metadata().equipment(), metadataOnly.equipment());
-        assertEquals(Equipment.CURRENT_VERSION, metadataOnly.equipment().version());
-        assertEquals("items",
-            new String(metadataOnly.equipment().decode(), StandardCharsets.UTF_8));
-    }
-
-    @Test
-    void binaryRoundTripsAppearanceChangeMetadataOnly() throws Exception {
-        AppearanceChanges changes = AppearanceChanges.encode(List.of(
-            new AppearanceChange(1L, 1.25f, metadata().appearance()),
-            new AppearanceChange(2L, 4.5f, metadata().appearance())));
-        ReplayMetadata withChanges = metadata().withAppearanceChanges(changes);
-        Path file = tempDir.resolve("appearance-changes.pzrp.gz");
-        BinaryReplayCodec.write(file, withChanges, frames(), true);
-
-        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
-
-        assertEquals(withChanges, metadataOnly);
-        assertEquals(changes, metadataOnly.appearanceChanges());
-        assertEquals(2, metadataOnly.appearanceChanges().decode().changes().size());
-        assertEquals(1.25f,
-            metadataOnly.appearanceChanges().decode().changes().get(0).timeSeconds());
-    }
-
-    @Test
-    void corruptAppearanceChangesDoNotBlockReadingTheReplay() throws Exception {
-        Map<String, String> values = metadata().toValues();
-        values.put("appearance_changes_version",
-            Integer.toString(AppearanceChanges.CURRENT_VERSION));
-        values.put("appearance_changes_data", "not base64!");
-        Path file = tempDir.resolve("corrupt-appearance-changes.pzrp");
-        Files.write(file, rawPayload(values));
-
-        ReplayData data = BinaryReplayCodec.read(file);
-
-        assertEquals(1, data.metadata().appearanceChanges().warnings().size());
-        assertTrue(data.metadata().appearanceChanges().warnings().get(0)
-            .contains("corrupt or incomplete"));
-    }
-
-    @Test
-    void binaryRejectsMissingMetadataField() throws Exception {
-        Map<String, String> values = metadata().toValues();
-        values.remove("save_name");
-        Path file = tempDir.resolve("missing-field.pzrp");
-        Files.write(file, rawPayload(values));
-
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("missing 'save_name'"));
-    }
-
-    @Test
-    void binaryRejectsUnknownLocomotionId() throws Exception {
-        Path file = tempDir.resolve("unknown-locomotion.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        patchFirstFrameByte(file, 36, 99);
-
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("locomotion"));
-    }
-
-    @Test
-    void binaryRejectsUnknownStanceId() throws Exception {
-        Path file = tempDir.resolve("unknown-stance.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        patchFirstFrameByte(file, 37, 99);
-
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("stance"));
-    }
-
-    @Test
-    void binaryRejectsDecompressedBomb() throws Exception {
-        Path file = tempDir.resolve("bomb.pzrp.gz");
-        try (OutputStream out = Files.newOutputStream(file);
-            GZIPOutputStream gzip = new GZIPOutputStream(out)) {
-            byte[] buffer = new byte[8192];
-            long remaining = BinaryReplayCodec.MAX_UNCOMPRESSED_BYTES + 1;
-            while (remaining > 0) {
-                int count = (int) Math.min(buffer.length, remaining);
-                gzip.write(buffer, 0, count);
-                remaining -= count;
-            }
+    void manifestRejectsOversizedAndOverCountInput() {
+        StringBuilder oversized = new StringBuilder();
+        for (int index = 0; index < 600; index++) {
+            oversized.append("unknown").append(index).append('=')
+                .append("x".repeat(100)).append('\n');
         }
+        FormatException tooLarge = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(oversized.toString().getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_LENGTH, tooLarge.reason());
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("decompressed data too large"));
+        String tooManyActors = replace(manifestText(), "actor_count=1", "actor_count=17");
+        FormatException tooMany = assertThrows(FormatException.class,
+            () -> FormatManifest.parse(tooManyActors.getBytes(StandardCharsets.UTF_8)));
+        assertEquals(FormatReason.MANIFEST_FIELD_INVALID, tooMany.reason());
     }
 
     @Test
-    void binaryRejectsFrameCountAboveLimit() throws Exception {
-        byte[] metadataBytes = "format=1\n".getBytes(StandardCharsets.UTF_8);
-        ByteBuffer buffer = ByteBuffer.allocate(16 + metadataBytes.length + 4)
-            .order(ByteOrder.BIG_ENDIAN);
-        buffer.putInt(BinaryReplayCodec.MAGIC);
-        buffer.putInt(ReplayMetadata.CURRENT_FORMAT_VERSION);
-        buffer.putInt(metadataBytes.length);
-        buffer.put(metadataBytes);
-        buffer.putInt(BinaryReplayCodec.MAX_FRAMES + 1);
-        Path file = tempDir.resolve("too-many-frames.pzrp");
-        Files.write(file, buffer.array());
+    void readerRejectsSectionCountAboveTheCap() throws Exception {
+        List<FormatTestSupport.Section> sections = new ArrayList<>(validSections());
+        for (int index = 0; index < 64; index++) {
+            sections.add(new FormatTestSupport.Section("extra/s" + index, false, 1,
+                new byte[] {(byte) index}));
+        }
+        Path file = tempDir.resolve("sections.pzrp.gz");
+        writeRaw(file, FormatTestSupport.raw(manifestText(), sections));
 
-        ReplayFormatException exception = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        assertTrue(exception.getMessage().contains("invalid frame count"));
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readInfo(file));
+        assertEquals(FormatReason.SECTION_TABLE, exception.reason());
     }
 
     @Test
-    void sixtySecondCompressedBinaryFitsHourlyBudget() throws Exception {
-        Path file = tempDir.resolve("budget.pzrp.gz");
-        BinaryReplayCodec.write(file, metadata(), realisticFrames(), true);
+    void readerRejectsGzipCrcTrailingBytesAndTruncation() throws Exception {
+        Path good = tempDir.resolve("good.pzrp.gz");
+        writeRaw(good, rawPackage());
+        byte[] gzip = Files.readAllBytes(good);
 
-        double bytesPerHour = Files.size(file) * 3600.0 / 60.0;
-        assertTrue(bytesPerHour < 3.0 * 1024 * 1024,
-            "compressed replay would use " + Math.round(bytesPerHour) + " bytes/hour");
+        Path badCrc = tempDir.resolve("bad-crc.pzrp.gz");
+        byte[] corrupt = gzip.clone();
+        corrupt[corrupt.length - 1] ^= 0x01;
+        Files.write(badCrc, corrupt);
+        assertEquals(FormatReason.GZIP_CRC, readError(badCrc));
+
+        Path trailing = tempDir.resolve("trailing.pzrp.gz");
+        Files.write(trailing, FormatTestSupport.concat(gzip, new byte[] {1}));
+        assertEquals(FormatReason.TRAILING_BYTES, readError(trailing));
+
+        Path truncated = tempDir.resolve("truncated.pzrp.gz");
+        Files.write(truncated, Arrays.copyOf(gzip, gzip.length - 5));
+        assertEquals(FormatReason.TRUNCATED, readError(truncated));
     }
 
     @Test
-    void readerReadsCompressedReplay() throws Exception {
-        Path file = tempDir.resolve("reader.pzrp.gz");
-        BinaryReplayCodec.write(file, metadata(), frames(), true);
+    void readerRejectsBadManifestHashSectionHashAndFooter() throws Exception {
+        Path badManifest = tempDir.resolve("bad-manifest.pzrp.gz");
+        byte[] raw = rawPackage();
+        FormatTestSupport.setManifestHash(raw, new byte[32]);
+        writeRaw(badManifest, raw);
+        assertEquals(FormatReason.MANIFEST_HASH, readError(badManifest));
+
+        Path badSection = tempDir.resolve("bad-section.pzrp.gz");
+        raw = rawPackage();
+        int hashOffset = FormatTestSupport.sectionHashOffset(raw, "actor/local");
+        raw[hashOffset] ^= 0x01;
+        FormatTestSupport.refreshCrc(raw);
+        writeRaw(badSection, raw);
+        assertEquals(FormatReason.SECTION_HASH, playbackError(badSection));
+
+        Path badFooter = tempDir.resolve("bad-footer.pzrp.gz");
+        raw = rawPackage();
+        raw[raw.length - 12] ^= 0x01;
+        writeRaw(badFooter, raw);
+        assertEquals(FormatReason.FOOTER, readError(badFooter));
+
+        Path badMagic = tempDir.resolve("bad-magic.pzrp.gz");
+        raw = rawPackage();
+        FormatTestSupport.setFooterMagic(raw, "PZRECEND".getBytes(StandardCharsets.US_ASCII));
+        raw[raw.length - 8] ^= 0x01;
+        writeRaw(badMagic, raw);
+        assertEquals(FormatReason.FOOTER, readError(badMagic));
+    }
+
+    @Test
+    void oldInternalLayoutIsRejectedWithoutMigration() throws Exception {
+        byte[] old = {'P', 'Z', 'R', 'P', 0, 0, 0, 1, 0, 0, 0, 0};
+
+        Path raw = tempDir.resolve("old-raw.pzrp.gz");
+        Files.write(raw, old);
+        assertEquals(FormatReason.OLD_LAYOUT, readError(raw));
+
+        Path gzip = tempDir.resolve("old-gzip.pzrp.gz");
+        Files.write(gzip, FormatGzip.deflate(old));
+        assertEquals(FormatReason.OLD_LAYOUT, readError(gzip));
+    }
+
+    @Test
+    void readerRejectsUnsupportedVersionsFlagsAndReaderFormat() throws Exception {
+        Path versionZero = tempDir.resolve("version-0.pzrp.gz");
+        byte[] raw = rawPackage();
+        ByteBuffer.wrap(raw).order(ByteOrder.BIG_ENDIAN).putShort(8, (short) 0);
+        FormatTestSupport.refreshCrc(raw);
+        writeRaw(versionZero, raw);
+        assertEquals(FormatReason.UNSUPPORTED_VERSION, readError(versionZero));
+
+        Path versionTwo = tempDir.resolve("version-2.pzrp.gz");
+        raw = rawPackage();
+        ByteBuffer.wrap(raw).order(ByteOrder.BIG_ENDIAN).putShort(8, (short) 2);
+        FormatTestSupport.refreshCrc(raw);
+        writeRaw(versionTwo, raw);
+        assertEquals(FormatReason.UNSUPPORTED_VERSION, readError(versionTwo));
+
+        Path flags = tempDir.resolve("flags.pzrp.gz");
+        raw = rawPackage();
+        ByteBuffer.wrap(raw).order(ByteOrder.BIG_ENDIAN).putShort(10, (short) 1);
+        FormatTestSupport.refreshCrc(raw);
+        writeRaw(flags, raw);
+        assertEquals(FormatReason.UNSUPPORTED_FLAGS, readError(flags));
+
+        Path minReader = tempDir.resolve("min-reader.pzrp.gz");
+        writeRaw(minReader, FormatTestSupport.raw(
+            replace(manifestText(), "min_reader_format=1", "min_reader_format=2"),
+            validSections()));
+        assertEquals(FormatReason.UNSUPPORTED_VERSION, readError(minReader));
+
+        Path manifestVersion = tempDir.resolve("manifest-version.pzrp.gz");
+        writeRaw(manifestVersion, FormatTestSupport.raw(
+            replace(manifestText(), "manifest_version=1", "manifest_version=2"),
+            validSections()));
+        assertEquals(FormatReason.UNSUPPORTED_VERSION, readError(manifestVersion));
+    }
+
+    @Test
+    void unknownOptionalSectionIsSkippedAndUnknownRequiredSectionBlocks() throws Exception {
+        Path optional = tempDir.resolve("optional.pzrp.gz");
+        List<FormatTestSupport.Section> sections = new ArrayList<>(validSections());
+        sections.add(new FormatTestSupport.Section("custom/blob", false, 1, new byte[] {1}));
+        writeRaw(optional, FormatTestSupport.raw(manifestText(), sections));
+
+        FormatReadResult result = FormatReader.readPackage(optional);
+        assertEquals(frames(), result.frames());
+        assertTrue(result.warnings().stream()
+            .anyMatch(warning -> warning.contains("unknown optional section")));
+
+        Path required = tempDir.resolve("required.pzrp.gz");
+        sections = new ArrayList<>(validSections());
+        sections.add(new FormatTestSupport.Section("custom/blob", true, 1, new byte[] {1}));
+        writeRaw(required, FormatTestSupport.raw(manifestText(), sections));
+
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readPackage(required));
+        assertEquals(FormatReason.UNKNOWN_REQUIRED_SECTION, exception.reason());
+    }
+
+    @Test
+    void missingActorSectionBlocksPlaybackButNotTheCatalogue() throws Exception {
+        Path file = tempDir.resolve("missing-actor.pzrp.gz");
+        writeRaw(file, FormatTestSupport.raw(manifestText(), List.of()));
+
+        FormatInfo info = FormatReader.readInfo(file);
+        assertEquals("Replay Tester", info.metadata().playerName());
+
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readPackage(file));
+        assertEquals(FormatReason.ACTOR_SECTION_MISSING, exception.reason());
+    }
+
+    @Test
+    void newerActorSchemaBlocksActorsAndNewerMetadataOnlyWarns() throws Exception {
+        Path actorNewer = tempDir.resolve("actor-newer.pzrp.gz");
+        List<FormatTestSupport.Section> sections = new ArrayList<>();
+        sections.add(new FormatTestSupport.Section("actor/local", true, 2,
+            FormatTestSupport.actorPayload(frames())));
+        sections.add(new FormatTestSupport.Section("actor_meta/local", false, 1,
+            FormatTestSupport.actorMetadata()));
+        writeRaw(actorNewer, FormatTestSupport.raw(manifestText(), sections));
+
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readPackage(actorNewer));
+        assertEquals(FormatReason.SECTION_SCHEMA_NEWER, exception.reason());
+
+        Path metaNewer = tempDir.resolve("meta-newer.pzrp.gz");
+        sections = new ArrayList<>();
+        sections.add(new FormatTestSupport.Section("actor/local", true, 1,
+            FormatTestSupport.actorPayload(frames())));
+        sections.add(new FormatTestSupport.Section("actor_meta/local", false, 2,
+            FormatTestSupport.actorMetadata()));
+        writeRaw(metaNewer, FormatTestSupport.raw(manifestText(), sections));
+
+        FormatReadResult result = FormatReader.readPackage(metaNewer);
+        assertEquals(frames(), result.frames());
+        assertEquals(Appearance.none(), result.metadata().appearance());
+        assertTrue(result.warnings().stream()
+            .anyMatch(warning -> warning.contains("actor metadata ignored")));
+    }
+
+    @Test
+    void worldSectionsAreRejectedReadOnlyWhileActorsStillPlay() throws Exception {
+        byte[] worldBase = "BASE".getBytes(StandardCharsets.UTF_8);
+        byte[] worldLog = "LOG!".getBytes(StandardCharsets.UTF_8);
+        String manifest = FormatTestSupport.worldManifest(metadata(), frames().size(), true,
+            worldBase, worldLog);
+        List<FormatTestSupport.Section> sections = new ArrayList<>(validSections());
+        sections.add(new FormatTestSupport.Section("world_base", true, 1, worldBase));
+        sections.add(new FormatTestSupport.Section("world_log", true, 1, worldLog));
+
+        Path validWorld = tempDir.resolve("world.pzrp.gz");
+        writeRaw(validWorld, FormatTestSupport.raw(manifest, sections));
+        FormatReadResult result = FormatReader.readPackage(validWorld);
+        assertEquals(frames(), result.frames());
+        assertEquals("unsupported", result.worldStatus());
+        assertEquals(FormatReason.WORLD_UNSUPPORTED, result.worldReason());
+
+        Path corruptWorld = tempDir.resolve("world-corrupt.pzrp.gz");
+        byte[] raw = FormatTestSupport.raw(manifest, sections);
+        int hashOffset = FormatTestSupport.sectionHashOffset(raw, "world_log");
+        raw[hashOffset] ^= 0x01;
+        FormatTestSupport.refreshCrc(raw);
+        writeRaw(corruptWorld, raw);
+        result = FormatReader.readPackage(corruptWorld);
+        assertEquals(frames(), result.frames());
+        assertEquals(FormatReason.WORLD_SECTION_HASH, result.worldReason());
+    }
+
+    @Test
+    void recordCountAndPayloadShapeAreChecked() throws Exception {
+        Path badLength = tempDir.resolve("bad-length.pzrp.gz");
+        List<FormatTestSupport.Section> sections = List.of(
+            new FormatTestSupport.Section("actor/local", true, 1, new byte[41]));
+        writeRaw(badLength, FormatTestSupport.raw(manifestText(), sections));
+        assertEquals(FormatReason.ACTOR_PAYLOAD_INVALID,
+            playbackError(badLength));
+
+        Path badCount = tempDir.resolve("bad-count.pzrp.gz");
+        writeRaw(badCount, FormatTestSupport.raw(
+            replace(manifestText(), "actor.0.frame_count=3", "actor.0.frame_count=2"),
+            validSections()));
+        assertEquals(FormatReason.ACTOR_PAYLOAD_INVALID, playbackError(badCount));
+    }
+
+    @Test
+    void catalogueReadsManifestOnlyAndPlaybackVerifiesPayload() throws Exception {
+        Path file = tempDir.resolve("catalogue.pzrp.gz");
+        List<FormatTestSupport.Section> sections = List.of(
+            new FormatTestSupport.Section("actor/local", true, 1, new byte[41]));
+        writeRaw(file, FormatTestSupport.raw(manifestText(), sections));
+
+        ReplayCatalogue.Result result = ReplayCatalogue.list(tempDir, "");
+        ReplayCatalogue.Entry entry = result.entries().stream()
+            .filter(candidate -> candidate.fileName().equals("catalogue.pzrp.gz"))
+            .findFirst().orElseThrow();
+        assertTrue(entry.valid());
+        assertEquals("none", entry.worldStatus());
+
+        assertEquals(FormatReason.ACTOR_PAYLOAD_INVALID,
+            assertThrows(FormatException.class, () -> FormatReader.readPackage(file)).reason());
+    }
+
+    @Test
+    void identicalInputProducesIdenticalBytes() throws Exception {
+        Path first = tempDir.resolve("first.pzrp.gz");
+        Path second = tempDir.resolve("second.pzrp.gz");
+
+        FormatWriter.write(first, metadata(), frames());
+        FormatWriter.write(second, metadata(), frames());
+
+        assertArrayEquals(Files.readAllBytes(first), Files.readAllBytes(second));
+    }
+
+    @Test
+    void atomicWritePublishesOnlyAfterReadbackAndLeavesNoPartFile() throws Exception {
+        Path file = tempDir.resolve("atomic.pzrp.gz");
+        FormatWriter.write(file, metadata(), frames());
+
+        assertTrue(Files.exists(file));
+        assertFalse(Files.exists(tempDir.resolve("atomic.pzrp.gz.part")));
+        assertEquals(frames(), FormatReader.readPackage(file).frames());
+    }
+
+    @Test
+    void atomicWriteRefusesToOverwriteAndLeavesNoPartFile() throws Exception {
+        Path file = tempDir.resolve("existing.pzrp.gz");
+        Files.writeString(file, "keep");
+
+        assertThrows(java.nio.file.FileAlreadyExistsException.class,
+            () -> FormatWriter.write(file, metadata(), frames()));
+        assertEquals("keep", Files.readString(file));
+        assertFalse(Files.exists(tempDir.resolve("existing.pzrp.gz.part")));
+    }
+
+    @Test
+    void cleanupRemovesOnlyOldPartAndStagingEntries() throws Exception {
+        Path oldPart = tempDir.resolve("old.pzrp.gz.part");
+        Path newPart = tempDir.resolve("new.pzrp.gz.part");
+        Path staging = tempDir.resolve(".pzrp-tmp");
+        Path oldStage = staging.resolve("old");
+        Path newStage = staging.resolve("new");
+        Files.writeString(oldPart, "old");
+        Files.writeString(newPart, "new");
+        Files.createDirectories(oldStage);
+        Files.createDirectories(newStage);
+        Files.setLastModifiedTime(oldPart,
+            java.nio.file.attribute.FileTime.fromMillis(0L));
+        Files.setLastModifiedTime(oldStage,
+            java.nio.file.attribute.FileTime.fromMillis(0L));
+
+        FormatWriter.cleanupOrphans(tempDir, 2L * 24 * 60 * 60 * 1000);
+
+        assertFalse(Files.exists(oldPart));
+        assertTrue(Files.exists(newPart));
+        assertFalse(Files.exists(oldStage));
+        assertTrue(Files.exists(newStage));
+    }
+
+    @Test
+    void migrationWritesListsPlaysAndDeletesTheNewFormat() throws Exception {
+        Path file = tempDir.resolve("migration.pzrp.gz");
+        FormatWriter.write(file, metadata(), frames());
+
+        ReplayCatalogue.Result catalogue = ReplayCatalogue.list(tempDir, file.toString());
+        assertEquals(1, catalogue.entries().size());
+        assertTrue(catalogue.entries().get(0).valid());
+        assertTrue(catalogue.entries().get(0).lastReplay());
 
         ReplayData data = ReplayReader.read(file);
+        PlaybackTimeline timeline = new PlaybackTimeline(data);
+        assertEquals(frames().size(), timeline.getFrameCount());
+        assertEquals(metadata().appearance(), data.metadata().appearance());
 
-        assertEquals(3, data.frames().size());
-        assertTrue(ReplayReader.summary(data).contains("frames=3"));
-        assertTrue(ReplayReader.summary(data, true).contains("action_events=dropped"));
-        assertFalse(ReplayReader.summary(data).contains("action_events=dropped"));
+        ReplayFileManager.Result deleted = ReplayFileManager.delete(tempDir, file.toString());
+        assertTrue(deleted.ok(), deleted.error());
+        assertFalse(Files.exists(file));
+        assertTrue(ReplayCatalogue.list(tempDir, "").entries().isEmpty());
     }
 
-    @Test
-    void metadataOnlyReadAgreesWithFullRead() throws Exception {
-        Path file = tempDir.resolve("metadata.pzrp.gz");
-        BinaryReplayCodec.write(file, metadata(), frames(), true);
-
-        ReplayMetadata metadataOnly = BinaryReplayCodec.readMetadata(file);
-        ReplayData full = BinaryReplayCodec.read(file);
-
-        assertEquals(full.metadata(), metadataOnly);
+    private static String readError(Path file) {
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readInfo(file));
+        return exception.reason();
     }
 
-    @Test
-    void metadataOnlyReadRejectsCorruptFrameLikeFullRead() throws Exception {
-        Path file = tempDir.resolve("metadata-corrupt.pzrp");
-        BinaryReplayCodec.write(file, metadata(), frames(), false);
-        byte[] bytes = Files.readAllBytes(file);
-        bytes[bytes.length - 20] ^= 0x01;
-        Files.write(file, bytes);
-
-        ReplayFormatException fullError = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.read(file));
-        ReplayFormatException metadataError = assertThrows(ReplayFormatException.class,
-            () -> BinaryReplayCodec.readMetadata(file));
-        assertEquals(fullError.getMessage(), metadataError.getMessage());
+    private static String playbackError(Path file) {
+        FormatException exception = assertThrows(FormatException.class,
+            () -> FormatReader.readPackage(file));
+        return exception.reason();
     }
 
-    private static byte[] rawPayload(Map<String, String> values) throws IOException {
-        StringBuilder text = new StringBuilder();
-        for (Map.Entry<String, String> entry : values.entrySet()) {
-            text.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+    private static String replace(String text, String from, String to) {
+        return text.replace(from, to);
+    }
+
+    private static String removeLine(String text, String key) {
+        StringBuilder builder = new StringBuilder();
+        for (String line : text.split("\n")) {
+            if (!line.startsWith(key + "=")) {
+                builder.append(line).append('\n');
+            }
         }
-        byte[] metadataBytes = text.toString().getBytes(StandardCharsets.UTF_8);
-        CRC32 crc = new CRC32();
-        crc.update(metadataBytes);
-
-        ByteArrayOutputStream payload = new ByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(payload);
-        out.writeInt(BinaryReplayCodec.MAGIC);
-        out.writeInt(ReplayMetadata.CURRENT_FORMAT_VERSION);
-        out.writeInt(metadataBytes.length);
-        out.write(metadataBytes);
-        out.writeInt(0);
-        out.writeInt((int) crc.getValue());
-        out.writeLong(BinaryReplayCodec.FOOTER);
-        out.flush();
-        return payload.toByteArray();
-    }
-
-    private static List<CaptureSample> realisticFrames() {
-        List<CaptureSample> frames = new ArrayList<>(1800);
-        for (int index = 0; index < 1800; index++) {
-            float time = index / 30f;
-            frames.add(new CaptureSample(
-                1000 + index,
-                time,
-                100f + time,
-                10500.125f + index * 0.03125f,
-                9800.5f - index * 0.015625f,
-                0f,
-                (float) (index * 0.01),
-                1.25f,
-                CaptureSample.Locomotion.WALK,
-                CaptureSample.Stance.STAND,
-                CaptureSample.FLAG_MOVING
-            ));
-        }
-        return frames;
-    }
-
-    private static void patchFirstFrameByte(Path file, int offset, int value) throws IOException {
-        byte[] bytes = Files.readAllBytes(file);
-        int metadataLength = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt(8);
-        int frameStart = 16 + metadataLength;
-        bytes[frameStart + offset] = (byte) value;
-        Files.write(file, bytes);
-    }
-
-    private void assertBinaryRoundTrip(Path file) throws IOException, ReplayFormatException {
-        ReplayData data = BinaryReplayCodec.read(file);
-        assertEquals(metadata(), data.metadata());
-        assertEquals(frames(), data.frames());
+        return builder.toString();
     }
 }
