@@ -42,8 +42,8 @@ class ActionEventsTest {
             0f,
             0f,
             30.0,
-            1L,
-            2L,
+            0L,
+            60_000L,
             Appearance.none(),
             Equipment.none(),
             events
@@ -74,7 +74,7 @@ class ActionEventsTest {
         ReplayMetadata metadata = metadata(events);
         Path path = tempDir.resolve("events.pzrp.gz");
 
-        BinaryReplayCodec.write(path, metadata, List.of(frame(0f), frame(2f)), true);
+        FormatWriter.write(path, metadata, List.of(frame(0f), frame(2f)));
         ReplayData data = ReplayReader.read(path);
         PlaybackTimeline timeline = new PlaybackTimeline(data);
 
