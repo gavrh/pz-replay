@@ -22,6 +22,7 @@ final class CaptureRecorder {
     private final AppearanceCapture appearanceCapture = new AppearanceCapture();
     private final EquipmentCapture equipmentCapture = new EquipmentCapture();
     private final VehicleCapture vehicleCapture = new VehicleCapture();
+    private final WorldCapture worldCapture = new WorldCapture();
     private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
     private ReplayMetadata metadata;
@@ -52,7 +53,7 @@ final class CaptureRecorder {
     private CaptureRecorder() {
     }
 
-    boolean start(String name, double sampleRateHz) {
+    boolean start(String name, double sampleRateHz, boolean worldEnabled, int worldPadding) {
         if (session.isRecording()) {
             return false;
         }
@@ -114,6 +115,7 @@ final class CaptureRecorder {
 
         long nowMillis = System.currentTimeMillis();
         session.start(nowMillis);
+        worldCapture.start(worldEnabled, worldPadding, resolvedName);
         try {
             if (metadata.appearance().isCurrent()) {
                 appearanceCapture.markBaseline(metadata.appearance().decode());
@@ -199,6 +201,7 @@ final class CaptureRecorder {
             captureAppearance(player, false);
             captureEquipment(player, false);
         }
+        worldCapture.tick();
         recordCost(tickStartNanos);
         afterTick(nowMillis);
     }
@@ -211,6 +214,7 @@ final class CaptureRecorder {
         long nowMillis = System.currentTimeMillis();
         tickCounter++;
         session.tick(tickCounter, nowMillis, null, true);
+        worldCapture.tick();
         recordCost(tickStartNanos);
         afterTick(nowMillis);
     }
@@ -685,8 +689,9 @@ final class CaptureRecorder {
             captureName = resolvedName;
         }
         Path path = ReplayStorage.pathFor(captureName);
+        WorldPackage world = worldCapture.finish();
         try {
-            FormatWriter.write(path, finalMetadata, session.frames());
+            writePackage(path, finalMetadata, world);
             ReplayData data = ReplayReader.read(path);
             lastReplayPath = path.toString();
             lastReplaySummary = ReplayReader.summary(data, eventsDropped);
@@ -696,11 +701,31 @@ final class CaptureRecorder {
                 + (eventsDropped ? " without action events" : "")
                 + " name=" + captureName
                 + " path=" + lastReplayPath + " bytes=" + Files.size(path)
-                + " " + lastReplaySummary);
+                + " " + lastReplaySummary
+                + " " + worldCapture.getSummary());
         } catch (IOException | ReplayFormatException exception) {
             lastError = "replay write failed: " + exception.getMessage();
             System.out.println("[pz-replay] recording failed name=" + captureName
                 + " path=" + path + " error=" + lastError);
+        } finally {
+            worldCapture.reset();
+        }
+    }
+
+    private void writePackage(Path path, ReplayMetadata finalMetadata, WorldPackage world)
+        throws IOException, ReplayFormatException {
+        if (world == null) {
+            FormatWriter.write(path, finalMetadata, session.frames());
+            return;
+        }
+        try {
+            FormatWriter.write(path, finalMetadata, session.frames(), List.of(), null, world);
+        } catch (IOException | ReplayFormatException exception) {
+            lastError = "world capture could not be written: " + exception.getMessage();
+            System.out.println("[pz-replay] world package failed name=" + captureName
+                + " error=" + lastError);
+            Files.deleteIfExists(path);
+            FormatWriter.write(path, finalMetadata, session.frames());
         }
     }
 

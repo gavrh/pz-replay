@@ -396,7 +396,8 @@ public final class PZReplayLua {
     }
 
     private static boolean startCapture(String name, ReplaySettings settings) {
-        boolean started = CaptureRecorder.INSTANCE.start(name, settings.getSampleRate());
+        boolean started = CaptureRecorder.INSTANCE.start(name, settings.getSampleRate(),
+            settings.isWorldCaptureEnabled(), settings.getWorldPaddingTiles());
         if (started) {
             STATE.recordingStarted(settings.getSampleRate(),
                 CaptureRecorder.INSTANCE.getCaptureName());
