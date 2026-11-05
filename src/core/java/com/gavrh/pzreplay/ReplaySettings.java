@@ -27,6 +27,10 @@ public final class ReplaySettings {
     private static final List<Integer> FALLBACK_KEYS = List.of(
         65, 199, 201, 209, 210, 207, 211, 41, 43, 39, 40);
 
+    public static final int DEFAULT_WORLD_PADDING_TILES = 16;
+    public static final int MIN_WORLD_PADDING_TILES = 0;
+    public static final int MAX_WORLD_PADDING_TILES = 128;
+
     public record Conflict(String action, int key, String other) {
     }
 
@@ -36,6 +40,8 @@ public final class ReplaySettings {
     private boolean cameraFollowDefault;
     private boolean debugControls;
     private boolean killSwitch;
+    private boolean worldCaptureEnabled;
+    private int worldPaddingTiles = DEFAULT_WORLD_PADDING_TILES;
 
     public ReplaySettings() {
         resetKeys();
@@ -79,6 +85,12 @@ public final class ReplaySettings {
         settings.cameraFollowDefault = parseBoolean(values.get("camera_follow_default"));
         settings.debugControls = parseBoolean(values.get("debug_controls"));
         settings.killSwitch = parseBoolean(values.get("kill_switch"));
+        settings.worldCaptureEnabled = parseBoolean(values.get("world_capture"));
+        int padding = parseInt(values.get("world_padding_tiles"),
+            DEFAULT_WORLD_PADDING_TILES);
+        if (isValidWorldPadding(padding)) {
+            settings.worldPaddingTiles = padding;
+        }
 
         Map<String, Integer> requested = new LinkedHashMap<>();
         for (String action : ACTIONS) {
@@ -102,6 +114,8 @@ public final class ReplaySettings {
         text.append("camera_follow_default=").append(cameraFollowDefault).append('\n');
         text.append("debug_controls=").append(debugControls).append('\n');
         text.append("kill_switch=").append(killSwitch).append('\n');
+        text.append("world_capture=").append(worldCaptureEnabled).append('\n');
+        text.append("world_padding_tiles=").append(worldPaddingTiles).append('\n');
         for (String action : ACTIONS) {
             text.append("key.").append(action).append('=').append(key(action)).append('\n');
         }
@@ -160,6 +174,30 @@ public final class ReplaySettings {
 
     public void setKillSwitch(boolean enabled) {
         killSwitch = enabled;
+    }
+
+    public boolean isWorldCaptureEnabled() {
+        return worldCaptureEnabled;
+    }
+
+    public void setWorldCaptureEnabled(boolean enabled) {
+        worldCaptureEnabled = enabled;
+    }
+
+    public static boolean isValidWorldPadding(int tiles) {
+        return tiles >= MIN_WORLD_PADDING_TILES && tiles <= MAX_WORLD_PADDING_TILES;
+    }
+
+    public boolean setWorldPaddingTiles(int tiles) {
+        if (!isValidWorldPadding(tiles)) {
+            return false;
+        }
+        worldPaddingTiles = tiles;
+        return true;
+    }
+
+    public int getWorldPaddingTiles() {
+        return worldPaddingTiles;
     }
 
     public int key(String action) {

@@ -37,20 +37,51 @@ final class FormatTestSupport {
         byte[] worldBase, byte[] worldLog) {
         String text = manifest(metadata, frameCount, actorMetadata, 0);
         text = text.replace("world_mode=off\n", "");
+        long records = countRecords(worldLog);
         StringBuilder builder = new StringBuilder(text);
         builder.append("world_mode=padded\n");
         builder.append("world_padding_tiles=16\n");
         builder.append("world_sample_rate_hz=2\n");
         builder.append("world_coverage_status=complete\n");
         builder.append("world_coverage_squares=1\n");
-        builder.append("world_coverage_objects=0\n");
-        builder.append("world_log_changes=0\n");
+        builder.append("world_coverage_objects=").append(records).append('\n');
+        builder.append("world_log_changes=").append(records).append('\n');
         builder.append("world_log_bytes=").append(worldLog.length).append('\n');
         builder.append("world_base_bytes=").append(worldBase.length).append('\n');
         builder.append("world_base_format=zip-store-1\n");
         builder.append("world_log_format=pzwlog-1\n");
         builder.append("world_first_sample=full\n");
         return builder.toString();
+    }
+
+    static long countRecords(byte[] worldLog) {
+        try {
+            return WorldLogCodec.countRecords(worldLog);
+        } catch (ReplayFormatException exception) {
+            throw new IllegalArgumentException(exception);
+        }
+    }
+
+    static byte[] worldBaseArchive(String name, byte[] content) throws Exception {
+        Path temp = Files.createTempDirectory("pzreplay-base");
+        Path target = temp.resolve("base.zip");
+        try {
+            Path source = temp.resolve(name);
+            Files.createDirectories(source.getParent());
+            Files.write(source, content);
+            WorldBaseArchive.writeFromDirectory(temp, target);
+            return Files.readAllBytes(target);
+        } finally {
+            try (var stream = Files.walk(temp)) {
+                for (Path path : stream.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
+    static byte[] t0Log(WorldStateRecord... records) throws Exception {
+        return WorldLogCodec.encodeT0(List.of(records));
     }
 
     static byte[] actorPayload(List<CaptureSample> frames) {

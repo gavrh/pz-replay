@@ -29,6 +29,8 @@ public final class FormatReason {
     public static final String WORLD_SECTION_HASH = "world_section_hash";
     public static final String WORLD_SCHEMA_NEWER = "world_schema_newer";
     public static final String WORLD_COUNT_MISMATCH = "world_count_mismatch";
+    public static final String WORLD_BASE_INVALID = "world_base_invalid";
+    public static final String WORLD_LOG_INVALID = "world_log_invalid";
 
     private FormatReason() {
     }

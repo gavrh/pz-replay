@@ -347,9 +347,12 @@ class ReplayFormatTest {
     }
 
     @Test
-    void worldSectionsAreRejectedReadOnlyWhileActorsStillPlay() throws Exception {
-        byte[] worldBase = "BASE".getBytes(StandardCharsets.UTF_8);
-        byte[] worldLog = "LOG!".getBytes(StandardCharsets.UTF_8);
+    void worldSectionsReadBackAndValidateWhileActorsPlay() throws Exception {
+        byte[] worldBase = FormatTestSupport.worldBaseArchive("WorldDictionary.bin",
+            "BASE".getBytes(StandardCharsets.UTF_8));
+        byte[] worldLog = FormatTestSupport.t0Log(new WorldDoorState(
+            WorldTarget.door(10, 20, 0, 0), "doors_1", 0, true, false, false, 100, 42L,
+            true));
         String manifest = FormatTestSupport.worldManifest(metadata(), frames().size(), true,
             worldBase, worldLog);
         List<FormatTestSupport.Section> sections = new ArrayList<>(validSections());
@@ -360,8 +363,12 @@ class ReplayFormatTest {
         writeRaw(validWorld, FormatTestSupport.raw(manifest, sections));
         FormatReadResult result = FormatReader.readPackage(validWorld);
         assertEquals(frames(), result.frames());
-        assertEquals("unsupported", result.worldStatus());
-        assertEquals(FormatReason.WORLD_UNSUPPORTED, result.worldReason());
+        assertEquals("padded", result.worldStatus());
+        assertEquals("", result.worldReason());
+        assertArrayEquals(worldBase, FormatReader.readWorldBase(validWorld));
+        assertArrayEquals(worldLog, FormatReader.readWorldLog(validWorld));
+        assertEquals(1, WorldLogCodec.decodeT0(
+            FormatReader.readWorldLog(validWorld)).size());
 
         Path corruptWorld = tempDir.resolve("world-corrupt.pzrp.gz");
         byte[] raw = FormatTestSupport.raw(manifest, sections);
