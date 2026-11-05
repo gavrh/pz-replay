@@ -20,10 +20,10 @@ class ReplayCatalogueTest {
     void listsNewestFirstWithMetadataAndLastReplayMarker() throws Exception {
         Path older = tempDir.resolve("older.pzrp.gz");
         Path newer = tempDir.resolve("newer.pzrp.gz");
-        BinaryReplayCodec.write(older, metadata("Older", 1_700_000_000_000L,
-            1_700_000_060_000L), frames(), true);
-        BinaryReplayCodec.write(newer, metadata("Newer", 1_700_000_100_000L,
-            1_700_000_190_000L), frames(), true);
+        FormatWriter.write(older, metadata("Older", 1_700_000_000_000L,
+            1_700_000_060_000L), frames());
+        FormatWriter.write(newer, metadata("Newer", 1_700_000_100_000L,
+            1_700_000_190_000L), frames());
         Files.setLastModifiedTime(older, FileTime.fromMillis(1_000L));
         Files.setLastModifiedTime(newer, FileTime.fromMillis(2_000L));
 
@@ -42,6 +42,7 @@ class ReplayCatalogueTest {
         assertEquals("Sandbox", entry.gameMode());
         assertEquals("Older", entry.playerName());
         assertTrue(entry.sizeBytes() > 0);
+        assertEquals("none", entry.worldStatus());
     }
 
     @Test
@@ -49,7 +50,7 @@ class ReplayCatalogueTest {
         Path corrupt = tempDir.resolve("corrupt.pzrp.gz");
         Files.writeString(corrupt, "not a replay");
         Path truncated = tempDir.resolve("truncated.pzrp.gz");
-        BinaryReplayCodec.write(truncated, metadata("Truncated", 1L, 2L), frames(), true);
+        FormatWriter.write(truncated, metadata("Truncated", 1L, 60_001L), frames());
         byte[] bytes = Files.readAllBytes(truncated);
         Files.write(truncated, java.util.Arrays.copyOf(bytes, bytes.length - 8));
 
@@ -92,8 +93,8 @@ class ReplayCatalogueTest {
     void ignoresNonReplayFilesAndPartFiles() throws Exception {
         Files.writeString(tempDir.resolve("notes.txt"), "ignored");
         Files.writeString(tempDir.resolve("unfinished.pzrp.gz.part"), "ignored");
-        BinaryReplayCodec.write(tempDir.resolve("valid.pzrp.gz"),
-            metadata("Valid", 1L, 2L), frames(), true);
+        FormatWriter.write(tempDir.resolve("valid.pzrp.gz"),
+            metadata("Valid", 1L, 60_001L), frames());
 
         ReplayCatalogue.Result result = ReplayCatalogue.list(tempDir, "");
 
@@ -105,7 +106,7 @@ class ReplayCatalogueTest {
     @Test
     void catalogueRefreshesAfterRenameAndDeleteAndRemapsLastReplay() throws Exception {
         Path original = tempDir.resolve("original.pzrp.gz");
-        BinaryReplayCodec.write(original, metadata("Original", 1L, 2L), frames(), true);
+        FormatWriter.write(original, metadata("Original", 1L, 60_001L), frames());
         ReplayCatalogue.Result before = ReplayCatalogue.list(tempDir, original.toString());
         assertEquals("original.pzrp.gz", before.entries().get(0).fileName());
         assertTrue(before.entries().get(0).lastReplay());

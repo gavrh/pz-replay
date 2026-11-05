@@ -8,7 +8,7 @@ public final class ReplayReader {
     }
 
     public static ReplayData read(Path path) throws IOException, ReplayFormatException {
-        return BinaryReplayCodec.read(path);
+        return FormatReader.read(path);
     }
 
     public static String summary(ReplayData data) {

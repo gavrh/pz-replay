@@ -42,8 +42,8 @@ class TimelineGapsTest {
             0f,
             0f,
             30.0,
-            1L,
-            2L,
+            0L,
+            60_000L,
             Appearance.none(),
             AppearanceChanges.none(),
             Equipment.none(),
@@ -63,8 +63,8 @@ class TimelineGapsTest {
         TimelineGaps gaps = TimelineGaps.encode(source);
         Path path = tempDir.resolve("gaps.pzrp.gz");
 
-        BinaryReplayCodec.write(path, metadata(gaps),
-            List.of(frame(0f, 0f), frame(1f, 1f), frame(8f, 8f)), true);
+        FormatWriter.write(path, metadata(gaps),
+            List.of(frame(0f, 0f), frame(1f, 1f), frame(8f, 8f)));
         ReplayData data = ReplayReader.read(path);
         PlaybackTimeline timeline = new PlaybackTimeline(data);
 

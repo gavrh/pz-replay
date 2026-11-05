@@ -48,8 +48,8 @@ class VehiclesTest {
             0f,
             0f,
             30.0,
-            1L,
-            2L,
+            0L,
+            60_000L,
             Appearance.none(),
             AppearanceChanges.none(),
             Equipment.none(),
@@ -66,8 +66,8 @@ class VehiclesTest {
         ));
         Path path = tempDir.resolve("vehicles.pzrp.gz");
 
-        BinaryReplayCodec.write(path, metadata(vehicles),
-            List.of(frame(0f, true), frame(3f, true)), true);
+        FormatWriter.write(path, metadata(vehicles),
+            List.of(frame(0f, true), frame(3f, true)));
         ReplayData data = ReplayReader.read(path);
         PlaybackTimeline timeline = new PlaybackTimeline(data);
 

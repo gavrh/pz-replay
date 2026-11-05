@@ -202,6 +202,11 @@ public final class ReplayCatalogueApi {
         return entry == null ? "" : entry.playerName();
     }
 
+    public static String getWorldStatus(int index) {
+        ReplayCatalogue.Entry entry = entry(index);
+        return entry == null ? "" : entry.worldStatus();
+    }
+
     public static boolean isValid(int index) {
         ReplayCatalogue.Entry entry = entry(index);
         return entry != null && entry.valid();

@@ -71,6 +71,12 @@ final class CaptureRecorder {
             System.out.println("[pz-replay] capture start failed: " + lastError);
             return false;
         }
+        try {
+            FormatWriter.cleanupOrphans(ReplayStorage.directory(),
+                System.currentTimeMillis());
+        } catch (IOException exception) {
+            System.out.println("[pz-replay] replay cleanup failed: " + exception);
+        }
         session = startedSession;
 
         String resolvedName = RecordingNames.unique(ReplayStorage.directory(),
@@ -679,10 +685,8 @@ final class CaptureRecorder {
             captureName = resolvedName;
         }
         Path path = ReplayStorage.pathFor(captureName);
-        boolean written = false;
         try {
-            BinaryReplayCodec.write(path, finalMetadata, session.frames(), true);
-            written = true;
+            FormatWriter.write(path, finalMetadata, session.frames());
             ReplayData data = ReplayReader.read(path);
             lastReplayPath = path.toString();
             lastReplaySummary = ReplayReader.summary(data, eventsDropped);
@@ -697,12 +701,6 @@ final class CaptureRecorder {
             lastError = "replay write failed: " + exception.getMessage();
             System.out.println("[pz-replay] recording failed name=" + captureName
                 + " path=" + path + " error=" + lastError);
-            if (written) {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                }
-            }
         }
     }
 

@@ -10,7 +10,7 @@ public final class CaptureSession {
     public static final double MAX_SAMPLE_RATE_HZ = 30.0;
     public static final int MAX_FRAMES = 54_000;
     public static final double MAX_DURATION_SECONDS = 30.0 * 60.0;
-    public static final int ESTIMATED_BYTES_PER_FRAME = BinaryReplayCodec.RECORD_BYTES;
+    public static final int ESTIMATED_BYTES_PER_FRAME = FormatWriter.RECORD_BYTES;
     public static final int MAX_EVENTS = ActionEventCodec.MAX_EVENTS;
     static final long MAX_ACTIVE_WALL_DELTA_MILLIS = 250L;
     static final double EVENT_DEDUPE_SECONDS = 0.08;

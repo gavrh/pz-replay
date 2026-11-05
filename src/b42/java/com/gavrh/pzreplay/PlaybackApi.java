@@ -74,6 +74,9 @@ public final class PlaybackApi {
         ReplayCompatibility.Result compatibility =
             ReplayCompatibility.check(data.metadata(), context());
         List<String> warnings = new ArrayList<>(compatibility.warnings());
+        for (String formatWarning : data.warnings()) {
+            addWarning(warnings, formatWarning);
+        }
         for (String eventWarning : loaded.getEventWarnings()) {
             addWarning(warnings, eventWarning);
         }
