@@ -3,11 +3,13 @@ package com.gavrh.pzreplay;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorldFormatTest {
     @TempDir
@@ -37,6 +39,56 @@ class WorldFormatTest {
         assertEquals("padded", info.worldStatus());
         assertEquals(metadata().mapName(), info.metadata().mapName());
         assertEquals("249", FormatReader.readSourceWorldVersion(file));
+    }
+
+    @Test
+    void writesT0AndDiffRecordsWithManifestCountsThatMatchThePayload() throws Exception {
+        byte[] base = FormatTestSupport.worldBaseArchive("WorldDictionary.bin",
+            "dictionary".getBytes(StandardCharsets.UTF_8));
+        WorldDoorState closed = new WorldDoorState(WorldTarget.door(10, 20, 0, 0),
+            "door", 0, true, false, false, 100, 7L, true);
+        WorldDoorState open = new WorldDoorState(WorldTarget.door(10, 20, 0, 0),
+            "door", 0, true, false, true, 100, 7L, true);
+        WorldLogBuilder builder = new WorldLogBuilder();
+        builder.appendT0(List.of(closed));
+        WorldDiffSampler sampler = new WorldDiffSampler();
+        sampler.seedT0(List.of(closed));
+        List<WorldLogEntry> diff = sampler.diff(WorldDiffSample.of(List.of(open),
+            Set.of(WorldDiffSampler.squareKey(10, 20, 0)), Set.of(), Set.of()));
+        assertTrue(builder.append(diff, 500L));
+        WorldPackage world = new WorldPackage(base, builder.payload(), 16, 2, "complete",
+            1089L, 1L, builder.changes());
+
+        Path file = tempDir.resolve("world-diff.pzrp.gz");
+        FormatWriter.write(file, metadata(), frames(), List.of(), null, world);
+
+        assertEquals("padded", FormatReader.readPackage(file).worldStatus());
+        byte[] log = FormatReader.readWorldLog(file);
+        assertEquals(2, WorldLogCodec.decodeAll(log).size());
+        FormatManifest manifest = FormatManifest.fromMetadata(metadata(), frames().size(),
+            false, 0, "", false, world);
+        assertEquals(builder.changes(), manifest.worldLogChanges);
+        assertEquals(1L, manifest.worldCoverageObjects);
+        assertEquals(2, manifest.worldSampleRateHz);
+        assertEquals(1089L, manifest.worldCoverageSquares);
+        assertEquals("complete", manifest.worldCoverageStatus);
+        WorldLogCodec.validate(log, manifest.worldLogChanges, manifest.worldCoverageObjects);
+    }
+
+    @Test
+    void manifestCarriesTruncatedCoverageStatus() throws Exception {
+        byte[] base = FormatTestSupport.worldBaseArchive("WorldDictionary.bin",
+            "dictionary".getBytes(StandardCharsets.UTF_8));
+        byte[] log = FormatTestSupport.t0Log(new WorldDoorState(
+            WorldTarget.door(10, 20, 0, 0), "door", 0, false, false, false, 100, 0L,
+            false));
+        WorldPackage world = new WorldPackage(base, log, 16, 2, "truncated", 12L, 1L, 1L);
+
+        FormatManifest manifest = FormatManifest.fromMetadata(metadata(), frames().size(),
+            false, 0, "", false, world);
+
+        assertEquals("truncated", manifest.worldCoverageStatus);
+        assertEquals(12L, manifest.worldCoverageSquares);
     }
 
     @Test

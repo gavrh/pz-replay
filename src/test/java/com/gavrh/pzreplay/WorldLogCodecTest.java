@@ -79,7 +79,7 @@ class WorldLogCodecTest {
     void encodesVehicleScriptSqlIdAndQuaternionPose() throws Exception {
         WorldVehicleState vehicle = new WorldVehicleState(
             WorldTarget.vehicle(500, 600, 0, 77L, "Base.CarNormal"),
-            true, true, 500.25f, 600.5f, 0f,
+            true, true, 500.25f, 600.5f, 0f, 0.1875f,
             0.1f, 0.2f, 0.3f, 0.92736185f);
 
         WorldVehicleState decoded = (WorldVehicleState) WorldLogCodec.decodeT0(
@@ -93,6 +93,8 @@ class WorldLogCodecTest {
         assertTrue(decoded.headlightsOn());
         assertEquals(500.25f, decoded.poseX());
         assertEquals(600.5f, decoded.poseY());
+        assertEquals(0f, decoded.poseZ());
+        assertEquals(0.1875f, decoded.posePhysicsZ());
         assertEquals(0.92736185f, decoded.quaternionW());
     }
 

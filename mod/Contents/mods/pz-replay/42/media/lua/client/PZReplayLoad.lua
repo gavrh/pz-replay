@@ -33,8 +33,8 @@ local function installSaveListFilter()
             local filtered = {}
             for _, folder in ipairs(folders) do
                 local name = tostring(folder)
-                if not name:find("~pzrp%-") then
                 if not name:match("^~pzrp%-ctx%-") then
+                    filtered[#filtered + 1] = folder
                 end
             end
             return filtered

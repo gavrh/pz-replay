@@ -7,9 +7,13 @@ import java.util.List;
 import java.util.Set;
 import org.joml.Quaternionf;
 import zombie.characters.IsoPlayer;
+import zombie.core.physics.Transform;
 import zombie.iso.IsoCell;
+import zombie.iso.IsoDirections;
 import zombie.iso.IsoGridSquare;
+import zombie.iso.IsoMovingObject;
 import zombie.iso.IsoObject;
+import zombie.iso.IsoObjectUtils;
 import zombie.iso.objects.IsoBarricade;
 import zombie.iso.objects.IsoDoor;
 import zombie.iso.objects.IsoWindow;
@@ -21,16 +25,22 @@ final class WorldScanner {
 
     record Result(
         List<WorldStateRecord> records,
-        long coverageSquares,
+        Set<Long> observableSquares,
+        Set<String> presentVehicleIdentities,
+        Set<String> duplicateIdentities,
         String coverageStatus,
         long durationMillis
     ) {
         Result {
             records = List.copyOf(records);
+            observableSquares = Set.copyOf(observableSquares);
+            presentVehicleIdentities = Set.copyOf(presentVehicleIdentities);
+            duplicateIdentities = Set.copyOf(duplicateIdentities);
         }
     }
 
     private final Quaternionf rotation = new Quaternionf();
+    private final Transform transform = new Transform();
 
     Result scan(IsoPlayer player, int padding) {
         long startedNanos = System.nanoTime();
@@ -46,7 +56,8 @@ final class WorldScanner {
         int maxZ = Math.min(31, centerZ + Z_RADIUS);
         List<WorldStateRecord> records = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        long coverageSquares = 0L;
+        Set<String> duplicates = new HashSet<>();
+        Set<Long> observableSquares = new HashSet<>();
         boolean partial = false;
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
@@ -58,33 +69,48 @@ final class WorldScanner {
                         }
                         continue;
                     }
-                    coverageSquares++;
+                    observableSquares.add(WorldDiffSampler.squareKey(x, y, z));
                     for (int index = 0; index < square.getObjects().size(); index++) {
                         IsoObject object = square.getObjects().get(index);
                         if (object instanceof IsoDoor door) {
-                            captureDoor(door, records, seen);
+                            captureDoor(door, records, seen, duplicates);
                         } else if (object instanceof IsoWindow window) {
-                            captureWindow(window, records, seen);
+                            captureWindow(window, records, seen, duplicates);
+                        } else if (!(object instanceof IsoBarricade)
+                            && !(object instanceof IsoMovingObject)) {
+                            captureGeneric(object, records, seen, duplicates);
                         }
                     }
                 }
             }
         }
+        Set<String> presentVehicleIdentities = new HashSet<>();
         for (BaseVehicle vehicle : cell.getVehicles()) {
-            if (vehicle == null || vehicle.isRemovedFromWorld()) {
+            if (vehicle == null) {
                 continue;
             }
+            int sqlId = vehicle.getSqlId();
+            String script = vehicle.getScriptName();
+            if (sqlId <= 0 || script == null || script.isBlank()) {
+                continue;
+            }
+            String identity = "4:" + Integer.toUnsignedLong(sqlId) + ":" + script;
+            if (vehicle.isRemovedFromWorld()) {
+                continue;
+            }
+            presentVehicleIdentities.add(identity);
             if (!vehicleCovered(vehicle, minX, maxX, minY, maxY)) {
                 continue;
             }
-            captureVehicle(vehicle, records, seen);
+            captureVehicle(vehicle, records, seen, duplicates);
         }
         long durationMillis = (System.nanoTime() - startedNanos) / 1_000_000L;
-        return new Result(records, coverageSquares, partial ? "partial" : "complete",
-            durationMillis);
+        return new Result(records, observableSquares, presentVehicleIdentities, duplicates,
+            partial ? "partial" : "complete", durationMillis);
     }
 
-    private void captureDoor(IsoDoor door, List<WorldStateRecord> records, Set<String> seen) {
+    private void captureDoor(IsoDoor door, List<WorldStateRecord> records, Set<String> seen,
+        Set<String> duplicates) {
         IsoGridSquare square = door.getSquare();
         if (square == null) {
             return;
@@ -93,6 +119,7 @@ final class WorldScanner {
         String key = "1:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
             + ":" + orientation;
         if (!seen.add(key)) {
+            duplicates.add(key);
             return;
         }
         int keyId = door.getKeyId();
@@ -103,13 +130,13 @@ final class WorldScanner {
             door.isLockedByKey(), door.isOpen(), door.getHealth(),
             hasKey ? Integer.toUnsignedLong(keyId) : 0L, hasKey));
         captureBarricade(door.getBarricadeOnSameSquare(), door, square, orientation, 0,
-            records, seen);
+            records, seen, duplicates);
         captureBarricade(door.getBarricadeOnOppositeSquare(), door, square, orientation, 1,
-            records, seen);
+            records, seen, duplicates);
     }
 
     private void captureWindow(IsoWindow window, List<WorldStateRecord> records,
-        Set<String> seen) {
+        Set<String> seen, Set<String> duplicates) {
         IsoGridSquare square = window.getSquare();
         if (square == null) {
             return;
@@ -118,6 +145,7 @@ final class WorldScanner {
         String key = "2:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
             + ":" + orientation;
         if (!seen.add(key)) {
+            duplicates.add(key);
             return;
         }
         records.add(new WorldWindowState(
@@ -125,14 +153,14 @@ final class WorldScanner {
             spriteName(window), window.getObjectIndex(), window.IsOpen(), window.isSmashed(),
             window.isLocked(), window.isGlassRemoved(), window.isPermaLocked() ? 1 : 0));
         captureBarricade(window.getBarricadeOnSameSquare(), window, square, orientation, 0,
-            records, seen);
-        captureBarricade(window.getBarricadeOnOppositeSquare(), window, square, orientation, 1,
-            records, seen);
+            records, seen, duplicates);
+        captureBarricade(window.getBarricadeOnOppositeSquare(), window, square, orientation,
+            1, records, seen, duplicates);
     }
 
     private void captureBarricade(IsoBarricade barricade, IsoObject parent,
         IsoGridSquare square, int orientation, int opposite, List<WorldStateRecord> records,
-        Set<String> seen) {
+        Set<String> seen, Set<String> duplicates) {
         if (barricade == null) {
             return;
         }
@@ -151,6 +179,7 @@ final class WorldScanner {
         String key = "3:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
             + ":" + parentClass + ":" + orientation + ":" + opposite;
         if (!seen.add(key)) {
+            duplicates.add(key);
             return;
         }
         int[] health = plankHealth(barricade);
@@ -162,8 +191,28 @@ final class WorldScanner {
             barricade.getNumPlanks(), barricade.getHealth(), health, aggregateOnly));
     }
 
+    private void captureGeneric(IsoObject object, List<WorldStateRecord> records,
+        Set<String> seen, Set<String> duplicates) {
+        IsoGridSquare square = object.getSquare();
+        if (square == null) {
+            return;
+        }
+        int orientation = directionIndex(object.getDir());
+        String type = object.getClass().getName();
+        String key = "5:" + type + ":" + square.getX() + ":" + square.getY() + ":"
+            + square.getZ() + ":" + orientation;
+        if (!seen.add(key)) {
+            duplicates.add(key);
+            return;
+        }
+        records.add(new WorldGenericState(
+            WorldTarget.generic(square.getX(), square.getY(), square.getZ(), orientation,
+                type),
+            spriteName(object), object.getObjectIndex(), !isSimpleGeneric(object)));
+    }
+
     private void captureVehicle(BaseVehicle vehicle, List<WorldStateRecord> records,
-        Set<String> seen) {
+        Set<String> seen, Set<String> duplicates) {
         int sqlId = vehicle.getSqlId();
         String script = vehicle.getScriptName();
         if (sqlId <= 0 || script == null || script.isBlank()) {
@@ -172,18 +221,21 @@ final class WorldScanner {
         long id = Integer.toUnsignedLong(sqlId);
         String key = "4:" + id;
         if (!seen.add(key)) {
+            duplicates.add(key);
             return;
         }
-        vehicle.jniTransform.getRotation(rotation);
+        vehicle.getWorldTransform(transform);
+        transform.getRotation(rotation);
         records.add(new WorldVehicleState(
             WorldTarget.vehicle((int) Math.floor(vehicle.getX()),
                 (int) Math.floor(vehicle.getY()), (int) Math.floor(vehicle.getZ()), id, script),
             !vehicle.isRemovedFromWorld(), vehicle.getHeadlightsOn(),
-            vehicle.getX(), vehicle.getY(), vehicle.getZ(),
+            vehicle.getX(), vehicle.getY(), vehicle.getZ(), transform.origin.y,
             rotation.x, rotation.y, rotation.z, rotation.w));
     }
 
-    private boolean vehicleCovered(BaseVehicle vehicle, int minX, int maxX, int minY, int maxY) {
+    private boolean vehicleCovered(BaseVehicle vehicle, int minX, int maxX, int minY,
+        int maxY) {
         VehiclePoly poly = vehicle.getPoly();
         if (poly == null) {
             return false;
@@ -194,6 +246,48 @@ final class WorldScanner {
         float highestY = Math.max(Math.max(poly.y1, poly.y2), Math.max(poly.y3, poly.y4));
         return highestX >= minX && lowestX <= maxX + 1
             && highestY >= minY && lowestY <= maxY + 1;
+    }
+
+    private static boolean isSimpleGeneric(IsoObject object) {
+        try {
+            if (object.getClass() != IsoObject.class) {
+                return false;
+            }
+            if (IsoObjectUtils.isObjectMultiSquare(object)) {
+                return false;
+            }
+            if (object.getContainer() != null) {
+                return false;
+            }
+            if (object.hasModData()) {
+                return false;
+            }
+            if (object.getAttachedAnimSpriteCount() > 0) {
+                return false;
+            }
+            if (object.getChildSprites() != null && !object.getChildSprites().isEmpty()) {
+                return false;
+            }
+            return !spriteName(object).isEmpty();
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static int directionIndex(IsoDirections direction) {
+        if (direction == null) {
+            return 0;
+        }
+        return switch (direction) {
+            case N -> 0;
+            case E -> 1;
+            case S -> 2;
+            case W -> 3;
+            case NE -> 4;
+            case SE -> 5;
+            case SW -> 6;
+            case NW -> 7;
+        };
     }
 
     private static String spriteName(IsoObject object) {

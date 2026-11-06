@@ -31,6 +31,8 @@ public final class WorldLogCodec {
     public static final int MAX_STATE_BODY_BYTES = 512;
     public static final int MAX_COMPLEX_BODY_BYTES = 768;
     public static final int MAX_STRING_BYTES = 96;
+    public static final long MAX_RECORDS = 2_000_000L;
+    public static final long MAX_PAYLOAD_BYTES = 256L * 1024 * 1024;
 
     private static final int BODY_HEADER_BYTES = 16;
     private static final String ASCII8_ALLOWED =
@@ -41,26 +43,35 @@ public final class WorldLogCodec {
             .thenComparingInt(record -> record.target().sz())
             .thenComparingInt(WorldStateRecord::classId)
             .thenComparingInt(record -> record.target().orientation())
-            .thenComparing(record -> record.target().script())
             .thenComparing(record -> record.target().type())
+            .thenComparing(record -> record.target().script())
             .thenComparingLong(record -> record.target().sqlId());
+    private static final Comparator<WorldLogEntry> DIFF_ORDER =
+        Comparator.comparingInt((WorldLogEntry entry) -> isRemoval(entry) ? 0 : 1)
+            .thenComparingInt(WorldLogCodec::phaseRank)
+            .thenComparing(WorldLogEntry::record, ORDER);
 
     private WorldLogCodec() {
     }
 
     public static byte[] encodeT0(List<WorldStateRecord> records)
         throws ReplayFormatException {
-        List<WorldStateRecord> ordered = new ArrayList<>(records == null ? List.of() : records);
-        ordered.sort(ORDER);
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        long sequence = 1L;
-        for (WorldStateRecord record : ordered) {
-            byte[] body = encodeBody(record, sequence, 0L);
-            writeU32(output, body.length);
-            output.writeBytes(body);
-            sequence++;
+        List<WorldLogEntry> entries = new ArrayList<>();
+        for (WorldStateRecord record : records == null ? List.<WorldStateRecord>of() : records) {
+            boolean stateRecord = record.kind() == KIND_OBJECT_STATE
+                || record.kind() == KIND_VEHICLE_STATE;
+            if (!stateRecord || record.classId() == CLASS_GENERIC) {
+                throw new ReplayFormatException("T0 sample contains a non-state record");
+            }
+            entries.add(new WorldLogEntry(record, recordFlags(record)));
         }
-        return output.toByteArray();
+        return encodeEntries(entries, 1L, 0L,
+            Comparator.comparing(WorldLogEntry::record, ORDER));
+    }
+
+    public static byte[] encodeDiff(List<WorldLogEntry> entries, long firstSequence,
+        long timeMillis) throws ReplayFormatException {
+        return encodeEntries(entries, firstSequence, timeMillis, DIFF_ORDER);
     }
 
     public static List<WorldStateRecord> decodeT0(byte[] payload) throws ReplayFormatException {
@@ -97,6 +108,36 @@ public final class WorldLogCodec {
             }
             expectedSequence++;
             previousTime = time;
+        }
+        return List.copyOf(records);
+    }
+
+    public static List<WorldLogRecord> decodeAll(byte[] payload) throws ReplayFormatException {
+        ByteBuffer buffer = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN);
+        List<WorldLogRecord> records = new ArrayList<>();
+        while (buffer.hasRemaining()) {
+            require(buffer, 4);
+            long bodyLength = uint32(buffer);
+            if (bodyLength < BODY_HEADER_BYTES || bodyLength > MAX_BODY_BYTES) {
+                throw new ReplayFormatException("world log record length is invalid");
+            }
+            require(buffer, (int) bodyLength);
+            ByteBuffer body = slice(buffer, (int) bodyLength);
+            int kind = (int) uint32(body);
+            long sequence = uint32(body);
+            long time = body.getLong();
+            Target target = readTarget(body);
+            WorldStateRecord record = switch (kind) {
+                case KIND_OBJECT_STATE -> decodeStateBody(body, target.target(),
+                    target.classId(), target.flags());
+                case KIND_VEHICLE_STATE -> decodeVehicleBody(body, target.target());
+                case KIND_OBJECT_DESTROYED -> decodeObjectDestroyed(body, target);
+                case KIND_OBJECT_ADDED -> decodeObjectAdded(body, target);
+                default -> null;
+            };
+            if (record != null) {
+                records.add(new WorldLogRecord(kind, sequence, time, target.flags(), record));
+            }
         }
         return List.copyOf(records);
     }
@@ -160,6 +201,9 @@ public final class WorldLogCodec {
                 }
             }
             count++;
+            if (count > MAX_RECORDS) {
+                throw new ReplayFormatException("world log record count exceeds the cap");
+            }
             sequence++;
             previousTime = time;
         }
@@ -171,14 +215,92 @@ public final class WorldLogCodec {
         }
     }
 
-    private static byte[] encodeBody(WorldStateRecord record, long sequence, long time)
-        throws ReplayFormatException {
+    private static byte[] encodeEntries(List<WorldLogEntry> entries, long firstSequence,
+        long timeMillis, Comparator<WorldLogEntry> comparator) throws ReplayFormatException {
+        List<WorldLogEntry> ordered = new ArrayList<>(entries == null ? List.of() : entries);
+        ordered.sort(comparator);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        long sequence = firstSequence;
+        for (WorldLogEntry entry : ordered) {
+            byte[] body = encodeBody(entry.record(), sequence, timeMillis, entry.flags());
+            writeU32(output, body.length);
+            output.writeBytes(body);
+            sequence++;
+        }
+        return output.toByteArray();
+    }
+
+    private static byte[] encodeBody(WorldStateRecord record, long sequence, long time,
+        int flags) throws ReplayFormatException {
         validateTarget(record.target(), record.classId());
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         writeU32(output, record.kind());
         writeU32(output, sequence);
         writeU64(output, time);
-        writeTarget(output, record.target(), record.classId(), recordFlags(record));
+        writeTarget(output, record.target(), record.classId(), flags);
+        if (record instanceof WorldDoorState
+            || record instanceof WorldWindowState
+            || record instanceof WorldBarricadeState) {
+            writeStateBody(output, record);
+        } else if (record instanceof WorldVehicleState vehicle) {
+            int vehicleFlags = (vehicle.present() ? 0x01 : 0)
+                | (vehicle.headlightsOn() ? 0x02 : 0);
+            writeU8(output, vehicleFlags);
+            writeF32(output, vehicle.poseX());
+            writeF32(output, vehicle.poseY());
+            writeF32(output, vehicle.poseZ());
+            writeF32(output, vehicle.posePhysicsZ());
+            writeF32(output, vehicle.quaternionX());
+            writeF32(output, vehicle.quaternionY());
+            writeF32(output, vehicle.quaternionZ());
+            writeF32(output, vehicle.quaternionW());
+        } else if (record instanceof WorldObjectDestroyed destroyed) {
+            validateObjectIndex(destroyed.objectIndex());
+            writeAscii8(output, destroyed.sprite(), 0, MAX_STRING_BYTES);
+            writeAscii8(output, destroyed.type(), 0, MAX_STRING_BYTES);
+            writeI32(output, destroyed.objectIndex());
+            writeU8(output, 1);
+            if (destroyed.classId() == CLASS_GENERIC) {
+                if (destroyed.restoreState() != null) {
+                    throw new ReplayFormatException(
+                        "generic destroy record carries a restore state");
+                }
+            } else {
+                validateStateForClass(destroyed.restoreState(), destroyed.classId());
+                writeStateBody(output, destroyed.restoreState());
+            }
+        } else if (record instanceof WorldObjectAdded added) {
+            validateObjectIndex(added.objectIndex());
+            validateRange(added.addMode(), 1, 2, "add mode");
+            writeAscii8(output, added.sprite(), 0, MAX_STRING_BYTES);
+            writeAscii8(output, added.type(), 0, MAX_STRING_BYTES);
+            writeI32(output, added.objectIndex());
+            writeU8(output, added.addMode());
+            if (added.classId() == CLASS_GENERIC) {
+                if (added.state() != null) {
+                    throw new ReplayFormatException(
+                        "generic add record carries a class state");
+                }
+            } else {
+                validateStateForClass(added.state(), added.classId());
+                writeStateBody(output, added.state());
+            }
+        } else {
+            throw new ReplayFormatException("unsupported world state record");
+        }
+        byte[] body = output.toByteArray();
+        int payloadBytes = body.length - BODY_HEADER_BYTES;
+        int cap = record.kind() == KIND_VEHICLE_STATE
+            || record.kind() == KIND_OBJECT_STATE
+            ? MAX_STATE_BODY_BYTES : MAX_COMPLEX_BODY_BYTES;
+        if (payloadBytes > cap || body.length > MAX_BODY_BYTES) {
+            throw new ReplayFormatException("world log record exceeds the cap");
+        }
+        return body;
+    }
+
+    private static void writeStateBody(ByteArrayOutputStream output, WorldStateRecord record)
+        throws ReplayFormatException {
         if (record instanceof WorldDoorState door) {
             validateObjectIndex(door.objectIndex());
             validateRange(door.health(), 0, 100_000, "door health");
@@ -223,78 +345,118 @@ public final class WorldLogCodec {
                 validateRange(value, 0, 65_535, "barricade plank health");
                 writeU16(output, value);
             }
-        } else if (record instanceof WorldVehicleState vehicle) {
-            int flags = (vehicle.present() ? 0x01 : 0)
-                | (vehicle.headlightsOn() ? 0x02 : 0);
-            writeU8(output, flags);
-            writeF32(output, vehicle.poseX());
-            writeF32(output, vehicle.poseY());
-            writeF32(output, vehicle.poseZ());
-            writeF32(output, vehicle.quaternionX());
-            writeF32(output, vehicle.quaternionY());
-            writeF32(output, vehicle.quaternionZ());
-            writeF32(output, vehicle.quaternionW());
         } else {
-            throw new ReplayFormatException("unsupported world state record");
+            throw new ReplayFormatException("world state record has no class body");
         }
-        byte[] body = output.toByteArray();
-        int payloadBytes = body.length - BODY_HEADER_BYTES;
-        int cap = record.kind() == KIND_VEHICLE_STATE || record.kind() == KIND_OBJECT_STATE
-            ? MAX_STATE_BODY_BYTES : MAX_COMPLEX_BODY_BYTES;
-        if (payloadBytes > cap || body.length > MAX_BODY_BYTES) {
-            throw new ReplayFormatException("world log record exceeds the cap");
-        }
-        return body;
     }
 
-    private static WorldStateRecord decodeObjectState(ByteBuffer body) throws ReplayFormatException {
+    private static WorldStateRecord decodeObjectState(ByteBuffer body)
+        throws ReplayFormatException {
         Target target = readTarget(body);
-        int classId = target.classId();
+        return decodeStateBody(body, target.target(), target.classId(), target.flags());
+    }
+
+    private static WorldStateRecord decodeStateBody(ByteBuffer body, WorldTarget target,
+        int classId, int recordFlags) throws ReplayFormatException {
         String sprite = readAscii8(body, 0, MAX_STRING_BYTES);
+        require(body, 4);
         int objectIndex = body.getInt();
         if (classId == CLASS_DOOR) {
+            require(body, 10);
             int flags = u8(body);
             int health = body.getInt();
             long keyId = uint32(body);
             boolean hasKey = u8(body) == 1;
-            return new WorldDoorState(target.target(), sprite, objectIndex,
+            return new WorldDoorState(target, sprite, objectIndex,
                 (flags & 0x01) != 0, (flags & 0x02) != 0, (flags & 0x04) != 0,
                 health, keyId, hasKey);
         }
         if (classId == CLASS_WINDOW) {
+            require(body, 2);
             int flags = u8(body);
             int permaLocked = u8(body);
-            return new WorldWindowState(target.target(), sprite, objectIndex,
+            return new WorldWindowState(target, sprite, objectIndex,
                 (flags & 0x01) != 0, (flags & 0x02) != 0, (flags & 0x04) != 0,
                 (flags & 0x08) != 0, permaLocked);
         }
         if (classId == CLASS_BARRICADE) {
+            require(body, 5);
             int material = u8(body);
             int plankCount = u8(body);
             int aggregateHealth = u16(body);
             int healthCount = u8(body);
+            require(body, healthCount * 2);
             int[] health = new int[healthCount];
             for (int index = 0; index < healthCount; index++) {
                 health[index] = u16(body);
             }
-            return new WorldBarricadeState(target.target(), sprite, objectIndex,
+            return new WorldBarricadeState(target, sprite, objectIndex,
                 material, plankCount, aggregateHealth, health,
-                (target.flags() & FLAG_AGGREGATE_ONLY) != 0);
+                (recordFlags & FLAG_AGGREGATE_ONLY) != 0);
         }
         throw new ReplayFormatException("world object state class is invalid");
     }
 
-    private static WorldStateRecord decodeVehicleState(ByteBuffer body)
+    private static WorldVehicleState decodeVehicleState(ByteBuffer body)
         throws ReplayFormatException {
         Target target = readTarget(body);
-        if (target.classId() != CLASS_VEHICLE) {
+        return decodeVehicleBody(body, target.target());
+    }
+
+    private static WorldVehicleState decodeVehicleBody(ByteBuffer body, WorldTarget target)
+        throws ReplayFormatException {
+        if (target.orientation() != 255) {
             throw new ReplayFormatException("vehicle state class is invalid");
         }
+        require(body, 1 + 8 * 4);
         int flags = u8(body);
-        return new WorldVehicleState(target.target(),
+        float poseX = readFinite(body);
+        float poseY = readFinite(body);
+        float poseZ = readFinite(body);
+        float posePhysicsZ = readFinite(body);
+        float quaternionX = readFinite(body);
+        float quaternionY = readFinite(body);
+        float quaternionZ = readFinite(body);
+        float quaternionW = readFinite(body);
+        return new WorldVehicleState(target,
             (flags & 0x01) != 0, (flags & 0x02) != 0,
-            body.getFloat(), body.getFloat(), body.getFloat(),
-            body.getFloat(), body.getFloat(), body.getFloat(), body.getFloat());
+            poseX, poseY, poseZ, posePhysicsZ,
+            quaternionX, quaternionY, quaternionZ, quaternionW);
+    }
+
+    private static WorldStateRecord decodeObjectDestroyed(ByteBuffer body, Target target)
+        throws ReplayFormatException {
+        String sprite = readAscii8(body, 0, MAX_STRING_BYTES);
+        String type = readAscii8(body, 0, MAX_STRING_BYTES);
+        require(body, 5);
+        int objectIndex = body.getInt();
+        int removalMode = u8(body);
+        if (removalMode != 1) {
+            throw new ReplayFormatException("world removal mode is invalid");
+        }
+        WorldStateRecord restoreState = null;
+        if (target.classId() != CLASS_GENERIC) {
+            restoreState = decodeStateBody(body, target.target(), target.classId(),
+                target.flags());
+        }
+        return new WorldObjectDestroyed(target.target(), target.classId(), sprite, type,
+            objectIndex, restoreState);
+    }
+
+    private static WorldStateRecord decodeObjectAdded(ByteBuffer body, Target target)
+        throws ReplayFormatException {
+        String sprite = readAscii8(body, 0, MAX_STRING_BYTES);
+        String type = readAscii8(body, 0, MAX_STRING_BYTES);
+        require(body, 5);
+        int objectIndex = body.getInt();
+        int addMode = u8(body);
+        WorldStateRecord state = null;
+        if (target.classId() != CLASS_GENERIC) {
+            state = decodeStateBody(body, target.target(), target.classId(),
+                target.flags());
+        }
+        return new WorldObjectAdded(target.target(), target.classId(), sprite, type,
+            objectIndex, addMode, state);
     }
 
     private static Target readTarget(ByteBuffer body) throws ReplayFormatException {
@@ -336,6 +498,21 @@ public final class WorldLogCodec {
         return 0;
     }
 
+    private static boolean isRemoval(WorldLogEntry entry) {
+        if (entry.record().kind() == KIND_OBJECT_DESTROYED) {
+            return true;
+        }
+        return entry.record() instanceof WorldVehicleState vehicle && !vehicle.present();
+    }
+
+    private static int phaseRank(WorldLogEntry entry) {
+        boolean barricade = entry.record().classId() == CLASS_BARRICADE;
+        if (isRemoval(entry)) {
+            return barricade ? 0 : 1;
+        }
+        return barricade ? 1 : 0;
+    }
+
     private static void writeTarget(ByteArrayOutputStream output, WorldTarget target,
         int classId, int flags) throws ReplayFormatException {
         writeU8(output, classId);
@@ -352,6 +529,13 @@ public final class WorldLogCodec {
             writeAscii8(output, target.script(), 1, 64);
         } else if (classId == CLASS_GENERIC) {
             writeAscii8(output, target.type(), 1, MAX_STRING_BYTES);
+        }
+    }
+
+    private static void validateStateForClass(WorldStateRecord state, int classId)
+        throws ReplayFormatException {
+        if (state == null || state.classId() != classId) {
+            throw new ReplayFormatException("world record state class is invalid");
         }
     }
 
@@ -463,6 +647,14 @@ public final class WorldLogCodec {
 
     private static int u16(ByteBuffer buffer) {
         return buffer.getShort() & 0xFFFF;
+    }
+
+    private static float readFinite(ByteBuffer buffer) throws ReplayFormatException {
+        float value = buffer.getFloat();
+        if (!Float.isFinite(value)) {
+            throw new ReplayFormatException("world log float is not finite");
+        }
+        return value;
     }
 
     private static void writeU8(ByteArrayOutputStream output, int value) {

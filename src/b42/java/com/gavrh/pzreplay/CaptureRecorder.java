@@ -201,7 +201,7 @@ final class CaptureRecorder {
             captureAppearance(player, false);
             captureEquipment(player, false);
         }
-        worldCapture.tick();
+        worldCapture.tick(recordingMillis());
         recordCost(tickStartNanos);
         afterTick(nowMillis);
     }
@@ -214,7 +214,7 @@ final class CaptureRecorder {
         long nowMillis = System.currentTimeMillis();
         tickCounter++;
         session.tick(tickCounter, nowMillis, null, true);
-        worldCapture.tick();
+        worldCapture.tick(recordingMillis());
         recordCost(tickStartNanos);
         afterTick(nowMillis);
     }
@@ -734,6 +734,10 @@ final class CaptureRecorder {
         captureCostNanos += costNanos;
         captureCostMaxNanos = Math.max(captureCostMaxNanos, costNanos);
         captureCostTicks++;
+    }
+
+    private long recordingMillis() {
+        return Math.round(session.currentTimeSeconds() * 1000.0);
     }
 
     private String overhead() {
