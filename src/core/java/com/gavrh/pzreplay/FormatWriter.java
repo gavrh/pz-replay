@@ -202,6 +202,10 @@ public final class FormatWriter {
             throw new FormatException(FormatReason.WORLD_LOG_INVALID,
                 "world log is outside the cap");
         }
+        if (world.baseBytes() != base.length || world.logBytes() != log.length) {
+            throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
+                "world payload lengths do not match the manifest");
+        }
         if (world.paddingTiles() < 0 || world.paddingTiles() > 128) {
             throw new FormatException(FormatReason.WORLD_BASE_INVALID,
                 "world padding is outside the range");
@@ -228,10 +232,6 @@ public final class FormatWriter {
             String reason = exception.getMessage().contains("count")
                 ? FormatReason.WORLD_COUNT_MISMATCH : FormatReason.WORLD_LOG_INVALID;
             throw new FormatException(reason, exception.getMessage(), exception);
-        }
-        if (world.logChanges() != world.coverageObjects()) {
-            throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
-                "world log changes do not equal the T0 object count");
         }
     }
 
