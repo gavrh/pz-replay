@@ -5,7 +5,11 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -17,6 +21,8 @@ import zombie.iso.IsoWorld;
 final class WorldCapture {
     private static final long FINISH_WAIT_MILLIS = 30_000L;
     private static final long DISK_MARGIN_BYTES = 64L * 1024L * 1024L;
+    private static final long SAMPLE_INTERVAL_MILLIS =
+        1_000L / WorldPackage.DEFAULT_SAMPLE_RATE_HZ;
 
     private record Build(byte[] base, long sourceBytes, long copyMillis, long packMillis,
         String failure) {
@@ -31,13 +37,26 @@ final class WorldCapture {
         return thread;
     });
     private final WorldScanner scanner = new WorldScanner();
+    private final WorldDiffSampler sampler = new WorldDiffSampler();
+    private final Set<Long> coveredSquares = new HashSet<>();
+    private final List<Long> scanDurations = new ArrayList<>();
 
     private Future<Build> future;
     private Path staging;
     private int paddingTiles;
     private boolean requested;
+    private boolean t0Complete;
     private String failure = "";
     private WorldPackage packageData;
+    private Build readyBuild;
+    private WorldLogBuilder logBuilder;
+    private long coverageObjects;
+    private long nextSampleMillis;
+    private long lastRecordingMillis;
+    private long sampleCount;
+    private long duplicateReported;
+    private boolean samplingStopped;
+    private String coverageStatus = "complete";
     private String summary = "world=off";
 
     synchronized void start(boolean enabled, int padding, String captureName) {
@@ -71,22 +90,34 @@ final class WorldCapture {
         future = executor.submit(() -> build(source, archive, replayDirectory));
     }
 
-    synchronized void tick() {
+    synchronized void tick(long recordingMillis) {
+        lastRecordingMillis = Math.max(lastRecordingMillis, recordingMillis);
         if (!requested || packageData != null || !failure.isEmpty()) {
             return;
         }
-        poll();
+        if (!t0Complete) {
+            poll(recordingMillis);
+            return;
+        }
+        if (samplingStopped || logBuilder.isTruncated()
+            || recordingMillis < nextSampleMillis) {
+            return;
+        }
+        sample();
     }
 
     synchronized WorldPackage finish() {
         if (!requested) {
             return null;
         }
+        if (packageData != null) {
+            return packageData;
+        }
         long deadline = System.currentTimeMillis() + FINISH_WAIT_MILLIS;
-        while (packageData == null && failure.isEmpty()
+        while (!t0Complete && failure.isEmpty()
             && System.currentTimeMillis() < deadline) {
-            poll();
-            if (packageData == null && failure.isEmpty()) {
+            poll(lastRecordingMillis);
+            if (!t0Complete && failure.isEmpty()) {
                 try {
                     wait(50L);
                 } catch (InterruptedException exception) {
@@ -94,6 +125,11 @@ final class WorldCapture {
                     break;
                 }
             }
+        }
+        if (failure.isEmpty() && t0Complete) {
+            packageData = buildPackage();
+            summary = formatSummary();
+            System.out.println("[pz-replay] world capture finished " + summary);
         }
         return packageData;
     }
@@ -120,13 +156,26 @@ final class WorldCapture {
             staging = null;
         }
         requested = false;
+        t0Complete = false;
         failure = "";
         packageData = null;
+        readyBuild = null;
+        logBuilder = null;
+        coverageObjects = 0L;
+        nextSampleMillis = 0L;
+        lastRecordingMillis = 0L;
+        sampleCount = 0L;
+        duplicateReported = 0L;
+        samplingStopped = false;
+        coverageStatus = "complete";
         summary = "world=off";
         paddingTiles = 0;
+        coveredSquares.clear();
+        scanDurations.clear();
+        sampler.seedT0(List.of());
     }
 
-    private void poll() {
+    private void poll(long recordingMillis) {
         if (future == null || !future.isDone()) {
             return;
         }
@@ -154,23 +203,133 @@ final class WorldCapture {
             fail("T0 sample failed: " + message(exception));
             return;
         }
-        byte[] log;
+        List<WorldStateRecord> t0Records = new ArrayList<>();
+        for (WorldStateRecord record : scan.records()) {
+            if (record.classId() >= WorldLogCodec.CLASS_DOOR
+                && record.classId() <= WorldLogCodec.CLASS_VEHICLE) {
+                t0Records.add(record);
+            }
+        }
         try {
-            log = WorldLogCodec.encodeT0(scan.records());
+            logBuilder = new WorldLogBuilder();
+            logBuilder.appendT0(t0Records);
         } catch (ReplayFormatException exception) {
             fail("T0 sample could not be encoded: " + exception.getMessage());
             return;
         }
-        long count = scan.records().size();
-        packageData = new WorldPackage(build.base(), log, paddingTiles,
-            WorldPackage.DEFAULT_SAMPLE_RATE_HZ, scan.coverageStatus(),
-            scan.coverageSquares(), count, count, worldVersion());
-        summary = String.format(Locale.ROOT,
-            "world=padded base_bytes=%d base_copy_ms=%d base_pack_ms=%d t0_ms=%d t0_objects=%d coverage_squares=%d",
-            build.base().length, build.copyMillis(), build.packMillis(),
-            scan.durationMillis(), count, scan.coverageSquares());
-        System.out.println("[pz-replay] world capture ready " + summary);
+        readyBuild = build;
+        sampler.seedT0(scan.records());
+        coveredSquares.addAll(scan.observableSquares());
+        coverageObjects = t0Records.size();
+        coverageStatus = scan.coverageStatus();
+        nextSampleMillis = nextInterval(recordingMillis);
+        t0Complete = true;
+        summary = formatSummary();
+        System.out.println("[pz-replay] world capture ready " + summary
+            + " t0_ms=" + scan.durationMillis());
         deleteStaging();
+    }
+
+    private void sample() {
+        IsoPlayer player = IsoPlayer.getInstance();
+        if (player == null) {
+            return;
+        }
+        long sampleTime = nextSampleMillis;
+        nextSampleMillis += SAMPLE_INTERVAL_MILLIS;
+        if (nextSampleMillis <= lastRecordingMillis) {
+            nextSampleMillis = nextInterval(lastRecordingMillis);
+        }
+        WorldScanner.Result scan;
+        try {
+            scan = scanner.scan(player, paddingTiles);
+        } catch (RuntimeException exception) {
+            truncate("world sample failed: " + message(exception));
+            return;
+        }
+        Set<Long> newlyCovered = new HashSet<>(scan.observableSquares());
+        newlyCovered.removeAll(coveredSquares);
+        coveredSquares.addAll(scan.observableSquares());
+        List<WorldLogEntry> entries = sampler.diff(new WorldDiffSample(scan.records(),
+            scan.observableSquares(), newlyCovered, scan.presentVehicleIdentities(),
+            scan.duplicateIdentities()));
+        try {
+            if (!logBuilder.append(entries, sampleTime)) {
+                samplingStopped = true;
+                coverageStatus = "truncated";
+                System.out.println("[pz-replay] world log truncated time_ms=" + sampleTime
+                    + " changes=" + logBuilder.changes() + " bytes=" + logBuilder.bytes());
+            } else if ("partial".equals(scan.coverageStatus())
+                && !"truncated".equals(coverageStatus)) {
+                coverageStatus = "partial";
+            }
+        } catch (ReplayFormatException exception) {
+            truncate("world sample could not be encoded: " + exception.getMessage());
+            return;
+        }
+        scanDurations.add(scan.durationMillis());
+        sampleCount++;
+        long duplicates = sampler.getDuplicateIdentities();
+        if (duplicates > duplicateReported) {
+            duplicateReported = duplicates;
+            System.out.println("[pz-replay] world duplicate identities count=" + duplicates);
+        }
+    }
+
+    private WorldPackage buildPackage() {
+        if (readyBuild == null || logBuilder == null) {
+            return null;
+        }
+        byte[] log = logBuilder.payload();
+        return new WorldPackage(readyBuild.base(), log, paddingTiles,
+            WorldPackage.DEFAULT_SAMPLE_RATE_HZ, coverageStatus, coveredSquares.size(),
+            coverageObjects, logBuilder.changes(), worldVersion());
+    }
+
+    private String formatSummary() {
+        if (readyBuild == null || logBuilder == null) {
+            return "world=off";
+        }
+        StringBuilder builder = new StringBuilder("world=padded")
+            .append(" base_bytes=").append(readyBuild.base().length)
+            .append(" base_copy_ms=").append(readyBuild.copyMillis())
+            .append(" base_pack_ms=").append(readyBuild.packMillis())
+            .append(" t0_objects=").append(coverageObjects)
+            .append(" coverage_squares=").append(coveredSquares.size())
+            .append(" samples=").append(sampleCount)
+            .append(" changes=").append(logBuilder.changes())
+            .append(" log_bytes=").append(logBuilder.bytes())
+            .append(" duplicates=").append(sampler.getDuplicateIdentities())
+            .append(" status=").append(coverageStatus);
+        if (logBuilder.isTruncated() || "truncated".equals(coverageStatus)) {
+            builder.append(" truncated=true");
+        }
+        appendScanDurations(builder);
+        return builder.toString();
+    }
+
+    private void appendScanDurations(StringBuilder builder) {
+        if (scanDurations.isEmpty()) {
+            builder.append(" scan_ms=none");
+            return;
+        }
+        List<Long> sorted = new ArrayList<>(scanDurations);
+        sorted.sort(Long::compareTo);
+        long p50 = sorted.get(percentileIndex(sorted.size(), 0.50));
+        long p95 = sorted.get(percentileIndex(sorted.size(), 0.95));
+        long max = sorted.get(sorted.size() - 1);
+        builder.append(" scan_ms_p50=").append(p50)
+            .append(" scan_ms_p95=").append(p95)
+            .append(" scan_ms_max=").append(max);
+    }
+
+    private static int percentileIndex(int size, double percentile) {
+        int index = (int) Math.ceil(percentile * size) - 1;
+        return Math.max(0, Math.min(size - 1, index));
+    }
+
+    private static long nextInterval(long recordingMillis) {
+        return ((recordingMillis / SAMPLE_INTERVAL_MILLIS) + 1L) * SAMPLE_INTERVAL_MILLIS;
     }
 
     private Build build(Path source, Path archive, Path replayDirectory) {
@@ -193,6 +352,15 @@ final class WorldCapture {
             return new Build(bytes, inventory.totalBytes(), copyMillis, packMillis, "");
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
             return Build.failed("base capture failed: " + message(exception));
+        }
+    }
+
+    private void truncate(String reason) {
+        samplingStopped = true;
+        coverageStatus = "truncated";
+        if (logBuilder != null) {
+            System.out.println("[pz-replay] world log truncated reason=" + reason
+                + " changes=" + logBuilder.changes() + " bytes=" + logBuilder.bytes());
         }
     }
 
