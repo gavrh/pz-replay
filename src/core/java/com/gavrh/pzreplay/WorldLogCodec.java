@@ -230,6 +230,7 @@ public final class WorldLogCodec {
             writeF32(output, vehicle.poseX());
             writeF32(output, vehicle.poseY());
             writeF32(output, vehicle.poseZ());
+            writeF32(output, vehicle.posePhysicsZ());
             writeF32(output, vehicle.quaternionX());
             writeF32(output, vehicle.quaternionY());
             writeF32(output, vehicle.quaternionZ());
@@ -293,7 +294,7 @@ public final class WorldLogCodec {
         int flags = u8(body);
         return new WorldVehicleState(target.target(),
             (flags & 0x01) != 0, (flags & 0x02) != 0,
-            body.getFloat(), body.getFloat(), body.getFloat(),
+            body.getFloat(), body.getFloat(), body.getFloat(), body.getFloat(),
             body.getFloat(), body.getFloat(), body.getFloat(), body.getFloat());
     }
 
