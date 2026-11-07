@@ -1,6 +1,8 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -150,5 +152,42 @@ class WorldLogCodecTest {
             "bad sprite!", 0, false, false, false, 100, 0L, false);
         assertThrows(ReplayFormatException.class,
             () -> WorldLogCodec.encodeT0(List.of(badSprite)));
+    }
+
+    @Test
+    void unknownKindsAreCountedAndSkippedWithoutParsingATarget() throws Exception {
+        byte[] known = WorldLogCodec.encodeT0(List.of(new WorldDoorState(
+            WorldTarget.door(1, 2, 0, 0), "door", 0, false, false, false, 100, 0L,
+            false)));
+        ByteArrayOutputStream payload = new ByteArrayOutputStream();
+        payload.writeBytes(known);
+        payload.writeBytes(unknownRecord(999, 2L, 500L));
+
+        Map<Integer, Integer> kinds = WorldLogCodec.countKinds(payload.toByteArray());
+        List<WorldLogRecord> decoded = WorldLogCodec.decodeAll(payload.toByteArray());
+
+        assertEquals(1, kinds.get(999));
+        assertEquals(1, decoded.size());
+        assertEquals(WorldLogCodec.KIND_OBJECT_STATE, decoded.get(0).kind());
+    }
+
+    private static byte[] unknownRecord(int kind, long sequence, long time) {
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        writeU32(body, kind);
+        writeU32(body, sequence);
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            body.write((int) ((time >>> shift) & 0xFF));
+        }
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        writeU32(output, body.size());
+        output.writeBytes(body.toByteArray());
+        return output.toByteArray();
+    }
+
+    private static void writeU32(ByteArrayOutputStream output, long value) {
+        output.write((int) ((value >>> 24) & 0xFF));
+        output.write((int) ((value >>> 16) & 0xFF));
+        output.write((int) ((value >>> 8) & 0xFF));
+        output.write((int) (value & 0xFF));
     }
 }
