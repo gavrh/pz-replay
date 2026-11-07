@@ -2,20 +2,25 @@ package com.gavrh.pzreplay;
 
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import me.zed_0xff.zombie_buddy.Exposer;
+import zombie.characters.IsoPlayer;
 import zombie.core.Core;
+import zombie.iso.IsoChunkMap;
 import zombie.iso.IsoWorld;
 
 @Exposer.LuaClass(name = "PZReplayPlayback")
 public final class PlaybackApi {
     private static PlaybackTimeline timeline;
     private static GhostMotionController controller;
+    private static WorldPlayback worldPlayback;
     private static String lastPath = "";
     private static boolean reportedFinished;
+    private static boolean reportedWorldFinished;
 
     private PlaybackApi() {
     }
@@ -71,8 +76,15 @@ public final class PlaybackApi {
             return false;
         }
 
+        Path replayPath = Paths.get(requested);
+        ReplayCompatibility.Context compatibilityContext = context();
+        if (LoadApi.isContextPrepared()) {
+            compatibilityContext = new ReplayCompatibility.Context(
+                compatibilityContext.gameVersion(), data.metadata().saveName(),
+                compatibilityContext.mapName(), compatibilityContext.gameMode());
+        }
         ReplayCompatibility.Result compatibility =
-            ReplayCompatibility.check(data.metadata(), context());
+            ReplayCompatibility.check(data.metadata(), compatibilityContext);
         List<String> warnings = new ArrayList<>(compatibility.warnings());
         for (String formatWarning : data.warnings()) {
             addWarning(warnings, formatWarning);
@@ -102,6 +114,26 @@ public final class PlaybackApi {
         }
         System.out.println("[pz-replay] replay loaded path=" + requested + " "
             + ReplayReader.summary(data));
+
+        WorldPlayback loadedWorld = null;
+        try {
+            FormatInfo info = FormatReader.readInfo(replayPath);
+            if ("padded".equals(info.worldStatus())) {
+                if (!LoadApi.isContextPrepared()) {
+                    addWarning(warnings, "world apply requires the playback context");
+                } else {
+                    String coverageStatus = FormatReader.readWorldCoverageStatus(replayPath);
+                    loadedWorld = WorldPlayback.open(replayPath, coverageStatus,
+                        warning -> addPlayingWarning(warnings, warning));
+                    for (String worldWarning : loadedWorld.summary().warnings()) {
+                        addWarning(warnings, worldWarning);
+                    }
+                }
+            }
+        } catch (IOException | ReplayFormatException exception) {
+            fail(requested, "cannot read world log: " + exception.getMessage());
+            return false;
+        }
 
         GhostMotionController loadedController = new GhostMotionController(loaded,
             warning -> addPlayingWarning(warnings, warning));
@@ -137,8 +169,13 @@ public final class PlaybackApi {
 
         timeline = loaded;
         controller = loadedController;
+        worldPlayback = loadedWorld;
         lastPath = requested;
         reportedFinished = false;
+        reportedWorldFinished = false;
+        if (worldPlayback != null) {
+            System.out.println("[pz-replay] world playback apply " + worldPlayback.summaryText());
+        }
         System.out.println("[pz-replay] replay playback started path=" + requested
             + " duration=" + format(loaded.getDuration()) + "s"
             + " frames=" + loaded.getFrameCount()
@@ -159,14 +196,20 @@ public final class PlaybackApi {
         if (active != null) {
             double currentTime = active.getCurrentTime();
             String path = lastPath;
+            String worldSummary = worldPlayback == null ? null : worldPlayback.summaryText();
             controller = null;
             timeline = null;
+            worldPlayback = null;
             lastPath = "";
             reportedFinished = false;
+            reportedWorldFinished = false;
             state.playbackStopped();
             GhostApi.despawn();
             System.out.println("[pz-replay] replay playback stopped path=" + path
                 + " time=" + format(currentTime) + "s");
+            if (worldSummary != null) {
+                System.out.println("[pz-replay] world playback summary " + worldSummary);
+            }
         } else {
             state.playbackStopped();
         }
@@ -207,8 +250,19 @@ public final class PlaybackApi {
 
     public static boolean seek(double seconds) {
         GhostActor ghost = GhostApi.getGhost();
-        if (controller == null || ghost == null || !controller.seek(ghost, seconds)) {
+        if (controller == null) {
             return false;
+        }
+        if (worldPlayback != null && WorldSeekDecision.seek(true, controller.getCurrentTime(),
+            seconds) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
+            warnWorld("world replay cannot seek backward without a context reload");
+            return false;
+        }
+        if (ghost == null || !controller.seek(ghost, seconds)) {
+            return false;
+        }
+        if (worldPlayback != null) {
+            worldPlayback.applyTo(seconds, true);
         }
         if (controller.getCurrentTime() < controller.getDuration()) {
             reportedFinished = false;
@@ -219,7 +273,15 @@ public final class PlaybackApi {
 
     public static boolean restart() {
         GhostActor ghost = GhostApi.getGhost();
-        if (controller == null || ghost == null || !controller.restart(ghost)) {
+        if (controller == null) {
+            return false;
+        }
+        if (worldPlayback != null
+            && WorldSeekDecision.restart(true) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
+            warnWorld("world replay cannot restart without a context reload");
+            return false;
+        }
+        if (ghost == null || !controller.restart(ghost)) {
             return false;
         }
         reportedFinished = false;
@@ -370,6 +432,11 @@ public final class PlaybackApi {
                 controller.refreshCamera(ghost);
             }
         }
+        if (worldPlayback != null) {
+            GhostActor ghost = GhostApi.getGhost();
+            followAnchor(ghost);
+            worldPlayback.applyTo(controller.getCurrentTime(), false);
+        }
         state.playbackProgress(controller.getCurrentTime(), controller.getDuration(),
             controller.getCameraMode());
         state.setCameraMode(controller.getCameraMode());
@@ -381,6 +448,11 @@ public final class PlaybackApi {
                 + " duration=" + format(controller.getDuration()) + "s"
                 + " ghost_removed=false");
         }
+        if (controller.isFinished() && worldPlayback != null && !reportedWorldFinished) {
+            reportedWorldFinished = true;
+            System.out.println("[pz-replay] world playback finished "
+                + worldPlayback.summaryText());
+        }
     }
 
     static void onGhostDespawned() {
@@ -389,9 +461,52 @@ public final class PlaybackApi {
         }
         controller = null;
         timeline = null;
+        worldPlayback = null;
         lastPath = "";
         reportedFinished = false;
+        reportedWorldFinished = false;
         CameraController.restorePlayerCamera();
+    }
+
+    public static String getWorldApplySummary() {
+        return worldPlayback == null ? "" : worldPlayback.summaryText();
+    }
+
+    private static void followAnchor(GhostActor ghost) {
+        if (ghost == null || !LoadApi.isContextPrepared()) {
+            return;
+        }
+        IsoPlayer anchor = IsoPlayer.getInstance();
+        if (anchor == null || anchor == ghost) {
+            return;
+        }
+        float x = ghost.getX();
+        float y = ghost.getY();
+        float z = ghost.getZ();
+        if (Math.abs(anchor.getX() - x) < 0.001f
+            && Math.abs(anchor.getY() - y) < 0.001f
+            && Math.abs(anchor.getZ() - z) < 0.001f) {
+            return;
+        }
+        anchor.setX(x);
+        anchor.setY(y);
+        anchor.setZ(z);
+        anchor.setCurrentSquareFromPosition();
+        IsoWorld world = IsoWorld.instance;
+        if (world != null && world.currentCell != null) {
+            IsoChunkMap chunkMap = world.currentCell.getChunkMap(0);
+            if (chunkMap != null) {
+                chunkMap.ProcessChunkPos(anchor);
+            }
+        }
+    }
+
+    private static void warnWorld(String message) {
+        List<String> warnings = new ArrayList<>(
+            PZReplayLua.state().getCompatibilityWarnings());
+        addWarning(warnings, message);
+        PZReplayLua.state().setCompatibilityWarnings(warnings);
+        System.out.println("[pz-replay] world playback warning " + message);
     }
 
     private static void syncTransportState() {

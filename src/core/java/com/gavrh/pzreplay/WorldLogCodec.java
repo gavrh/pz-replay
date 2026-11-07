@@ -6,7 +6,9 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class WorldLogCodec {
     public static final int KIND_OBJECT_STATE = 1;
@@ -126,6 +128,9 @@ public final class WorldLogCodec {
             int kind = (int) uint32(body);
             long sequence = uint32(body);
             long time = body.getLong();
+            if (kind < KIND_OBJECT_STATE || kind > KIND_OBJECT_ADDED) {
+                continue;
+            }
             Target target = readTarget(body);
             WorldStateRecord record = switch (kind) {
                 case KIND_OBJECT_STATE -> decodeStateBody(body, target.target(),
@@ -156,6 +161,24 @@ public final class WorldLogCodec {
             count++;
         }
         return count;
+    }
+
+    public static Map<Integer, Integer> countKinds(byte[] payload)
+        throws ReplayFormatException {
+        Map<Integer, Integer> counts = new LinkedHashMap<>();
+        ByteBuffer buffer = ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN);
+        while (buffer.hasRemaining()) {
+            require(buffer, 4);
+            long bodyLength = uint32(buffer);
+            if (bodyLength < BODY_HEADER_BYTES || bodyLength > MAX_BODY_BYTES) {
+                throw new ReplayFormatException("world log record length is invalid");
+            }
+            require(buffer, (int) bodyLength);
+            ByteBuffer body = slice(buffer, (int) bodyLength);
+            int kind = (int) uint32(body);
+            counts.merge(kind, 1, Integer::sum);
+        }
+        return Map.copyOf(counts);
     }
 
     public static void validate(byte[] payload, long expectedRecords, long expectedObjects)

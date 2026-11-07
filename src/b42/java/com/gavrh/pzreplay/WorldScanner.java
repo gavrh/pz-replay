@@ -275,19 +275,7 @@ final class WorldScanner {
     }
 
     private static int directionIndex(IsoDirections direction) {
-        if (direction == null) {
-            return 0;
-        }
-        return switch (direction) {
-            case N -> 0;
-            case E -> 1;
-            case S -> 2;
-            case W -> 3;
-            case NE -> 4;
-            case SE -> 5;
-            case SW -> 6;
-            case NW -> 7;
-        };
+        return direction == null ? 0 : WorldOrientation.index(direction.ordinal());
     }
 
     private static String spriteName(IsoObject object) {

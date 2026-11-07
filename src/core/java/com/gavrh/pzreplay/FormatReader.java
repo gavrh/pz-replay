@@ -79,6 +79,12 @@ public final class FormatReader {
         return readCatalogueManifest(source).sourceWorldVersion;
     }
 
+    public static String readWorldCoverageStatus(Path source)
+        throws IOException, ReplayFormatException {
+        String status = readCatalogueManifest(source).worldCoverageStatus;
+        return status == null || status.isBlank() ? "complete" : status;
+    }
+
     public static FormatReadResult readPackage(Path source)
         throws IOException, ReplayFormatException {
         Container container = readContainer(source);
