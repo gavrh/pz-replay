@@ -33,8 +33,7 @@ final class WorldApplier {
 
     void apply(WorldApplyCommand command, WorldApplySummary summary) {
         if (command.action() == WorldApplyCommand.Action.VEHICLE_REMOVE) {
-            summary.recordedOnly();
-            summary.reloadRequired();
+            summary.recordedOnlyReloadRequired();
             return;
         }
         switch (command.action()) {

@@ -56,6 +56,12 @@ public final class WorldApplySummary {
         skipped++;
     }
 
+    public void recordedOnlyReloadRequired() {
+        recordedOnly++;
+        reloadRequired++;
+        skipped++;
+    }
+
     public boolean warnOnce(String identity, String message) {
         if (identity == null || identity.isBlank() || !warnedIdentities.add(identity)) {
             return false;

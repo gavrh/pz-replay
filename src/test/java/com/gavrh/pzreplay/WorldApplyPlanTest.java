@@ -234,6 +234,16 @@ class WorldApplyPlanTest {
     }
 
     @Test
+    void recordedOnlyReloadRequiredCountsSkippedOnce() {
+        WorldApplySummary summary = new WorldApplySummary();
+        summary.recordedOnlyReloadRequired();
+
+        assertEquals(1, summary.recordedOnlyCount());
+        assertEquals(1, summary.reloadRequiredCount());
+        assertEquals(1, summary.skippedCount());
+    }
+
+    @Test
     void truncationFreezesAtLastRecordAndWarns() {
         WorldApplyPlan plan = new WorldApplyPlan(List.of(
             record(1, 0, WorldLogCodec.KIND_OBJECT_STATE, door(10, 20, false)),
