@@ -224,6 +224,20 @@ local function startLoadedPlayback(player)
         end
         api().markContextLoaded()
         api().finishPending()
+        if PZReplayPlayback.isActive() then
+            PZReplayPlayback.stop()
+        end
+        local started = PZReplayPlayback.play(path)
+        if not started then
+            local errorMessage = PZReplayPlayback.getLastPlaybackError()
+            if not errorMessage or errorMessage == "" then
+                errorMessage = T.get("UI_pzreplay_load_playback_could_not_start",
+                    "playback could not start")
+            end
+            failAfterLoad(player, T.format("UI_pzreplay_load_not_started",
+                "Replay not started: %s", T.message(errorMessage)))
+            return
+        end
         log("context loaded path=" .. path .. " warnings=" .. tostring(warnings))
         if warnings ~= "" then
             notify(player, T.format("UI_pzreplay_load_context_warning",
