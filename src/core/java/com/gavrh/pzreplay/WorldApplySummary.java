@@ -36,7 +36,6 @@ public final class WorldApplySummary {
 
     public void recordedOnly(boolean partial) {
         recordedOnly++;
-        skipped++;
         if (partial) {
             partial();
         }
@@ -77,7 +76,6 @@ public final class WorldApplySummary {
 
     public void reloadRequired(boolean partial) {
         reloadRequired++;
-        skipped++;
         if (partial) {
             partial();
         }
@@ -90,7 +88,6 @@ public final class WorldApplySummary {
     public void recordedOnlyReloadRequired(boolean partial) {
         recordedOnly++;
         reloadRequired++;
-        skipped++;
         if (partial) {
             partial();
         }
