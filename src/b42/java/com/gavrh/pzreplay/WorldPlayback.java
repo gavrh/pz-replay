@@ -13,18 +13,21 @@ final class WorldPlayback {
     private final WorldApplyDuplicates duplicates = new WorldApplyDuplicates();
     private final Consumer<String> warning;
     private final String coverageStatus;
+    private final CameraBounds cameraBounds;
     private long applyNanos;
     private long diffRecords;
     private long seekCount;
 
     private WorldPlayback(List<WorldLogRecord> records, String coverageStatus,
-        Map<Integer, Integer> kinds, Consumer<String> warning) {
+        int paddingTiles, Map<Integer, Integer> kinds, Consumer<String> warning) {
         this.plan = new WorldApplyPlan(records);
         this.applier = new WorldApplier(warning);
         this.coverageStatus = coverageStatus == null ? "complete" : coverageStatus;
         this.warning = warning;
+        this.cameraBounds = CameraBounds.fromRecords(records, paddingTiles);
         applyKinds(kinds);
         applyCoverage();
+        applyCameraBounds(paddingTiles, records.size());
         applyRecords(plan.advanceTo(0L));
         if (summary.appliedCount() > 0 || plan.size() > 0) {
             System.out.println("[pz-replay] world apply T0 " + summary.text()
@@ -32,12 +35,12 @@ final class WorldPlayback {
         }
     }
 
-    static WorldPlayback open(Path path, String coverageStatus, Consumer<String> warning)
-        throws IOException, ReplayFormatException {
+    static WorldPlayback open(Path path, String coverageStatus, int paddingTiles,
+        Consumer<String> warning) throws IOException, ReplayFormatException {
         byte[] log = FormatReader.readWorldLog(path);
         Map<Integer, Integer> kinds = WorldLogCodec.countKinds(log);
         List<WorldLogRecord> records = WorldLogCodec.decodeAll(log);
-        return new WorldPlayback(records, coverageStatus, kinds, warning);
+        return new WorldPlayback(records, coverageStatus, paddingTiles, kinds, warning);
     }
 
     void applyTo(double seconds, boolean seek) {
@@ -69,6 +72,10 @@ final class WorldPlayback {
 
     WorldApplySummary summary() {
         return summary;
+    }
+
+    CameraBounds cameraBounds() {
+        return cameraBounds;
     }
 
     String summaryText() {
@@ -129,6 +136,15 @@ final class WorldPlayback {
             plan.lastRecordMillis());
         if (!message.isEmpty()) {
             warn(message);
+        }
+    }
+
+    private void applyCameraBounds(int paddingTiles, int recordCount) {
+        System.out.println("[pz-replay] world camera bounds " + cameraBounds.text()
+            + " padding=" + paddingTiles + " margin=0.000"
+            + " records=" + recordCount);
+        if (!cameraBounds.isBounded()) {
+            warn("world camera coverage is empty; using the default camera radius");
         }
     }
 

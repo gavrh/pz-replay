@@ -70,19 +70,13 @@ public final class FormatReader {
         FormatManifest manifest = readCatalogueManifest(source);
         ReplayMetadata metadata = FormatMetadata.fromManifest(
             manifest, Map.of(), List.of());
-        return new FormatInfo(metadata, manifest.worldStatus(),
-            manifest.worldIssue, manifest.warnings);
+        return new FormatInfo(metadata, manifest.worldStatus(), manifest.worldIssue,
+            manifest.worldPaddingTiles, manifest.worldCoverageStatus, manifest.warnings);
     }
 
     public static String readSourceWorldVersion(Path source)
         throws IOException, ReplayFormatException {
         return readCatalogueManifest(source).sourceWorldVersion;
-    }
-
-    public static String readWorldCoverageStatus(Path source)
-        throws IOException, ReplayFormatException {
-        String status = readCatalogueManifest(source).worldCoverageStatus;
-        return status == null || status.isBlank() ? "complete" : status;
     }
 
     public static FormatReadResult readPackage(Path source)

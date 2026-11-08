@@ -122,8 +122,8 @@ public final class PlaybackApi {
                 if (!LoadApi.isContextPrepared()) {
                     addWarning(warnings, "world apply requires the playback context");
                 } else {
-                    String coverageStatus = FormatReader.readWorldCoverageStatus(replayPath);
-                    loadedWorld = WorldPlayback.open(replayPath, coverageStatus,
+                    loadedWorld = WorldPlayback.open(replayPath, info.worldCoverageStatus(),
+                        info.worldPaddingTiles(),
                         warning -> addPlayingWarning(warnings, warning));
                     for (String worldWarning : loadedWorld.summary().warnings()) {
                         addWarning(warnings, worldWarning);
@@ -137,6 +137,8 @@ public final class PlaybackApi {
 
         GhostMotionController loadedController = new GhostMotionController(loaded,
             warning -> addPlayingWarning(warnings, warning));
+        loadedController.setCameraBounds(
+            loadedWorld == null ? null : loadedWorld.cameraBounds());
         PlaybackTimeline.Sample first = loaded.sampleAt(0.0);
         GhostActor ghost = GhostApi.spawnWithMotion(loadedController, first.x(), first.y(),
             first.z(), first.facing(), appearance,
