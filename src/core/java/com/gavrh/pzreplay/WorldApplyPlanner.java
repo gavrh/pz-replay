@@ -10,12 +10,12 @@ public final class WorldApplyPlanner {
         }
         int flags = entry.flags();
         WorldStateRecord record = entry.record();
+        if (record instanceof WorldVehicleState vehicle) {
+            return vehicleCommand(vehicle, flags);
+        }
         if ((flags & WorldLogCodec.FLAG_RECORDED_ONLY) != 0) {
             return WorldApplyCommand.of(WorldApplyCommand.Action.SKIP_RECORDED_ONLY, record,
                 flags);
-        }
-        if (record instanceof WorldVehicleState vehicle) {
-            return vehicleCommand(vehicle, flags);
         }
         if ((flags & WorldLogCodec.FLAG_RELOAD_REQUIRED) != 0) {
             return WorldApplyCommand.of(WorldApplyCommand.Action.SKIP_RELOAD_REQUIRED, record,
@@ -34,10 +34,6 @@ public final class WorldApplyPlanner {
         if (!vehicle.present()) {
             return new WorldApplyCommand(WorldApplyCommand.Action.VEHICLE_REMOVE, vehicle,
                 flags, false, false, true);
-        }
-        if ((flags & WorldLogCodec.FLAG_RELOAD_REQUIRED) != 0) {
-            return WorldApplyCommand.of(WorldApplyCommand.Action.SKIP_RELOAD_REQUIRED, vehicle,
-                flags);
         }
         return WorldApplyCommand.of(WorldApplyCommand.Action.VEHICLE_STATE, vehicle, flags);
     }
