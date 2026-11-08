@@ -10,6 +10,7 @@ final class WorldPlayback {
     private final WorldApplyPlan plan;
     private final WorldApplier applier;
     private final WorldApplySummary summary = new WorldApplySummary();
+    private final WorldApplyDuplicates duplicates = new WorldApplyDuplicates();
     private final Consumer<String> warning;
     private final String coverageStatus;
     private long applyNanos;
@@ -84,6 +85,9 @@ final class WorldPlayback {
         for (WorldLogRecord record : records) {
             if (record.timeMillis() > 0L) {
                 diffRecords++;
+            }
+            if (duplicates.skip(record, summary)) {
+                continue;
             }
             try {
                 applier.apply(WorldApplyPlanner.command(record), summary);

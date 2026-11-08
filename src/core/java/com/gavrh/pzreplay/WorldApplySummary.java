@@ -17,6 +17,7 @@ public final class WorldApplySummary {
     private long unsupported;
     private long unknownKinds;
     private long reloadRequired;
+    private long duplicate;
 
     public void applied() {
         applied++;
@@ -29,6 +30,11 @@ public final class WorldApplySummary {
 
     public void partial() {
         partial++;
+    }
+
+    public void duplicate() {
+        duplicate++;
+        skipped++;
     }
 
     public void missing() {
@@ -112,6 +118,10 @@ public final class WorldApplySummary {
         return reloadRequired;
     }
 
+    public long duplicateCount() {
+        return duplicate;
+    }
+
     public List<String> warnings() {
         return List.copyOf(warnings);
     }
@@ -125,6 +135,7 @@ public final class WorldApplySummary {
             + " mismatched=" + mismatched
             + " unsupported=" + unsupported
             + " unknown=" + unknownKinds
-            + " reload_required=" + reloadRequired;
+            + " reload_required=" + reloadRequired
+            + " duplicate=" + duplicate;
     }
 }
