@@ -11,6 +11,9 @@ local HARD_TIMEOUT_SECONDS = 180
 
 local worldStarted = false
 local saveListFilterInstalled = false
+local vehicleCheckStarted = 0
+local vehicleCheckNext = 0
+local vehicleCheckError = ""
 
 local function api()
     return PZReplayLoadApi
@@ -218,6 +221,24 @@ local function startLoadedPlayback(player)
             return
         end
         local warnings = api().verifyContext()
+        local now = getTimestampMs()
+        if now >= vehicleCheckNext then
+            vehicleCheckError = api().verifyContextVehicles()
+            vehicleCheckNext = now + 500
+        end
+        if vehicleCheckError ~= "" then
+            if vehicleCheckStarted == 0 then
+                vehicleCheckStarted = now
+            end
+            if now - vehicleCheckStarted < 10000 then
+                return
+            end
+            failAfterLoad(player, T.format("UI_pzreplay_load_not_started",
+                "Replay not started: %s", vehicleCheckError))
+            return
+        end
+        vehicleCheckStarted = 0
+        vehicleCheckNext = 0
         local modWarning = verifyMods()
         if modWarning ~= "" then
             warnings = warnings ~= "" and (warnings .. "; " .. modWarning) or modWarning
@@ -374,7 +395,15 @@ function PZReplayLoad.load(path, library)
         .. " context=" .. tostring(api().isContextPrepared())
         .. " warnings=" .. tostring(api().getWarningCount()))
 
+    local previousCheckSavePlayerExists = checkSavePlayerExists
+    local previousCheckSaveFile = MainScreen.checkSaveFile
+    if api().isContextPrepared() then
+        checkSavePlayerExists = function() return true end
+        MainScreen.checkSaveFile = function() return true end
+    end
     local ok, errorMessage = pcall(MainScreen.continueLatestSave, gameMode, saveName)
+    checkSavePlayerExists = previousCheckSavePlayerExists
+    MainScreen.checkSaveFile = previousCheckSaveFile
     if not ok then
         api().cancelPending("load request failed")
         restoreNoSave()
@@ -453,6 +482,18 @@ end)
 Events.OnGameStart.Add(function()
     worldStarted = true
     PZReplayLoad.tick()
+end)
+
+Events.OnPostDistributionMerge.Add(function()
+    if api() and api().enterVehicleWindow then
+        api().enterVehicleWindow()
+    end
+end)
+
+Events.OnInitWorld.Add(function()
+    if api() and api().exitVehicleWindow then
+        api().exitVehicleWindow()
+    end
 end)
 
 Events.OnRenderTick.Add(function()
