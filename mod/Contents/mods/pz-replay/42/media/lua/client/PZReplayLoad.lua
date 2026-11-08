@@ -248,6 +248,7 @@ local function startLoadedPlayback(player)
         if PZReplayPlayback.isActive() then
             PZReplayPlayback.stop()
         end
+        local seekSeconds = api().getPendingSeekSeconds()
         local started = PZReplayPlayback.play(path)
         if not started then
             local errorMessage = PZReplayPlayback.getLastPlaybackError()
@@ -259,7 +260,18 @@ local function startLoadedPlayback(player)
                 "Replay not started: %s", T.message(errorMessage)))
             return
         end
-        log("context loaded path=" .. path .. " warnings=" .. tostring(warnings))
+        if seekSeconds > 0 then
+            if not PZReplayPlayback.seek(seekSeconds) then
+                failAfterLoad(player, T.format("UI_pzreplay_load_not_started",
+                    "Replay not started: %s",
+                    T.get("UI_pzreplay_load_playback_could_not_start",
+                        "playback could not start")))
+                return
+            end
+        end
+        api().finishReload()
+        log("context loaded path=" .. path .. " warnings=" .. tostring(warnings)
+            .. " seek=" .. tostring(seekSeconds))
         if warnings ~= "" then
             notify(player, T.format("UI_pzreplay_load_context_warning",
                 "Replay world loaded with warnings: %s", warnings))
@@ -387,7 +399,9 @@ function PZReplayLoad.load(path, library)
             "A replay load is already in progress.")
     end
 
-    library:hideForLoad()
+    if library and library.hideForLoad then
+        library:hideForLoad()
+    end
     worldStarted = false
     local saveName = api().getLoadSaveName()
     local gameMode = api().getLoadGameMode()
@@ -407,9 +421,11 @@ function PZReplayLoad.load(path, library)
     if not ok then
         api().cancelPending("load request failed")
         restoreNoSave()
-        library:restoreAfterLoadFailure(T.format(
-            "UI_pzreplay_load_save_could_not_load", "The save could not be loaded: %s",
-            tostring(errorMessage)))
+        if library and library.restoreAfterLoadFailure then
+            library:restoreAfterLoadFailure(T.format(
+                "UI_pzreplay_load_save_could_not_load", "The save could not be loaded: %s",
+                tostring(errorMessage)))
+        end
         return false, T.get("UI_pzreplay_load_save_failed",
             "The save could not be loaded.")
     end
@@ -420,13 +436,67 @@ function PZReplayLoad.abandon(message)
     if not PZReplayLoad.isPending() then
         return
     end
+    if api() and api().failReload then
+        api().failReload(message or "load abandoned")
+    end
     api().cancelPending("load abandoned")
     restoreNoSave()
     log("fallback menu-restored reason=" .. message)
     restoreLibrary(message)
 end
 
+local function reloadInProgress()
+    if not api() or not api().hasReloadRequest() then
+        return false
+    end
+    if api().isReloadStarted() then
+        return false
+    end
+    if getPlayer() ~= nil then
+        if not api().isReloadExiting() then
+            api().markReloadExiting()
+            if PZReplayPlayback and PZReplayPlayback.isActive() then
+                PZReplayPlayback.stop()
+            end
+            local ok, errorMessage = pcall(function()
+                getCore():exitToMenu()
+            end)
+            if not ok then
+                api().failReload(tostring(errorMessage))
+                log("world reload exit failed reason=" .. tostring(errorMessage))
+            else
+                log("world reload leaving world path=" .. api().getReloadPath()
+                    .. " target=" .. tostring(api().getReloadTargetSeconds()))
+            end
+        end
+        return true
+    end
+    local screen = MainScreen and MainScreen.instance
+    if not screen or not screen.getIsVisible or not screen:getIsVisible() then
+        return true
+    end
+    if getPlayer() ~= nil then
+        return true
+    end
+    api().markReloadStarted()
+    local path = api().getReloadPath()
+    local library = PZReplayLibrary and PZReplayLibrary.instance or nil
+    local ok, message = PZReplayLoad.load(path, library)
+    if not ok then
+        api().failReload(message or "reload could not start")
+        log("world reload could not start path=" .. path
+            .. " reason=" .. tostring(message))
+    else
+        log("world reload loading path=" .. path
+            .. " target=" .. tostring(api().getReloadTargetSeconds()))
+    end
+    return true
+end
+
 function PZReplayLoad.tick()
+    if reloadInProgress() then
+        return
+    end
     if not PZReplayLoad.isPending() then
         return
     end

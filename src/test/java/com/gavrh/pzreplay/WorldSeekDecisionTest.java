@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class WorldSeekDecisionTest {
     @Test
-    void forwardSeekAppliesInPlace() {
+    void forwardSeekDoesNotTriggerReload() {
         assertEquals(WorldSeekDecision.Action.APPLY_FORWARD,
             WorldSeekDecision.seek(true, 1.0, 2.0));
         assertEquals(WorldSeekDecision.Action.APPLY_FORWARD,
@@ -14,7 +14,7 @@ class WorldSeekDecisionTest {
     }
 
     @Test
-    void backwardSeekRequiresReload() {
+    void backwardSeekTriggersReload() {
         assertEquals(WorldSeekDecision.Action.RELOAD_REQUIRED,
             WorldSeekDecision.seek(true, 2.0, 1.0));
         assertEquals(WorldSeekDecision.Action.RELOAD_REQUIRED,
@@ -22,7 +22,7 @@ class WorldSeekDecisionTest {
     }
 
     @Test
-    void restartRequiresReloadForWorldPlayback() {
+    void restartTriggersReloadForWorldPlayback() {
         assertEquals(WorldSeekDecision.Action.RELOAD_REQUIRED,
             WorldSeekDecision.restart(true));
         assertEquals(WorldSeekDecision.Action.NORMAL,

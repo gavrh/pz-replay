@@ -27,6 +27,11 @@ public final class LoadApi {
     private static final NoSaveWindow VEHICLE_WINDOW = new NoSaveWindow();
     private static final long VEHICLE_WINDOW_LIMIT_MILLIS = 30_000L;
     private static long vehicleWindowOpenedMillis;
+    private static boolean reloadPending;
+    private static String reloadPath = "";
+    private static double reloadTargetSeconds;
+    private static boolean reloadExiting;
+    private static boolean reloadStarted;
 
     private LoadApi() {
     }
@@ -238,6 +243,77 @@ public final class LoadApi {
         return ContextVerifier.verifyVehicles(lastReplayPath);
     }
 
+    public static void requestReload(String path, double seconds) {
+        reloadPending = true;
+        reloadPath = path == null ? "" : path;
+        reloadTargetSeconds = Math.max(0.0, seconds);
+        reloadExiting = false;
+        reloadStarted = false;
+        System.out.println("[pz-replay] world reload requested path=" + reloadPath
+            + " target=" + reloadTargetSeconds);
+    }
+
+    public static boolean hasReloadRequest() {
+        return reloadPending;
+    }
+
+    public static String getReloadPath() {
+        return reloadPath;
+    }
+
+    public static double getReloadTargetSeconds() {
+        return reloadTargetSeconds;
+    }
+
+    public static boolean isReloadExiting() {
+        return reloadExiting;
+    }
+
+    public static void markReloadExiting() {
+        reloadExiting = true;
+    }
+
+    public static boolean isReloadStarted() {
+        return reloadStarted;
+    }
+
+    public static void markReloadStarted() {
+        reloadStarted = true;
+    }
+
+    public static double getPendingSeekSeconds() {
+        return reloadPending ? reloadTargetSeconds : 0.0;
+    }
+
+    public static void finishReload() {
+        if (!reloadPending) {
+            return;
+        }
+        System.out.println("[pz-replay] world reload finished path=" + reloadPath
+            + " target=" + reloadTargetSeconds);
+        reloadPending = false;
+        reloadPath = "";
+        reloadTargetSeconds = 0.0;
+        reloadExiting = false;
+        reloadStarted = false;
+    }
+
+    public static void failReload(String reason) {
+        if (!reloadPending) {
+            return;
+        }
+        System.out.println("[pz-replay] world reload failed path=" + reloadPath
+            + " target=" + reloadTargetSeconds
+            + " reason=" + (reason == null ? "" : reason));
+        reloadPending = false;
+        reloadPath = "";
+        reloadTargetSeconds = 0.0;
+        reloadExiting = false;
+        reloadStarted = false;
+        PZReplayLua.state().playbackFailed("world replay reload failed: "
+            + (reason == null ? "" : reason));
+    }
+
     public static void cleanupStaleContexts() {
         WorldContextManager.cleanupStale();
     }
@@ -310,6 +386,7 @@ public final class LoadApi {
             pendingPath = "";
             pendingStartedMillis = 0L;
         }
+        failReload(reason == null ? "cancelled" : reason);
         LoadingGate.clear();
         if (contextPrepared) {
             cleanupContext(reason == null ? "cancelled" : reason);
