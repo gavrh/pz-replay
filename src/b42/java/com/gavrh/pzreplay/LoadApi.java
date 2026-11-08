@@ -121,6 +121,7 @@ public final class LoadApi {
         }
         try {
             FormatInfo info = FormatReader.readInfo(Paths.get(lastReplayPath));
+            LoadingGate.start();
             WorldContextManager.prepare(lastReplayPath, info.metadata(), expectedWorldVersion);
             contextPrepared = true;
             VEHICLE_WINDOW.begin();
@@ -177,10 +178,15 @@ public final class LoadApi {
     }
 
     public static void cleanupContext(String reason) {
+        LoadingGate.clear();
         closeVehicleWindow();
         VEHICLE_WINDOW.end();
         WorldContextManager.cleanup(reason == null ? "requested" : reason);
         contextPrepared = false;
+    }
+
+    static boolean isContextLoading() {
+        return pending && isContextPrepared();
     }
 
     public static synchronized boolean enterVehicleWindow() {
@@ -255,6 +261,7 @@ public final class LoadApi {
     }
 
     public static void installLifecycle() {
+        LoadingGate.start();
         WorldContextManager.installShutdownHook();
         WorldContextManager.cleanupStale();
     }
@@ -303,6 +310,7 @@ public final class LoadApi {
             pendingPath = "";
             pendingStartedMillis = 0L;
         }
+        LoadingGate.clear();
         if (contextPrepared) {
             cleanupContext(reason == null ? "cancelled" : reason);
         }
