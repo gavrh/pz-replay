@@ -288,6 +288,8 @@ final class WorldApplier {
         transform.setRotation(new Quaternionf(pose.quaternionX(), pose.quaternionY(),
             pose.quaternionZ(), pose.quaternionW()));
         vehicle.setWorldTransform(transform);
+        vehicle.setX(state.poseX());
+        vehicle.setY(state.poseY());
         vehicle.polyDirty = true;
         vehicle.setHeadlightsOn(state.headlightsOn());
         applied(command, summary);
