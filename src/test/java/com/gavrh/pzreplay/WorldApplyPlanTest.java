@@ -209,38 +209,58 @@ class WorldApplyPlanTest {
     }
 
     @Test
-    void summaryCountsMissingMismatchedUnsupportedAndUnknown() {
+    void failureSkipsIncrementSkippedAndTheirOwnCounter() {
         WorldApplySummary summary = new WorldApplySummary();
-        summary.applied();
-        summary.recordedOnly();
-        summary.partial();
         summary.missing();
         summary.mismatched();
         summary.unsupported();
-        summary.reloadRequired();
         summary.unknownKind(2);
+        summary.duplicate();
 
-        assertEquals(1, summary.appliedCount());
-        assertEquals(1, summary.recordedOnlyCount());
-        assertEquals(1, summary.partialCount());
         assertEquals(1, summary.missingCount());
         assertEquals(1, summary.mismatchedCount());
         assertEquals(1, summary.unsupportedCount());
         assertEquals(2, summary.unknownKindCount());
-        assertEquals(1, summary.reloadRequiredCount());
-        assertEquals(7, summary.skippedCount());
-        assertTrue(summary.text().contains("applied=1"));
-        assertTrue(summary.text().contains("unknown=2"));
+        assertEquals(1, summary.duplicateCount());
+        assertEquals(6, summary.skippedCount());
+        assertEquals(0, summary.appliedCount());
+        assertEquals(0, summary.recordedOnlyCount());
+        assertEquals(0, summary.partialCount());
+        assertEquals(0, summary.reloadRequiredCount());
     }
 
     @Test
-    void recordedOnlyReloadRequiredCountsSkippedOnce() {
+    void recordedOnlyCountsOnlyRecordedOnly() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.recordedOnly();
+
+        assertEquals(1, summary.recordedOnlyCount());
+        assertEquals(0, summary.skippedCount());
+        assertEquals(0, summary.appliedCount());
+        assertEquals(0, summary.reloadRequiredCount());
+    }
+
+    @Test
+    void reloadRequiredCountsOnlyReloadRequired() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.reloadRequired();
+
+        assertEquals(1, summary.reloadRequiredCount());
+        assertEquals(0, summary.skippedCount());
+        assertEquals(0, summary.appliedCount());
+        assertEquals(0, summary.recordedOnlyCount());
+    }
+
+    @Test
+    void recordedOnlyReloadRequiredCountsBothWithoutSkip() {
         WorldApplySummary summary = new WorldApplySummary();
         summary.recordedOnlyReloadRequired();
 
         assertEquals(1, summary.recordedOnlyCount());
         assertEquals(1, summary.reloadRequiredCount());
-        assertEquals(1, summary.skippedCount());
+        assertEquals(0, summary.skippedCount());
     }
 
     @Test
@@ -251,7 +271,31 @@ class WorldApplyPlanTest {
 
         assertEquals(1, summary.recordedOnlyCount());
         assertEquals(1, summary.partialCount());
-        assertEquals(1, summary.skippedCount());
+        assertEquals(0, summary.skippedCount());
+    }
+
+    @Test
+    void appliedRecordCountsOnlyApplied() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.applied();
+
+        assertEquals(1, summary.appliedCount());
+        assertEquals(0, summary.skippedCount());
+        assertEquals(0, summary.partialCount());
+        assertEquals(0, summary.recordedOnlyCount());
+        assertEquals(0, summary.reloadRequiredCount());
+    }
+
+    @Test
+    void partialCountsIndependently() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.partial();
+
+        assertEquals(1, summary.partialCount());
+        assertEquals(0, summary.appliedCount());
+        assertEquals(0, summary.skippedCount());
     }
 
     @Test
@@ -274,7 +318,28 @@ class WorldApplyPlanTest {
 
         assertEquals(1, summary.reloadRequiredCount());
         assertEquals(1, summary.partialCount());
-        assertEquals(1, summary.skippedCount());
+        assertEquals(0, summary.skippedCount());
+    }
+
+    @Test
+    void summaryTextReflectsSeparateCounters() {
+        WorldApplySummary summary = new WorldApplySummary();
+        summary.applied();
+        summary.recordedOnly();
+        summary.partial();
+        summary.reloadRequired();
+        summary.missing();
+        summary.duplicate();
+
+        String text = summary.text();
+
+        assertTrue(text.contains("applied=1"));
+        assertTrue(text.contains("recorded_only=1"));
+        assertTrue(text.contains("partial=1"));
+        assertTrue(text.contains("skipped=2"));
+        assertTrue(text.contains("missing=1"));
+        assertTrue(text.contains("reload_required=1"));
+        assertTrue(text.contains("duplicate=1"));
     }
 
     @Test
