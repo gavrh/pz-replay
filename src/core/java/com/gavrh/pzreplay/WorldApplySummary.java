@@ -30,6 +30,20 @@ public final class WorldApplySummary {
         }
     }
 
+    public void appliedWithFlags(int flags, boolean partial) {
+        boolean recordedOnly = (flags & WorldLogCodec.FLAG_RECORDED_ONLY) != 0;
+        boolean reloadRequired = (flags & WorldLogCodec.FLAG_RELOAD_REQUIRED) != 0;
+        if (recordedOnly && reloadRequired) {
+            recordedOnlyReloadRequired(partial);
+        } else if (recordedOnly) {
+            recordedOnly(partial);
+        } else if (reloadRequired) {
+            reloadRequired(partial);
+        } else {
+            applied(partial);
+        }
+    }
+
     public void recordedOnly() {
         recordedOnly(false);
     }

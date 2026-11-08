@@ -153,12 +153,71 @@ class WorldApplyPlanTest {
     }
 
     @Test
-    void zeroVehicleQuaternionIsRejected() {
+    void vehiclePoseTransformAndPositionAgreeImmediately() {
         WorldVehicleState vehicle = new WorldVehicleState(
             WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
-            true, true, 10f, 20f, 0f, 0.15f, 0f, 0f, 0f, 0f);
+            true, true, 10790.5f, 10274f, 0f, 0.15f, 0f, 0f, 0f, 1f);
 
-        assertThrows(IllegalArgumentException.class, () -> WorldVehiclePose.of(vehicle, 0f, 0f));
+        WorldVehiclePose pose = WorldVehiclePose.of(vehicle, 1000f, 2000f);
+
+        assertEquals(vehicle.poseX(), pose.originX() + 1000f);
+        assertEquals(vehicle.poseY(), pose.originZ() + 2000f);
+        assertEquals(vehicle.posePhysicsZ(), pose.originY());
+        assertEquals(vehicle.poseX(), 10790.5f);
+        assertEquals(vehicle.poseY(), 10274f);
+    }
+
+    @Test
+    void recordedOnlyVehicleAppliesPoseAndSkipsPresence() {
+        WorldVehicleState present = new WorldVehicleState(
+            WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
+            true, false, 10f, 20f, 0f, 0.15f, 0f, 0f, 0f, 1f);
+        WorldVehicleState removed = new WorldVehicleState(
+            WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
+            false, false, 10f, 20f, 0f, 0.15f, 0f, 0f, 0f, 1f);
+
+        WorldApplyCommand presentCommand = WorldApplyPlanner.command(record(1, 2000,
+            WorldLogCodec.KIND_VEHICLE_STATE, present, WorldLogCodec.FLAG_RECORDED_ONLY));
+        WorldApplyCommand removedCommand = WorldApplyPlanner.command(record(2, 2000,
+            WorldLogCodec.KIND_VEHICLE_STATE, removed, WorldLogCodec.FLAG_RECORDED_ONLY));
+
+        assertEquals(WorldApplyCommand.Action.VEHICLE_STATE, presentCommand.action());
+        assertEquals(WorldApplyCommand.Action.VEHICLE_REMOVE, removedCommand.action());
+        assertTrue(removedCommand.reloadRequired());
+    }
+
+    @Test
+    void combinedVehicleFlagsCountBothCounters() {
+        WorldVehicleState vehicle = new WorldVehicleState(
+            WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
+            true, false, 10f, 20f, 0f, 0.15f, 0f, 0f, 0f, 1f);
+        int flags = WorldLogCodec.FLAG_RECORDED_ONLY | WorldLogCodec.FLAG_RELOAD_REQUIRED;
+
+        WorldApplyCommand command = WorldApplyPlanner.command(record(1, 2000,
+            WorldLogCodec.KIND_VEHICLE_STATE, vehicle, flags));
+        WorldApplySummary summary = new WorldApplySummary();
+        summary.appliedWithFlags(command.flags(), command.partial());
+
+        assertEquals(WorldApplyCommand.Action.VEHICLE_STATE, command.action());
+        assertTrue(command.reloadRequired());
+        assertEquals(1, summary.recordedOnlyCount());
+        assertEquals(1, summary.reloadRequiredCount());
+        assertEquals(0, summary.appliedCount());
+        assertEquals(0, summary.skippedCount());
+        assertEquals(0, summary.partialCount());
+    }
+
+    @Test
+    void zeroAndNonFiniteVehicleQuaternionsAreRejected() {
+        WorldVehicleState zero = new WorldVehicleState(
+            WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
+            true, true, 10f, 20f, 0f, 0.15f, 0f, 0f, 0f, 0f);
+        WorldVehicleState nan = new WorldVehicleState(
+            WorldTarget.vehicle(10, 20, 0, 77L, "Base.CarNormal"),
+            true, true, 10f, 20f, 0f, 0.15f, Float.NaN, 0f, 0f, 1f);
+
+        assertThrows(IllegalArgumentException.class, () -> WorldVehiclePose.of(zero, 0f, 0f));
+        assertThrows(IllegalArgumentException.class, () -> WorldVehiclePose.of(nan, 0f, 0f));
     }
 
     @Test
@@ -206,6 +265,19 @@ class WorldApplyPlanTest {
         assertEquals(WorldApplyCommand.Action.SKIP_RELOAD_REQUIRED, reload.action());
         assertEquals(WorldApplyCommand.Action.VEHICLE_REMOVE, vehicle.action());
         assertTrue(vehicle.reloadRequired());
+    }
+
+    @Test
+    void combinedRecordedOnlyReloadRequiredKeepsBothFlags() {
+        WorldDoorState door = door(10, 20, false);
+        int flags = WorldLogCodec.FLAG_RECORDED_ONLY | WorldLogCodec.FLAG_RELOAD_REQUIRED;
+
+        WorldApplyCommand command = WorldApplyPlanner.command(record(1, 500,
+            WorldLogCodec.KIND_OBJECT_STATE, door, flags));
+
+        assertEquals(WorldApplyCommand.Action.SKIP_RECORDED_ONLY, command.action());
+        assertTrue(command.reloadRequired());
+        assertEquals(flags, command.flags());
     }
 
     @Test

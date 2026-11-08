@@ -33,12 +33,14 @@ final class WorldApplier {
     }
 
     void apply(WorldApplyCommand command, WorldApplySummary summary) {
-        if (command.action() == WorldApplyCommand.Action.VEHICLE_REMOVE) {
-            summary.recordedOnlyReloadRequired(command.partial());
-            return;
-        }
         switch (command.action()) {
-            case SKIP_RECORDED_ONLY -> summary.recordedOnly(command.partial());
+            case SKIP_RECORDED_ONLY -> {
+                if (command.reloadRequired()) {
+                    summary.recordedOnlyReloadRequired(command.partial());
+                } else {
+                    summary.recordedOnly(command.partial());
+                }
+            }
             case SKIP_RELOAD_REQUIRED -> summary.reloadRequired(command.partial());
             case SKIP_UNSUPPORTED -> summary.unsupported();
             case DOOR_STATE -> applyDoorState(command, summary);
@@ -50,7 +52,7 @@ final class WorldApplier {
             case BARRICADE_STATE -> applyBarricadeState(command, summary);
             case BARRICADE_REMOVE -> removeBarricade(command, summary);
             case BARRICADE_ADD -> addBarricade(command, summary);
-            case VEHICLE_STATE -> applyVehicleState(command, summary);
+            case VEHICLE_STATE, VEHICLE_REMOVE -> applyVehicleState(command, summary);
             case GENERIC_ADD -> addGeneric(command, summary);
             case GENERIC_REMOVE -> removeGeneric(command, summary);
             default -> {
@@ -263,6 +265,10 @@ final class WorldApplier {
         WorldVehicleState state = (WorldVehicleState) command.record();
         BaseVehicle vehicle = findVehicle(state);
         if (vehicle == null) {
+            if (command.action() == WorldApplyCommand.Action.VEHICLE_REMOVE) {
+                summary.recordedOnlyReloadRequired(command.partial());
+                return;
+            }
             IsoCell cell = cell();
             System.out.println("[pz-replay] world vehicle missing sql="
                 + state.target().sqlId() + " script=" + state.target().script()
@@ -292,7 +298,11 @@ final class WorldApplier {
         vehicle.setY(state.poseY());
         vehicle.polyDirty = true;
         vehicle.setHeadlightsOn(state.headlightsOn());
-        applied(command, summary);
+        if (command.action() == WorldApplyCommand.Action.VEHICLE_REMOVE) {
+            summary.recordedOnlyReloadRequired(command.partial());
+        } else {
+            summary.appliedWithFlags(command.flags(), command.partial());
+        }
     }
 
     private void addGeneric(WorldApplyCommand command, WorldApplySummary summary) {
