@@ -284,6 +284,10 @@ public final class GhostMotionController {
         camera.update(ghost, delta);
     }
 
+    void setCameraBounds(CameraBounds bounds) {
+        camera.setBounds(bounds);
+    }
+
     public boolean setCameraMode(CameraMode mode, GhostActor ghost) {
         return camera.setMode(mode, ghost);
     }

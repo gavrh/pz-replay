@@ -17,6 +17,7 @@ public final class CameraController {
 
     private final FreeCamera freeCamera = new FreeCamera();
     private final CameraSmoothing smoothing = new CameraSmoothing();
+    private CameraBounds bounds = CameraBounds.empty();
     private CameraMode mode = CameraMode.PLAYER;
     private CameraMode modeBeforeFree = CameraMode.PLAYER;
     private boolean returningToPlayer;
@@ -41,7 +42,7 @@ public final class CameraController {
             switch (requested) {
                 case FREE -> enterFree(player, camera);
                 case FOLLOW_GHOST -> beginFollow(ghost, player, camera);
-                case PLAYER -> beginPlayer(camera);
+                case PLAYER -> beginPlayer(player, camera);
             }
             mode = requested;
             IsoCamera.setCameraCharacter(player);
@@ -90,10 +91,11 @@ public final class CameraController {
         }
         if (mode == CameraMode.FOLLOW_GHOST) {
             if (ghost != null) {
-                smoothing.setTarget(ghost.getX() - player.getX(),
-                    ghost.getY() - player.getY());
+                smoothing.setTarget(
+                    bounds.clampOffsetX(player.getX(), ghost.getX() - player.getX()),
+                    bounds.clampOffsetY(player.getY(), ghost.getY() - player.getY()));
                 smoothing.update(clampDelta(deltaSeconds));
-                applySmoothing(camera);
+                applySmoothing(player, camera);
             }
             return;
         }
@@ -102,7 +104,7 @@ public final class CameraController {
             return;
         }
         if (returningToPlayer) {
-            updateReturnToPlayer(camera, deltaSeconds);
+            updateReturnToPlayer(player, camera, deltaSeconds);
             return;
         }
         clearCameraOffsets();
@@ -119,7 +121,7 @@ public final class CameraController {
                 if (!smoothing.isActive()) {
                     snapFollow(ghost, player, camera);
                 } else {
-                    applySmoothing(camera);
+                    applySmoothing(player, camera);
                 }
             }
             return;
@@ -129,7 +131,7 @@ public final class CameraController {
             return;
         }
         if (returningToPlayer) {
-            applySmoothing(camera);
+            applySmoothing(player, camera);
             return;
         }
         clearCameraOffsets();
@@ -146,6 +148,11 @@ public final class CameraController {
         }
         snapFollow(ghost, player, camera);
         camera.center();
+    }
+
+    public void setBounds(CameraBounds bounds) {
+        this.bounds = bounds == null ? CameraBounds.empty() : bounds;
+        freeCamera.setBounds(this.bounds);
     }
 
     public void restore() {
@@ -204,11 +211,11 @@ public final class CameraController {
         }
         return String.format(Locale.ROOT,
             "camera=%s offset=%.3f,%.3f player=%.3f,%.3f ghost=%s on_screen=%s"
-                + " loaded=%s model=%s visible=%s",
+                + " loaded=%s model=%s visible=%s bounds=%s",
             mode.id(), camera.deferedX, camera.deferedY, player.getX(), player.getY(),
             ghost == null ? "none" : String.format(Locale.ROOT, "%.3f,%.3f",
                 ghost.getX(), ghost.getY()),
-            screen, loaded, model, visible);
+            screen, loaded, model, visible, bounds.text());
     }
 
     public static void restorePlayerCamera() {
@@ -244,11 +251,13 @@ public final class CameraController {
     private void beginFollow(GhostActor ghost, IsoPlayer player, PlayerCamera camera) {
         returningToPlayer = false;
         smoothing.resetTo(camera.deferedX, camera.deferedY);
-        smoothing.setTarget(ghost.getX() - player.getX(), ghost.getY() - player.getY());
-        applySmoothing(camera);
+        smoothing.setTarget(
+            bounds.clampOffsetX(player.getX(), ghost.getX() - player.getX()),
+            bounds.clampOffsetY(player.getY(), ghost.getY() - player.getY()));
+        applySmoothing(player, camera);
     }
 
-    private void beginPlayer(PlayerCamera camera) {
+    private void beginPlayer(IsoPlayer player, PlayerCamera camera) {
         returningToPlayer = true;
         smoothing.resetTo(camera.deferedX, camera.deferedY);
         smoothing.setTarget(0.0f, 0.0f);
@@ -258,10 +267,11 @@ public final class CameraController {
             clearCameraOffsets();
             return;
         }
-        applySmoothing(camera);
+        applySmoothing(player, camera);
     }
 
-    private void updateReturnToPlayer(PlayerCamera camera, double deltaSeconds) {
+    private void updateReturnToPlayer(IsoPlayer player, PlayerCamera camera,
+        double deltaSeconds) {
         smoothing.setTarget(0.0f, 0.0f);
         smoothing.update(clampDelta(deltaSeconds));
         if (smoothing.isAtTarget()) {
@@ -270,7 +280,7 @@ public final class CameraController {
             clearCameraOffsets();
             return;
         }
-        applySmoothing(camera);
+        applySmoothing(player, camera);
     }
 
     private void updateFreeCamera(IsoPlayer player, PlayerCamera camera, double deltaSeconds) {
@@ -306,14 +316,16 @@ public final class CameraController {
         camera.deferedY = freeCamera.offsetY(player.getY());
     }
 
-    private void applySmoothing(PlayerCamera camera) {
-        camera.deferedX = smoothing.getX();
-        camera.deferedY = smoothing.getY();
+    private void applySmoothing(IsoPlayer player, PlayerCamera camera) {
+        camera.deferedX = bounds.clampOffsetX(player.getX(), smoothing.getX());
+        camera.deferedY = bounds.clampOffsetY(player.getY(), smoothing.getY());
     }
 
     private void snapFollow(GhostActor ghost, IsoPlayer player, PlayerCamera camera) {
-        smoothing.resetTo(ghost.getX() - player.getX(), ghost.getY() - player.getY());
-        applySmoothing(camera);
+        smoothing.resetTo(
+            bounds.clampOffsetX(player.getX(), ghost.getX() - player.getX()),
+            bounds.clampOffsetY(player.getY(), ghost.getY() - player.getY()));
+        applySmoothing(player, camera);
     }
 
     private void logMode(String action, GhostActor ghost) {
