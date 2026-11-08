@@ -17,13 +17,21 @@ public final class LoadApi {
     private static SaveResolver.Result result =
         SaveResolver.Result.error("not-resolved", "");
     private static String lastReplayPath = "";
-    private static boolean pending;
+    private static volatile boolean pending;
     private static String pendingPath = "";
     private static long pendingStartedMillis;
     private static boolean worldReplay;
-    private static boolean contextPrepared;
+    private static volatile boolean contextPrepared;
     private static List<FormatMod> expectedMods = List.of();
     private static String expectedWorldVersion = "";
+    private static final NoSaveWindow VEHICLE_WINDOW = new NoSaveWindow();
+    private static final long VEHICLE_WINDOW_LIMIT_MILLIS = 30_000L;
+    private static long vehicleWindowOpenedMillis;
+    private static boolean reloadPending;
+    private static String reloadPath = "";
+    private static double reloadTargetSeconds;
+    private static boolean reloadExiting;
+    private static boolean reloadStarted;
 
     private LoadApi() {
     }
@@ -118,8 +126,10 @@ public final class LoadApi {
         }
         try {
             FormatInfo info = FormatReader.readInfo(Paths.get(lastReplayPath));
+            LoadingGate.start();
             WorldContextManager.prepare(lastReplayPath, info.metadata(), expectedWorldVersion);
             contextPrepared = true;
+            VEHICLE_WINDOW.begin();
             System.out.println("[pz-replay] load-play context prepared replay=" + lastReplayPath
                 + " folder=" + WorldContextManager.getFolderName()
                 + " mode=" + WorldContextManager.getGameMode());
@@ -127,6 +137,7 @@ public final class LoadApi {
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
             System.out.println("[pz-replay] load-play context failed replay=" + lastReplayPath
                 + " error=" + message(exception));
+            VEHICLE_WINDOW.end();
             WorldContextManager.cleanup("prepare failed");
             return false;
         }
@@ -172,8 +183,135 @@ public final class LoadApi {
     }
 
     public static void cleanupContext(String reason) {
+        LoadingGate.clear();
+        closeVehicleWindow();
+        VEHICLE_WINDOW.end();
         WorldContextManager.cleanup(reason == null ? "requested" : reason);
         contextPrepared = false;
+    }
+
+    static boolean isContextLoading() {
+        return pending && isContextPrepared();
+    }
+
+    public static synchronized boolean enterVehicleWindow() {
+        if (!isContextPrepared() || !pending || !VEHICLE_WINDOW.open()) {
+            return false;
+        }
+        vehicleWindowOpenedMillis = System.currentTimeMillis();
+        Core.getInstance().setNoSave(false);
+        System.out.println("[pz-replay] context vehicle window open no_save="
+            + Core.getInstance().isNoSave());
+        return true;
+    }
+
+    public static synchronized void exitVehicleWindow() {
+        if (!VEHICLE_WINDOW.close()) {
+            return;
+        }
+        vehicleWindowOpenedMillis = 0L;
+        Core.getInstance().setNoSave(true);
+        System.out.println("[pz-replay] context vehicle window closed no_save="
+            + Core.getInstance().isNoSave());
+    }
+
+    static synchronized void guardVehicleWindow() {
+        if (!VEHICLE_WINDOW.isOpen() || vehicleWindowOpenedMillis == 0L) {
+            return;
+        }
+        if (System.currentTimeMillis() - vehicleWindowOpenedMillis
+            < VEHICLE_WINDOW_LIMIT_MILLIS) {
+            return;
+        }
+        System.out.println("[pz-replay] context vehicle window closed by timeout");
+        exitVehicleWindow();
+    }
+
+    private static synchronized void closeVehicleWindow() {
+        if (VEHICLE_WINDOW.close()) {
+            vehicleWindowOpenedMillis = 0L;
+            Core.getInstance().setNoSave(true);
+            System.out.println("[pz-replay] context vehicle window closed no_save="
+                + Core.getInstance().isNoSave());
+        }
+    }
+
+    public static String verifyContextVehicles() {
+        if (!isContextPrepared()) {
+            return "context is not prepared";
+        }
+        return ContextVerifier.verifyVehicles(lastReplayPath);
+    }
+
+    public static void requestReload(String path, double seconds) {
+        reloadPending = true;
+        reloadPath = path == null ? "" : path;
+        reloadTargetSeconds = Math.max(0.0, seconds);
+        reloadExiting = false;
+        reloadStarted = false;
+        System.out.println("[pz-replay] world reload requested path=" + reloadPath
+            + " target=" + reloadTargetSeconds);
+    }
+
+    public static boolean hasReloadRequest() {
+        return reloadPending;
+    }
+
+    public static String getReloadPath() {
+        return reloadPath;
+    }
+
+    public static double getReloadTargetSeconds() {
+        return reloadTargetSeconds;
+    }
+
+    public static boolean isReloadExiting() {
+        return reloadExiting;
+    }
+
+    public static void markReloadExiting() {
+        reloadExiting = true;
+    }
+
+    public static boolean isReloadStarted() {
+        return reloadStarted;
+    }
+
+    public static void markReloadStarted() {
+        reloadStarted = true;
+    }
+
+    public static double getPendingSeekSeconds() {
+        return reloadPending ? reloadTargetSeconds : 0.0;
+    }
+
+    public static void finishReload() {
+        if (!reloadPending) {
+            return;
+        }
+        System.out.println("[pz-replay] world reload finished path=" + reloadPath
+            + " target=" + reloadTargetSeconds);
+        reloadPending = false;
+        reloadPath = "";
+        reloadTargetSeconds = 0.0;
+        reloadExiting = false;
+        reloadStarted = false;
+    }
+
+    public static void failReload(String reason) {
+        if (!reloadPending) {
+            return;
+        }
+        System.out.println("[pz-replay] world reload failed path=" + reloadPath
+            + " target=" + reloadTargetSeconds
+            + " reason=" + (reason == null ? "" : reason));
+        reloadPending = false;
+        reloadPath = "";
+        reloadTargetSeconds = 0.0;
+        reloadExiting = false;
+        reloadStarted = false;
+        PZReplayLua.state().playbackFailed("world replay reload failed: "
+            + (reason == null ? "" : reason));
     }
 
     public static void cleanupStaleContexts() {
@@ -199,6 +337,7 @@ public final class LoadApi {
     }
 
     public static void installLifecycle() {
+        LoadingGate.start();
         WorldContextManager.installShutdownHook();
         WorldContextManager.cleanupStale();
     }
@@ -247,6 +386,8 @@ public final class LoadApi {
             pendingPath = "";
             pendingStartedMillis = 0L;
         }
+        failReload(reason == null ? "cancelled" : reason);
+        LoadingGate.clear();
         if (contextPrepared) {
             cleanupContext(reason == null ? "cancelled" : reason);
         }

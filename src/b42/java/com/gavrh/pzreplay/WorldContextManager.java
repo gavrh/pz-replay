@@ -11,9 +11,14 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 import zombie.core.Core;
 import zombie.iso.IsoWorld;
 
@@ -30,6 +35,8 @@ final class WorldContextManager {
     private static String gameMode = "";
     private static Path contextPath;
     private static Path saveRoot;
+    private static Path realSavePath;
+    private static String realSaveHash = "";
     private static Path markerPath;
     private static Path backupPath;
     private static String packageId = "";
@@ -66,6 +73,8 @@ final class WorldContextManager {
                 gameMode = safeGameMode(metadata.gameMode());
                 packageId = Long.toHexString(metadata.startTimeMillis());
                 saveRoot = Paths.get(Core.getMyDocumentFolder(), "Saves", gameMode);
+                realSavePath = realSavePath(saveRoot, metadata.saveName());
+                realSaveHash = hashTree(realSavePath);
                 contextPath = saveRoot.resolve(folderName).normalize();
                 markerPath = contexts.resolve(id + MARKER_EXTENSION);
                 backupPath = contexts.resolve(id + ".latestSave.bak");
@@ -157,6 +166,8 @@ final class WorldContextManager {
             gameMode = "";
             contextPath = null;
             saveRoot = null;
+            realSavePath = null;
+            realSaveHash = "";
             markerPath = null;
             backupPath = null;
             packageId = "";
@@ -386,6 +397,60 @@ final class WorldContextManager {
         } catch (IOException | RuntimeException exception) {
             System.out.println("[pz-replay] context marker delete failed: "
                 + exception.getMessage());
+        }
+    }
+
+    static boolean realSaveUnchanged() {
+        synchronized (LOCK) {
+            if (realSaveHash.isBlank() || realSavePath == null) {
+                return true;
+            }
+            return realSaveHash.equals(hashTree(realSavePath));
+        }
+    }
+
+    private static Path realSavePath(Path modeRoot, String saveName) {
+        if (modeRoot == null || saveName == null || saveName.isBlank()) {
+            return null;
+        }
+        try {
+            Path root = modeRoot.toAbsolutePath().normalize();
+            Path candidate = root.resolve(Paths.get(saveName)).normalize();
+            if (!candidate.startsWith(root) || candidate.equals(root)) {
+                return null;
+            }
+            return candidate;
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private static String hashTree(Path root) {
+        if (root == null || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            return "";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            List<Path> files;
+            try (Stream<Path> stream = Files.walk(root)) {
+                files = stream.filter(Files::isRegularFile)
+                    .sorted(Comparator.comparing(path -> root.relativize(path).toString()))
+                    .toList();
+            }
+            for (Path file : files) {
+                digest.update(root.relativize(file).toString().getBytes(StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+                try (java.io.InputStream input = Files.newInputStream(file)) {
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        digest.update(buffer, 0, read);
+                    }
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (IOException | NoSuchAlgorithmException | RuntimeException exception) {
+            return "";
         }
     }
 

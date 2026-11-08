@@ -255,8 +255,8 @@ public final class PlaybackApi {
         }
         if (worldPlayback != null && WorldSeekDecision.seek(true, controller.getCurrentTime(),
             seconds) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
-            warnWorld("world replay cannot seek backward without a context reload");
-            return false;
+            LoadApi.requestReload(lastPath, seconds);
+            return true;
         }
         if (ghost == null || !controller.seek(ghost, seconds)) {
             return false;
@@ -278,8 +278,8 @@ public final class PlaybackApi {
         }
         if (worldPlayback != null
             && WorldSeekDecision.restart(true) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
-            warnWorld("world replay cannot restart without a context reload");
-            return false;
+            LoadApi.requestReload(lastPath, 0.0);
+            return true;
         }
         if (ghost == null || !controller.restart(ghost)) {
             return false;
@@ -499,14 +499,6 @@ public final class PlaybackApi {
                 chunkMap.ProcessChunkPos(anchor);
             }
         }
-    }
-
-    private static void warnWorld(String message) {
-        List<String> warnings = new ArrayList<>(
-            PZReplayLua.state().getCompatibilityWarnings());
-        addWarning(warnings, message);
-        PZReplayLua.state().setCompatibilityWarnings(warnings);
-        System.out.println("[pz-replay] world playback warning " + message);
     }
 
     private static void syncTransportState() {
