@@ -20,12 +20,26 @@ public final class WorldApplySummary {
     private long duplicate;
 
     public void applied() {
+        applied(false);
+    }
+
+    public void applied(boolean partial) {
         applied++;
+        if (partial) {
+            partial();
+        }
     }
 
     public void recordedOnly() {
+        recordedOnly(false);
+    }
+
+    public void recordedOnly(boolean partial) {
         recordedOnly++;
         skipped++;
+        if (partial) {
+            partial();
+        }
     }
 
     public void partial() {
@@ -58,14 +72,28 @@ public final class WorldApplySummary {
     }
 
     public void reloadRequired() {
+        reloadRequired(false);
+    }
+
+    public void reloadRequired(boolean partial) {
         reloadRequired++;
         skipped++;
+        if (partial) {
+            partial();
+        }
     }
 
     public void recordedOnlyReloadRequired() {
+        recordedOnlyReloadRequired(false);
+    }
+
+    public void recordedOnlyReloadRequired(boolean partial) {
         recordedOnly++;
         reloadRequired++;
         skipped++;
+        if (partial) {
+            partial();
+        }
     }
 
     public boolean warnOnce(String identity, String message) {

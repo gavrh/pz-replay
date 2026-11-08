@@ -244,6 +244,54 @@ class WorldApplyPlanTest {
     }
 
     @Test
+    void recordedOnlyPartialCountsBothCategories() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.recordedOnly(true);
+
+        assertEquals(1, summary.recordedOnlyCount());
+        assertEquals(1, summary.partialCount());
+        assertEquals(1, summary.skippedCount());
+    }
+
+    @Test
+    void appliedPartialCountsOnlyPartial() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.applied(true);
+
+        assertEquals(1, summary.appliedCount());
+        assertEquals(1, summary.partialCount());
+        assertEquals(0, summary.skippedCount());
+        assertEquals(0, summary.recordedOnlyCount());
+    }
+
+    @Test
+    void reloadRequiredPartialCountsBothCategories() {
+        WorldApplySummary summary = new WorldApplySummary();
+
+        summary.reloadRequired(true);
+
+        assertEquals(1, summary.reloadRequiredCount());
+        assertEquals(1, summary.partialCount());
+        assertEquals(1, summary.skippedCount());
+    }
+
+    @Test
+    void recordedOnlyAddKeepsItsPartialFlag() {
+        WorldGenericState chair = new WorldGenericState(
+            WorldTarget.generic(10, 20, 0, 0, "zombie.iso.IsoObject"), "chair", 3, false);
+        WorldObjectAdded added = new WorldObjectAdded(chair.target(), chair.classId(),
+            chair.sprite(), chair.target().type(), chair.objectIndex(), 2, null);
+
+        WorldApplyCommand command = WorldApplyPlanner.command(record(1, 1500,
+            WorldLogCodec.KIND_OBJECT_ADDED, added, WorldLogCodec.FLAG_PARTIAL));
+
+        assertEquals(WorldApplyCommand.Action.SKIP_RECORDED_ONLY, command.action());
+        assertTrue(command.partial());
+    }
+
+    @Test
     void truncationFreezesAtLastRecordAndWarns() {
         WorldApplyPlan plan = new WorldApplyPlan(List.of(
             record(1, 0, WorldLogCodec.KIND_OBJECT_STATE, door(10, 20, false)),
