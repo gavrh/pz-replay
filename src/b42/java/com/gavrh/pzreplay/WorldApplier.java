@@ -20,6 +20,7 @@ import zombie.vehicles.BaseVehicle;
 
 final class WorldApplier {
     private static final Field WINDOW_OPEN = field(IsoWindow.class, "open");
+    private static final Field WINDOW_PERMA_LOCKED = field(IsoWindow.class, "permaLocked");
     private static final Field WINDOW_CLOSED_SPRITE = field(IsoWindow.class, "closedSprite");
     private static final Field WINDOW_OPEN_SPRITE = field(IsoWindow.class, "openSprite");
     private static final Field BARRICADE_PLANK_HEALTH =
@@ -127,11 +128,8 @@ final class WorldApplier {
             skipMissingOrMismatched(state, summary, "window");
             return;
         }
-        boolean partial = applyWindow(window, state);
-        applied(command, summary);
-        if (partial) {
-            summary.partial();
-        }
+        boolean partial = applyWindow(window, state, summary);
+        applied(command, summary, partial);
     }
 
     private void removeWindow(WorldApplyCommand command, WorldApplySummary summary) {
@@ -166,6 +164,7 @@ final class WorldApplier {
             return;
         }
         IsoWindow existing = findWindow(added.target());
+        boolean partial = false;
         if (existing == null) {
             String sprite = added.sprite();
             IsoSprite iso = sprite.isBlank() ? null
@@ -180,18 +179,14 @@ final class WorldApplier {
             String actual = existing.getSpriteName();
             if (!sprite.equals(actual)) {
                 summary.warn("window sprite mismatch expected=" + sprite + " actual=" + actual);
-                summary.partial();
+                partial = true;
             }
         }
         WorldStateRecord state = added.state();
-        boolean partial = false;
         if (state instanceof WorldWindowState windowState) {
-            partial = applyWindow(existing, windowState);
+            partial |= applyWindow(existing, windowState, summary);
         }
-        applied(command, summary);
-        if (partial) {
-            summary.partial();
-        }
+        applied(command, summary, partial);
     }
 
     private void applyBarricadeState(WorldApplyCommand command, WorldApplySummary summary) {
@@ -356,7 +351,8 @@ final class WorldApplier {
         }
     }
 
-    private boolean applyWindow(IsoWindow window, WorldWindowState state) {
+    private boolean applyWindow(IsoWindow window, WorldWindowState state,
+        WorldApplySummary summary) {
         boolean partial = false;
         WorldWindowOpen open = WorldWindowOpen.of(window.IsOpen(), state.open(),
             WINDOW_OPEN != null);
@@ -372,7 +368,15 @@ final class WorldApplier {
         window.setSmashed(state.smashed());
         window.setGlassRemoved(state.glassRemoved());
         window.setIsLocked(state.locked());
-        window.setPermaLocked(state.permaLocked() == 2 ? null : state.permaLocked() == 1);
+        if (state.permaLocked() == 2) {
+            if (!WorldWindowPermaLock.clear(window, WINDOW_PERMA_LOCKED)) {
+                partial = true;
+                warnOnce(summary, WorldIdentity.of(state),
+                    "window perma-lock field is unavailable");
+            }
+        } else {
+            window.setPermaLocked(state.permaLocked() == 1);
+        }
         return partial;
     }
 
