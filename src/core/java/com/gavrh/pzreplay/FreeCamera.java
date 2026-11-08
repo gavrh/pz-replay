@@ -6,6 +6,7 @@ public final class FreeCamera {
     private float x;
     private float y;
     private boolean positioned;
+    private CameraBounds bounds = CameraBounds.empty();
 
     public boolean moveTo(float x, float y) {
         if (!Float.isFinite(x) || !Float.isFinite(y)) {
@@ -28,7 +29,15 @@ public final class FreeCamera {
     }
 
     public void clampTo(float anchorX, float anchorY) {
-        if (!positioned || !Float.isFinite(anchorX) || !Float.isFinite(anchorY)) {
+        if (!positioned) {
+            return;
+        }
+        if (bounds.isBounded()) {
+            x = bounds.clampX(x);
+            y = bounds.clampY(y);
+            return;
+        }
+        if (!Float.isFinite(anchorX) || !Float.isFinite(anchorY)) {
             return;
         }
         float offsetX = x - anchorX;
@@ -48,6 +57,13 @@ public final class FreeCamera {
 
     public float offsetY(float anchorY) {
         return positioned ? y - anchorY : 0.0f;
+    }
+
+    public void setBounds(CameraBounds bounds) {
+        this.bounds = bounds == null ? CameraBounds.empty() : bounds;
+        if (positioned) {
+            clampTo(x, y);
+        }
     }
 
     public boolean isPositioned() {

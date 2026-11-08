@@ -37,6 +37,8 @@ class WorldFormatTest {
 
         FormatInfo info = FormatReader.readInfo(file);
         assertEquals("padded", info.worldStatus());
+        assertEquals(16, info.worldPaddingTiles());
+        assertEquals("complete", info.worldCoverageStatus());
         assertEquals(metadata().mapName(), info.metadata().mapName());
         assertEquals("249", FormatReader.readSourceWorldVersion(file));
     }

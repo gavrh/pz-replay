@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -85,5 +86,64 @@ class FreeCameraTest {
         assertFalse(camera.isPositioned());
         assertEquals(0.0f, camera.offsetX(0.0f));
         assertEquals(0.0f, camera.offsetY(0.0f));
+    }
+
+    @Test
+    void boundsClampAtEachEdge() {
+        FreeCamera camera = new FreeCamera();
+        camera.setBounds(bounds());
+
+        camera.moveTo(10.5f, 20.5f);
+        camera.pan(-100.0f, 0.0f, 10.5f, 20.5f);
+        assertEquals(10.0f, camera.getX(), 0.001f);
+        camera.pan(100.0f, 0.0f, 10.5f, 20.5f);
+        assertEquals(11.0f, camera.getX(), 0.001f);
+        camera.pan(0.0f, -100.0f, 10.5f, 20.5f);
+        assertEquals(20.0f, camera.getY(), 0.001f);
+        camera.pan(0.0f, 100.0f, 10.5f, 20.5f);
+        assertEquals(21.0f, camera.getY(), 0.001f);
+    }
+
+    @Test
+    void boundsClampAtEachCorner() {
+        FreeCamera camera = new FreeCamera();
+        camera.setBounds(bounds());
+
+        camera.moveTo(10.5f, 20.5f);
+        camera.pan(-100.0f, -100.0f, 10.5f, 20.5f);
+        assertEquals(10.0f, camera.getX(), 0.001f);
+        assertEquals(20.0f, camera.getY(), 0.001f);
+        camera.pan(100.0f, 100.0f, 10.5f, 20.5f);
+        assertEquals(11.0f, camera.getX(), 0.001f);
+        assertEquals(21.0f, camera.getY(), 0.001f);
+    }
+
+    @Test
+    void settingBoundsReclampsThePosition() {
+        FreeCamera camera = new FreeCamera();
+        camera.moveTo(50.0f, 50.0f);
+
+        camera.setBounds(bounds());
+
+        assertEquals(11.0f, camera.getX(), 0.001f);
+        assertEquals(21.0f, camera.getY(), 0.001f);
+    }
+
+    @Test
+    void emptyBoundsKeepTheDefaultRadius() {
+        FreeCamera camera = new FreeCamera();
+        camera.setBounds(CameraBounds.empty());
+        camera.moveTo(0.0f, 0.0f);
+
+        camera.pan(100.0f, 0.0f, 0.0f, 0.0f);
+
+        assertEquals(FreeCamera.MAX_DISTANCE_TILES, camera.getX(), 0.001f);
+    }
+
+    private static CameraBounds bounds() {
+        return CameraBounds.fromRecords(List.of(new WorldLogRecord(
+            WorldLogCodec.KIND_OBJECT_STATE, 1L, 0L, 0, new WorldDoorState(
+                WorldTarget.door(10, 20, 0, 0), "door", 0, false, false, false, 100,
+                0L, false))), 0);
     }
 }
