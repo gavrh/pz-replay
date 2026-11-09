@@ -116,6 +116,10 @@ final class CaptureRecorder {
         long nowMillis = System.currentTimeMillis();
         session.start(nowMillis);
         worldCapture.start(worldEnabled, worldPadding, resolvedName);
+        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_START, captureName,
+            "world=" + (worldEnabled ? "padded" : "off"),
+            "padding=" + worldPadding,
+            "rate=" + sampleRateHz);
         try {
             if (metadata.appearance().isCurrent()) {
                 appearanceCapture.markBaseline(metadata.appearance().decode());
@@ -703,10 +707,19 @@ final class CaptureRecorder {
                 + " path=" + lastReplayPath + " bytes=" + Files.size(path)
                 + " " + lastReplaySummary
                 + " " + worldCapture.getSummary());
+            MeasurementLogStore.event(MeasurementLog.EVENT_RECORDING_SAVED, captureName,
+                "bytes=" + Files.size(path),
+                "duration_ms=" + durationMillis,
+                "world=" + (world == null ? "off" : "padded"),
+                "changes=" + worldCapture.getChangeCount(),
+                "samples=" + worldCapture.getSampleCount(),
+                "status=" + (world == null ? "off" : worldCapture.getCoverageStatus()));
         } catch (IOException | ReplayFormatException exception) {
             lastError = "replay write failed: " + exception.getMessage();
             System.out.println("[pz-replay] recording failed name=" + captureName
                 + " path=" + path + " error=" + lastError);
+            MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_FAILED, captureName,
+                "reason=" + lastError);
         } finally {
             worldCapture.reset();
         }
