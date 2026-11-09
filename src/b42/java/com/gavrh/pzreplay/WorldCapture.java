@@ -24,10 +24,10 @@ final class WorldCapture {
     private static final long SAMPLE_INTERVAL_MILLIS =
         1_000L / WorldPackage.DEFAULT_SAMPLE_RATE_HZ;
 
-    private record Build(byte[] base, long sourceBytes, long copyMillis, long packMillis,
-        String failure) {
+    private record Build(Path base, long baseBytes, long sourceBytes, long copyMillis,
+        long packMillis, String failure) {
         static Build failed(String message) {
-            return new Build(new byte[0], 0L, 0L, 0L, message);
+            return new Build(null, 0L, 0L, 0L, 0L, message);
         }
     }
 
@@ -43,12 +43,13 @@ final class WorldCapture {
 
     private Future<Build> future;
     private Path staging;
+    private Path logPath;
     private String captureName = "";
     private int paddingTiles;
     private boolean requested;
     private boolean t0Complete;
     private String failure = "";
-    private WorldPackage packageData;
+    private WorldPackageStaged packageData;
     private Build readyBuild;
     private WorldLogBuilder logBuilder;
     private long coverageObjects;
@@ -60,7 +61,7 @@ final class WorldCapture {
     private String coverageStatus = "complete";
     private String summary = "world=off";
 
-    synchronized void start(boolean enabled, int padding, String captureName) {
+    synchronized void start(boolean enabled, int padding, String captureName, Path captureStaging) {
         reset();
         if (!enabled) {
             return;
@@ -68,17 +69,16 @@ final class WorldCapture {
         requested = true;
         paddingTiles = padding;
         this.captureName = captureName == null ? "" : captureName;
-        Path replayDirectory = ReplayStorage.directory();
         try {
-            Files.createDirectories(replayDirectory);
-            staging = replayDirectory.resolve(".pzrp-tmp")
-                .resolve("world-" + safeName(captureName));
+            Files.createDirectories(captureStaging);
+            staging = captureStaging.resolve("world");
             Files.createDirectories(staging);
         } catch (IOException | RuntimeException exception) {
             fail("staging is unavailable: " + message(exception));
             return;
         }
         Path archive = staging.resolve("world_base.zip");
+        logPath = staging.resolve("world_log.pzwlog");
         String saveDirectory = currentSaveDirectory();
         if (saveDirectory.isBlank()) {
             fail("current save directory is unavailable");
@@ -89,6 +89,7 @@ final class WorldCapture {
             fail("current save directory does not exist");
             return;
         }
+        Path replayDirectory = ReplayStorage.directory();
         future = executor.submit(() -> build(source, archive, replayDirectory, this.captureName));
     }
 
@@ -108,7 +109,7 @@ final class WorldCapture {
         sample();
     }
 
-    synchronized WorldPackage finish() {
+    synchronized WorldPackageStaged finish() {
         if (!requested) {
             return null;
         }
@@ -129,6 +130,12 @@ final class WorldCapture {
             }
         }
         if (failure.isEmpty() && t0Complete) {
+            try {
+                logBuilder.close();
+            } catch (IOException exception) {
+                fail("world log could not be closed: " + message(exception));
+                return null;
+            }
             packageData = buildPackage();
             summary = formatSummary();
             System.out.println("[pz-replay] world capture finished " + summary);
@@ -165,6 +172,12 @@ final class WorldCapture {
             future.cancel(true);
             future = null;
         }
+        if (logBuilder != null) {
+            try {
+                logBuilder.close();
+            } catch (IOException ignored) {
+            }
+        }
         if (staging != null) {
             deleteRecursively(staging);
             staging = null;
@@ -175,6 +188,7 @@ final class WorldCapture {
         packageData = null;
         readyBuild = null;
         logBuilder = null;
+        logPath = null;
         captureName = "";
         coverageObjects = 0L;
         nextSampleMillis = 0L;
@@ -239,10 +253,10 @@ final class WorldCapture {
             }
         }
         try {
-            logBuilder = new WorldLogBuilder();
+            logBuilder = new WorldLogBuilder(logPath);
             logBuilder.appendT0(t0Records);
-        } catch (ReplayFormatException exception) {
-            fail("T0 sample could not be encoded: " + exception.getMessage());
+        } catch (IOException | ReplayFormatException exception) {
+            fail("T0 sample could not be encoded: " + message(exception));
             return;
         }
         readyBuild = build;
@@ -261,7 +275,6 @@ final class WorldCapture {
             "changes=" + logBuilder.changes(),
             "status=" + coverageStatus,
             "t0_ms=" + scan.durationMillis());
-        deleteStaging();
     }
 
     private void sample() {
@@ -310,14 +323,14 @@ final class WorldCapture {
         }
     }
 
-    private WorldPackage buildPackage() {
+    private WorldPackageStaged buildPackage() {
         if (readyBuild == null || logBuilder == null) {
             return null;
         }
-        byte[] log = logBuilder.payload();
-        return new WorldPackage(readyBuild.base(), log, paddingTiles,
-            WorldPackage.DEFAULT_SAMPLE_RATE_HZ, coverageStatus, coveredSquares.size(),
-            coverageObjects, logBuilder.changes(), worldVersion());
+        return new WorldPackageStaged(readyBuild.base(), logPath, readyBuild.baseBytes(),
+            logBuilder.bytes(), paddingTiles, WorldPackage.DEFAULT_SAMPLE_RATE_HZ,
+            coverageStatus, coveredSquares.size(), coverageObjects, logBuilder.changes(),
+            worldVersion());
     }
 
     private String formatSummary() {
@@ -325,7 +338,7 @@ final class WorldCapture {
             return "world=off";
         }
         StringBuilder builder = new StringBuilder("world=padded")
-            .append(" base_bytes=").append(readyBuild.base().length)
+            .append(" base_bytes=").append(readyBuild.baseBytes())
             .append(" base_copy_ms=").append(readyBuild.copyMillis())
             .append(" base_pack_ms=").append(readyBuild.packMillis())
             .append(" t0_objects=").append(coverageObjects)
@@ -388,8 +401,8 @@ final class WorldCapture {
             MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_END, captureId,
                 "ms=" + packMillis);
             deleteRecursively(copyRoot);
-            byte[] bytes = Files.readAllBytes(archive);
-            return new Build(bytes, inventory.totalBytes(), copyMillis, packMillis, "");
+            return new Build(archive, Files.size(archive), inventory.totalBytes(), copyMillis,
+                packMillis, "");
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
             return Build.failed("base capture failed: " + message(exception));
         }
@@ -411,6 +424,12 @@ final class WorldCapture {
         MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_FAILED, captureName,
             "reason=" + message);
         future = null;
+        if (logBuilder != null) {
+            try {
+                logBuilder.close();
+            } catch (IOException ignored) {
+            }
+        }
         deleteStaging();
     }
 
@@ -436,13 +455,6 @@ final class WorldCapture {
         } catch (RuntimeException exception) {
             return "";
         }
-    }
-
-    private static String safeName(String captureName) {
-        if (captureName == null || captureName.isBlank()) {
-            return "capture";
-        }
-        return captureName.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     private static String message(Exception exception) {

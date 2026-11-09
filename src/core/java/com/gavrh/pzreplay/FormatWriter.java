@@ -1,6 +1,9 @@
 package com.gavrh.pzreplay;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -19,6 +22,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 
 public final class FormatWriter {
     public static final int RECORD_BYTES = 40;
@@ -31,16 +35,16 @@ public final class FormatWriter {
     static final int MAX_MANIFEST_BYTES = 65_536;
     static final int MAX_SECTIONS = 64;
     static final int MAX_SECTION_ID = 64;
-    static final long MAX_COMPRESSED_BYTES = 1024L * 1024 * 1024;
-    static final long MAX_DECOMPRESSED_BYTES = 1024L * 1024 * 1024;
-    static final int MAX_FRAMES = 1_000_000;
-    static final int MAX_ACTOR_PAYLOAD = 64 * 1024 * 1024;
+    static final long MAX_COMPRESSED_BYTES = 2_000_000_000L;
+    static final long MAX_DECOMPRESSED_BYTES = 2_000_000_000L;
+    static final int MAX_FRAMES = 8_000_000;
+    static final int MAX_ACTOR_PAYLOAD = 320_000_000;
     static final int MAX_ACTOR_META_PAYLOAD = 1024 * 1024;
     static final int MAX_PREVIEW_PAYLOAD = 2 * 1024 * 1024;
     static final int MAX_MODS_PAYLOAD = 1024 * 1024;
     static final int MAX_MODS = 1024;
     static final int MAX_WORLD_BASE_PAYLOAD = 768 * 1024 * 1024;
-    static final int MAX_WORLD_LOG_PAYLOAD = 256 * 1024 * 1024;
+    static final int MAX_WORLD_LOG_PAYLOAD = 512 * 1024 * 1024;
     static final long ORPHAN_AGE_MILLIS = 24L * 60 * 60 * 1000;
 
     private static final byte[] PNG_SIGNATURE = {
@@ -72,40 +76,118 @@ public final class FormatWriter {
                 "actor frame count is outside the cap");
         }
 
-        List<FormatSection> sections = new ArrayList<>();
-        byte[] actorPayload = encodeFrames(metadata, frames);
-        sections.add(new FormatSection("actor/local", true, 1, actorPayload));
+        List<SectionSource> sections = new ArrayList<>();
+        sections.add(memorySource("actor/local", true, 1, encodeFrames(metadata, frames)));
 
         byte[] actorMetadata = FormatActorMetadata.encode(metadata);
         boolean hasActorMetadata = actorMetadata.length > 0;
         if (hasActorMetadata) {
-            sections.add(new FormatSection("actor_meta/local", false, 1, actorMetadata));
+            sections.add(memorySource("actor_meta/local", false, 1, actorMetadata));
         }
 
         List<FormatMod> resolvedMods = mods == null ? List.of() : mods;
         byte[] modsPayload = encodeMods(resolvedMods);
         boolean hasMods = modsPayload.length > 0;
         if (hasMods) {
-            sections.add(new FormatSection("mods", false, 1, modsPayload));
+            sections.add(memorySource("mods", false, 1, modsPayload));
         }
 
-        if (preview != null && preview.length > 0) {
-            if (preview.length > MAX_PREVIEW_PAYLOAD || !isPng(preview)) {
-                throw new FormatException(FormatReason.SECTION_TABLE,
-                    "preview is not a PNG within the cap");
-            }
-            sections.add(new FormatSection("preview", false, 1, preview));
-        }
+        addPreview(sections, preview);
 
         if (world != null) {
             validateWorldPackage(world);
-            sections.add(new FormatSection("world_base", true, 1, world.base()));
-            sections.add(new FormatSection("world_log", true, 1, world.log()));
+            sections.add(memorySource("world_base", true, 1, world.base()));
+            sections.add(memorySource("world_log", true, 1, world.log()));
         }
 
         FormatManifest manifest = FormatManifest.fromMetadata(metadata, frames.size(),
             hasActorMetadata, resolvedMods.size(), hasMods ? "1" : "", hasMods, world);
-        byte[] container = encodeContainer(manifest, sections);
+        writeContainer(target, manifest, sections);
+    }
+
+    public static void writeStaged(Path target, ReplayMetadata metadata,
+        CaptureFrameStage frames, List<FormatMod> mods, byte[] preview, WorldPackageStaged world)
+        throws IOException, ReplayFormatException {
+        if (metadata.formatVersion() != 1) {
+            throw new FormatException(FormatReason.UNSUPPORTED_VERSION,
+                "cannot write format version " + metadata.formatVersion());
+        }
+        if (frames == null) {
+            throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                "staged actor track is missing");
+        }
+        long frameCount = frames.frameCount();
+        if (frameCount < 1L || frameCount > MAX_FRAMES) {
+            throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                "actor frame count is outside the cap");
+        }
+        if (frames.bytes() != frameCount * RECORD_BYTES || !Files.isRegularFile(frames.path())) {
+            throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                "staged actor track is not readable");
+        }
+        double maximumSeconds = Math.max(0L,
+            metadata.endTimeMillis() - metadata.startTimeMillis()) / 1000.0;
+        float lastTime = lastFrameTime(frames.path(), frameCount);
+        if (lastTime < -0.0001f || lastTime > maximumSeconds + 0.001f) {
+            throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                "actor frame time is outside the recording range");
+        }
+
+        List<SectionSource> sections = new ArrayList<>();
+        sections.add(pathSource("actor/local", true, 1, frames.path(),
+            frameCount * RECORD_BYTES));
+
+        byte[] actorMetadata = FormatActorMetadata.encode(metadata);
+        boolean hasActorMetadata = actorMetadata.length > 0;
+        if (hasActorMetadata) {
+            sections.add(memorySource("actor_meta/local", false, 1, actorMetadata));
+        }
+
+        List<FormatMod> resolvedMods = mods == null ? List.of() : mods;
+        byte[] modsPayload = encodeMods(resolvedMods);
+        boolean hasMods = modsPayload.length > 0;
+        if (hasMods) {
+            sections.add(memorySource("mods", false, 1, modsPayload));
+        }
+
+        addPreview(sections, preview);
+
+        if (world != null) {
+            validateWorldPackage(world);
+            sections.add(pathSource("world_base", true, 1, world.base(), world.baseBytes()));
+            sections.add(pathSource("world_log", true, 1, world.log(), world.logBytes()));
+        }
+
+        FormatManifest manifest = FormatManifest.fromMetadata(metadata, (int) frameCount,
+            hasActorMetadata, resolvedMods.size(), hasMods ? "1" : "", hasMods, world);
+        writeContainer(target, manifest, sections);
+    }
+
+    private static void addPreview(List<SectionSource> sections, byte[] preview)
+        throws FormatException {
+        if (preview == null || preview.length == 0) {
+            return;
+        }
+        if (preview.length > MAX_PREVIEW_PAYLOAD || !isPng(preview)) {
+            throw new FormatException(FormatReason.SECTION_TABLE,
+                "preview is not a PNG within the cap");
+        }
+        sections.add(memorySource("preview", false, 1, preview));
+    }
+
+    private static SectionSource memorySource(String id, boolean required, int schemaVersion,
+        byte[] payload) {
+        return new SectionSource(id, required, schemaVersion, payload, null, payload.length);
+    }
+
+    private static SectionSource pathSource(String id, boolean required, int schemaVersion,
+        Path path, long length) {
+        return new SectionSource(id, required, schemaVersion, null, path, length);
+    }
+
+    private static void writeContainer(Path target, FormatManifest manifest,
+        List<SectionSource> sections) throws IOException, ReplayFormatException {
+        prepareSources(sections);
 
         Path absoluteTarget = target.toAbsolutePath().normalize();
         Path parent = absoluteTarget.getParent();
@@ -119,8 +201,8 @@ public final class FormatWriter {
         Path part = absoluteTarget.resolveSibling(
             absoluteTarget.getFileName().toString() + ".part");
         try {
-            writePart(part, container);
-            FormatReader.readPackage(part);
+            writePart(part, manifest.toText().getBytes(StandardCharsets.UTF_8), sections);
+            FormatReader.verify(part);
             moveIntoPlace(part, absoluteTarget);
             syncDirectory(parent);
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
@@ -176,19 +258,62 @@ public final class FormatWriter {
                     "actor frame time is outside the recording range");
             }
             previousTime = frame.timeSeconds();
-            buffer.putLong(frame.tick());
-            buffer.putFloat(frame.timeSeconds());
-            buffer.putFloat(frame.gameTimeSeconds());
-            buffer.putFloat(frame.x());
-            buffer.putFloat(frame.y());
-            buffer.putFloat(frame.z());
-            buffer.putFloat(frame.angle());
-            buffer.putFloat(frame.speed());
-            buffer.put((byte) frame.locomotion().id());
-            buffer.put((byte) frame.stance().id());
-            buffer.putShort((short) frame.flags());
+            writeRecord(buffer, frame);
         }
         return payload;
+    }
+
+    static void writeRecord(ByteBuffer buffer, CaptureSample frame) {
+        buffer.putLong(frame.tick());
+        buffer.putFloat(frame.timeSeconds());
+        buffer.putFloat(frame.gameTimeSeconds());
+        buffer.putFloat(frame.x());
+        buffer.putFloat(frame.y());
+        buffer.putFloat(frame.z());
+        buffer.putFloat(frame.angle());
+        buffer.putFloat(frame.speed());
+        buffer.put((byte) frame.locomotion().id());
+        buffer.put((byte) frame.stance().id());
+        buffer.putShort((short) frame.flags());
+    }
+
+    private static void validateWorldPackage(WorldPackageStaged world) throws FormatException {
+        if (world.baseBytes() < 1L || world.baseBytes() > MAX_WORLD_BASE_PAYLOAD) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID,
+                "world base is outside the cap");
+        }
+        if (world.logBytes() < 0L || world.logBytes() > MAX_WORLD_LOG_PAYLOAD) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world log is outside the cap");
+        }
+        if (!Files.isRegularFile(world.base()) || !Files.isRegularFile(world.log())) {
+            throw new FormatException(FormatReason.WORLD_SECTION_MISSING,
+                "world staging is missing");
+        }
+        try {
+            if (Files.size(world.base()) != world.baseBytes()
+                || Files.size(world.log()) != world.logBytes()) {
+                throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
+                    "world payload lengths do not match the manifest");
+            }
+        } catch (IOException exception) {
+            throw new FormatException(FormatReason.WORLD_SECTION_MISSING,
+                "world staging is unreadable", exception);
+        }
+        validateWorldSettings(world.paddingTiles(), world.sampleRateHz(), world.coverageStatus());
+        try {
+            WorldBaseArchive.validate(world.base());
+        } catch (ReplayFormatException | IOException exception) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID, exception.getMessage(),
+                exception);
+        }
+        try {
+            WorldLogCodec.validate(world.log(), world.logChanges(), world.coverageObjects());
+        } catch (ReplayFormatException | IOException exception) {
+            String reason = exception.getMessage().contains("count")
+                ? FormatReason.WORLD_COUNT_MISMATCH : FormatReason.WORLD_LOG_INVALID;
+            throw new FormatException(reason, exception.getMessage(), exception);
+        }
     }
 
     private static void validateWorldPackage(WorldPackage world) throws FormatException {
@@ -206,20 +331,7 @@ public final class FormatWriter {
             throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
                 "world payload lengths do not match the manifest");
         }
-        if (world.paddingTiles() < 0 || world.paddingTiles() > 128) {
-            throw new FormatException(FormatReason.WORLD_BASE_INVALID,
-                "world padding is outside the range");
-        }
-        if (world.sampleRateHz() < 1 || world.sampleRateHz() > 10) {
-            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
-                "world sample rate is outside the range");
-        }
-        if (!"complete".equals(world.coverageStatus())
-            && !"partial".equals(world.coverageStatus())
-            && !"truncated".equals(world.coverageStatus())) {
-            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
-                "world coverage status is invalid");
-        }
+        validateWorldSettings(world.paddingTiles(), world.sampleRateHz(), world.coverageStatus());
         try {
             WorldBaseArchive.validate(base);
         } catch (ReplayFormatException exception) {
@@ -232,6 +344,24 @@ public final class FormatWriter {
             String reason = exception.getMessage().contains("count")
                 ? FormatReason.WORLD_COUNT_MISMATCH : FormatReason.WORLD_LOG_INVALID;
             throw new FormatException(reason, exception.getMessage(), exception);
+        }
+    }
+
+    private static void validateWorldSettings(int paddingTiles, int sampleRateHz,
+        String coverageStatus) throws FormatException {
+        if (paddingTiles < 0 || paddingTiles > 128) {
+            throw new FormatException(FormatReason.WORLD_BASE_INVALID,
+                "world padding is outside the range");
+        }
+        if (sampleRateHz < 1 || sampleRateHz > 10) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world sample rate is outside the range");
+        }
+        if (!"complete".equals(coverageStatus)
+            && !"partial".equals(coverageStatus)
+            && !"truncated".equals(coverageStatus)) {
+            throw new FormatException(FormatReason.WORLD_LOG_INVALID,
+                "world coverage status is invalid");
         }
     }
 
@@ -260,96 +390,246 @@ public final class FormatWriter {
         return payload;
     }
 
-    private static byte[] encodeContainer(FormatManifest manifest, List<FormatSection> sections)
-        throws FormatException {
-        byte[] manifestBytes = manifest.toText().getBytes(StandardCharsets.UTF_8);
-        if (manifestBytes.length < 1 || manifestBytes.length > MAX_MANIFEST_BYTES) {
-            throw new FormatException(FormatReason.MANIFEST_LENGTH,
-                "manifest exceeds the cap");
-        }
+    private static void prepareSources(List<SectionSource> sections) throws FormatException {
         if (sections.size() > MAX_SECTIONS) {
             throw new FormatException(FormatReason.SECTION_TABLE,
                 "section count exceeds the cap");
         }
-
-        List<byte[]> hashes = new ArrayList<>(sections.size());
         long payloadBytes = 0L;
-        for (FormatSection section : sections) {
-            if (!FormatManifest.isValidSectionId(section.id())) {
+        for (SectionSource section : sections) {
+            if (!FormatManifest.isValidSectionId(section.id)) {
                 throw new FormatException(FormatReason.SECTION_TABLE,
-                    "section id is invalid: " + section.id());
+                    "section id is invalid: " + section.id);
             }
-            long length = section.payload().length;
-            payloadBytes += length;
+            if (section.length < 0L) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "section length is invalid: " + section.id);
+            }
+            payloadBytes += section.length;
             if (payloadBytes > MAX_DECOMPRESSED_BYTES) {
                 throw new FormatException(FormatReason.TOO_LARGE,
                     "section payloads exceed the container cap");
             }
-            hashes.add(sha256(section.payload()));
+            section.hash = section.payload == null
+                ? hashFile(section.path, section.length)
+                : sha256(section.payload);
+        }
+    }
+
+    private static void writePart(Path part, byte[] manifestBytes, List<SectionSource> sections)
+        throws IOException, FormatException {
+        if (manifestBytes.length < 1 || manifestBytes.length > MAX_MANIFEST_BYTES) {
+            throw new FormatException(FormatReason.MANIFEST_LENGTH,
+                "manifest exceeds the cap");
         }
 
-        long size = 16L + manifestBytes.length + 2L;
-        for (FormatSection section : sections) {
-            size += 46L + section.id().length();
+        ByteArrayOutputStream header = new ByteArrayOutputStream();
+        writeHeader(header, manifestBytes.length);
+        header.writeBytes(manifestBytes);
+        header.write((sections.size() >>> 8) & 0xFF);
+        header.write(sections.size() & 0xFF);
+        long payloadBytes = 0L;
+        for (SectionSource section : sections) {
+            byte[] id = section.id.getBytes(StandardCharsets.US_ASCII);
+            ByteBuffer descriptor = ByteBuffer.allocate(2 + id.length + 44)
+                .order(ByteOrder.BIG_ENDIAN);
+            descriptor.putShort((short) id.length);
+            descriptor.put(id);
+            descriptor.putShort((short) (section.required ? 1 : 0));
+            descriptor.putShort((short) section.schemaVersion);
+            descriptor.putLong(section.length);
+            descriptor.put(section.hash);
+            header.writeBytes(descriptor.array());
+            payloadBytes += section.length;
         }
-        size += payloadBytes + 44L;
-        if (size > MAX_DECOMPRESSED_BYTES) {
+
+        long containerBytes = 16L + manifestBytes.length + 2L + payloadBytes + 44L;
+        for (SectionSource section : sections) {
+            containerBytes += 46L + section.id.length();
+        }
+        if (containerBytes > MAX_DECOMPRESSED_BYTES) {
             throw new FormatException(FormatReason.TOO_LARGE,
                 "container exceeds the decompressed cap");
         }
 
-        int payloadStart = 16 + manifestBytes.length + 2;
-        for (FormatSection section : sections) {
-            payloadStart += 46 + section.id().length();
+        try (OutputStream file = Files.newOutputStream(part, StandardOpenOption.CREATE_NEW,
+            StandardOpenOption.WRITE);
+            GZIPOutputStream gzip = new GZIPOutputStream(file);
+            CrcOutputStream crc = new CrcOutputStream(gzip)) {
+            byte[] head = header.toByteArray();
+            crc.write(head, 0, head.length);
+            for (SectionSource section : sections) {
+                if (section.payload != null) {
+                    crc.write(section.payload, 0, section.payload.length);
+                } else {
+                    copy(section.path, section.length, crc);
+                }
+            }
+            long expectedFooter = 16L + manifestBytes.length + 2L + payloadBytes;
+            for (SectionSource section : sections) {
+                expectedFooter += 46L + section.id.length();
+            }
+            if (crc.bytes() != expectedFooter) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "container layout arithmetic does not match");
+            }
+            gzip.write(sha256(manifestBytes));
+            gzip.write(intBytes(crc.value()));
+            gzip.write(FOOTER_MAGIC);
         }
-        int footerOffset = payloadStart + (int) payloadBytes;
-
-        ByteBuffer buffer = ByteBuffer.allocate((int) size).order(ByteOrder.BIG_ENDIAN);
-        buffer.put(MAGIC);
-        buffer.putShort((short) CONTAINER_VERSION);
-        buffer.putShort((short) 0);
-        buffer.putInt(manifestBytes.length);
-        buffer.put(manifestBytes);
-        buffer.putShort((short) sections.size());
-        for (int index = 0; index < sections.size(); index++) {
-            FormatSection section = sections.get(index);
-            byte[] id = section.id().getBytes(StandardCharsets.US_ASCII);
-            buffer.putShort((short) id.length);
-            buffer.put(id);
-            buffer.putShort((short) (section.required() ? 1 : 0));
-            buffer.putShort((short) section.schemaVersion());
-            buffer.putLong(section.payload().length);
-            buffer.put(hashes.get(index));
-        }
-        for (FormatSection section : sections) {
-            buffer.put(section.payload());
-        }
-        int actualFooter = buffer.position();
-        if (actualFooter != footerOffset) {
-            throw new FormatException(FormatReason.SECTION_TABLE,
-                "container layout arithmetic does not match");
-        }
-        buffer.put(sha256(manifestBytes));
-        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
-        crc.update(buffer.array(), 0, footerOffset);
-        buffer.putInt((int) crc.getValue());
-        buffer.put(FOOTER_MAGIC);
-        if (buffer.position() != size) {
-            throw new FormatException(FormatReason.SECTION_TABLE,
-                "container size arithmetic does not match");
-        }
-        return buffer.array();
+        forceFile(part);
     }
 
-    private static void writePart(Path part, byte[] container) throws IOException {
-        byte[] compressed = FormatGzip.deflate(container);
-        try (FileChannel channel = FileChannel.open(part, StandardOpenOption.CREATE_NEW,
-            StandardOpenOption.WRITE)) {
-            ByteBuffer buffer = ByteBuffer.wrap(compressed);
-            while (buffer.hasRemaining()) {
-                channel.write(buffer);
+    private static void writeHeader(ByteArrayOutputStream output, int manifestLength) {
+        output.writeBytes(MAGIC);
+        output.write((CONTAINER_VERSION >>> 8) & 0xFF);
+        output.write(CONTAINER_VERSION & 0xFF);
+        output.write(0);
+        output.write(0);
+        output.write((manifestLength >>> 24) & 0xFF);
+        output.write((manifestLength >>> 16) & 0xFF);
+        output.write((manifestLength >>> 8) & 0xFF);
+        output.write(manifestLength & 0xFF);
+    }
+
+    private static byte[] intBytes(long value) {
+        return new byte[] {
+            (byte) ((value >>> 24) & 0xFF),
+            (byte) ((value >>> 16) & 0xFF),
+            (byte) ((value >>> 8) & 0xFF),
+            (byte) (value & 0xFF)
+        };
+    }
+
+    private static float lastFrameTime(Path path, long frameCount) throws FormatException {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+            ByteBuffer time = ByteBuffer.allocate(Float.BYTES).order(ByteOrder.BIG_ENDIAN);
+            long position = (frameCount - 1L) * RECORD_BYTES + Long.BYTES;
+            while (time.hasRemaining()) {
+                int count = channel.read(time, position + time.position());
+                if (count < 0) {
+                    throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                        "staged actor track is truncated");
+                }
             }
+            return time.flip().getFloat();
+        } catch (IOException exception) {
+            throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                "staged actor track is unreadable", exception);
+        }
+    }
+
+    private static byte[] hashFile(Path path, long length) throws FormatException {
+        MessageDigest digest = digest();
+        byte[] buffer = new byte[8192];
+        long remaining = length;
+        try (InputStream input = Files.newInputStream(path)) {
+            while (remaining > 0L) {
+                int count = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (count < 0) {
+                    throw new FormatException(FormatReason.SECTION_TABLE,
+                        "staged section is truncated: " + path);
+                }
+                digest.update(buffer, 0, count);
+                remaining -= count;
+            }
+            if (input.read() >= 0) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "staged section is longer than declared: " + path);
+            }
+        } catch (IOException exception) {
+            throw new FormatException(FormatReason.SECTION_TABLE,
+                "staged section is unreadable: " + path, exception);
+        }
+        return digest.digest();
+    }
+
+    private static void copy(Path path, long length, OutputStream output)
+        throws IOException, FormatException {
+        byte[] buffer = new byte[8192];
+        long remaining = length;
+        try (InputStream input = Files.newInputStream(path)) {
+            while (remaining > 0L) {
+                int count = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+                if (count < 0) {
+                    throw new FormatException(FormatReason.SECTION_TABLE,
+                        "staged section is truncated: " + path);
+                }
+                output.write(buffer, 0, count);
+                remaining -= count;
+            }
+            if (input.read() >= 0) {
+                throw new FormatException(FormatReason.SECTION_TABLE,
+                    "staged section is longer than declared: " + path);
+            }
+        }
+    }
+
+    private static void forceFile(Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
             channel.force(true);
+        }
+    }
+
+    private static final class SectionSource {
+        private final String id;
+        private final boolean required;
+        private final int schemaVersion;
+        private final byte[] payload;
+        private final Path path;
+        private final long length;
+        private byte[] hash;
+
+        private SectionSource(String id, boolean required, int schemaVersion, byte[] payload,
+            Path path, long length) {
+            this.id = id;
+            this.required = required;
+            this.schemaVersion = schemaVersion;
+            this.payload = payload;
+            this.path = path;
+            this.length = length;
+        }
+    }
+
+    private static final class CrcOutputStream extends OutputStream {
+        private final OutputStream output;
+        private final java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        private long bytes;
+
+        private CrcOutputStream(OutputStream output) {
+            this.output = output;
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            output.write(value);
+            crc.update(value);
+            bytes++;
+        }
+
+        @Override
+        public void write(byte[] buffer, int offset, int length) throws IOException {
+            output.write(buffer, offset, length);
+            crc.update(buffer, offset, length);
+            bytes += length;
+        }
+
+        @Override
+        public void flush() throws IOException {
+            output.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            output.flush();
+        }
+
+        private long value() {
+            return crc.getValue();
+        }
+
+        private long bytes() {
+            return bytes;
         }
     }
 
@@ -410,10 +690,14 @@ public final class FormatWriter {
     }
 
     static byte[] sha256(byte[] bytes, int offset, int length) throws FormatException {
+        MessageDigest digest = digest();
+        digest.update(bytes, offset, length);
+        return digest.digest();
+    }
+
+    private static MessageDigest digest() throws FormatException {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            digest.update(bytes, offset, length);
-            return digest.digest();
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new FormatException(FormatReason.SECTION_TABLE,
                 "SHA-256 is unavailable", exception);

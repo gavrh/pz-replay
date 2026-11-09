@@ -45,6 +45,13 @@ public final class FormatReader {
     ) {
     }
 
+    private record CatalogueEntry(String id, long length, byte[] hash) {
+    }
+
+    private record Catalogue(FormatManifest manifest, List<CatalogueEntry> entries,
+        int manifestLength, int descriptorBytes) {
+    }
+
     private record Container(
         byte[] bytes,
         FormatManifest manifest,
@@ -64,6 +71,42 @@ public final class FormatReader {
     public static ReplayMetadata readMetadata(Path source)
         throws IOException, ReplayFormatException {
         return readInfo(source).metadata();
+    }
+
+    public static void verify(Path source) throws IOException, ReplayFormatException {
+        Catalogue catalogue = scanCatalogue(source);
+        verifyCatalogueCounts(catalogue);
+        try (InputStream file = Files.newInputStream(source);
+            BufferedInputStream input = new BufferedInputStream(file);
+            FormatGzip.Stream gzip = FormatGzip.stream(input)) {
+            skipFully(gzip, 16L + catalogue.manifestLength() + 2L
+                + catalogue.descriptorBytes());
+            byte[] buffer = new byte[8192];
+            for (CatalogueEntry entry : catalogue.entries()) {
+                java.security.MessageDigest digest;
+                try {
+                    digest = java.security.MessageDigest.getInstance("SHA-256");
+                } catch (java.security.NoSuchAlgorithmException exception) {
+                    throw new FormatException(FormatReason.SECTION_TABLE,
+                        "SHA-256 is unavailable", exception);
+                }
+                long remaining = entry.length();
+                while (remaining > 0L) {
+                    int count = gzip.read(buffer, 0,
+                        (int) Math.min(buffer.length, remaining));
+                    if (count < 0) {
+                        throw new FormatException(FormatReason.TRUNCATED,
+                            "section payload is truncated: " + entry.id());
+                    }
+                    digest.update(buffer, 0, count);
+                    remaining -= count;
+                }
+                if (!Arrays.equals(digest.digest(), entry.hash())) {
+                    throw new FormatException(FormatReason.SECTION_HASH,
+                        "section hash does not match: " + entry.id());
+                }
+            }
+        }
     }
 
     public static FormatInfo readInfo(Path source) throws IOException, ReplayFormatException {
@@ -428,6 +471,11 @@ public final class FormatReader {
 
     private static FormatManifest readCatalogueManifest(Path source)
         throws IOException, ReplayFormatException {
+        return scanCatalogue(source).manifest();
+    }
+
+    private static Catalogue scanCatalogue(Path source)
+        throws IOException, ReplayFormatException {
         if (Files.size(source) > FormatWriter.MAX_COMPRESSED_BYTES) {
             throw new FormatException(FormatReason.TOO_LARGE,
                 "replay file exceeds the compressed cap");
@@ -453,7 +501,7 @@ public final class FormatReader {
         }
     }
 
-    private static FormatManifest readCatalogueStream(FormatGzip.Stream gzip)
+    private static Catalogue readCatalogueStream(FormatGzip.Stream gzip)
         throws IOException, ReplayFormatException {
         CrcInput input = new CrcInput(gzip);
         byte[] magic = input.read(FormatWriter.MAGIC.length);
@@ -491,7 +539,9 @@ public final class FormatReader {
                 "section count exceeds the cap");
         }
         Set<String> seen = new LinkedHashSet<>();
+        List<CatalogueEntry> entries = new ArrayList<>(sectionCount);
         long payloadBytes = 0L;
+        int descriptorBytes = 0;
         for (int index = 0; index < sectionCount; index++) {
             int idLength = u16(input.read(2), 0);
             if (idLength < 1 || idLength > FormatWriter.MAX_SECTION_ID) {
@@ -530,6 +580,9 @@ public final class FormatReader {
                     "section payloads exceed the container cap");
             }
             payloadBytes = newTotal;
+            byte[] hash = Arrays.copyOfRange(descriptor, 12, 44);
+            entries.add(new CatalogueEntry(id, length, hash));
+            descriptorBytes += 2 + idLength + 44;
         }
 
         input.skip(payloadBytes);
@@ -554,7 +607,61 @@ public final class FormatReader {
             throw new FormatException(FormatReason.TRUNCATED,
                 "footer offset does not land at the end of the file");
         }
-        return manifest;
+        return new Catalogue(manifest, List.copyOf(entries), (int) manifestLength,
+            descriptorBytes);
+    }
+
+    private static void verifyCatalogueCounts(Catalogue catalogue) throws FormatException {
+        for (FormatManifest.Actor actor : catalogue.manifest().actors) {
+            CatalogueEntry entry = findEntry(catalogue.entries(), actor.trackSection());
+            if (entry == null) {
+                throw new FormatException(FormatReason.ACTOR_SECTION_MISSING,
+                    "actor section is missing: " + actor.trackSection());
+            }
+            if (entry.length() > FormatWriter.MAX_ACTOR_PAYLOAD
+                || entry.length() % FormatWriter.RECORD_BYTES != 0
+                || entry.length() / FormatWriter.RECORD_BYTES != actor.frameCount()) {
+                throw new FormatException(FormatReason.ACTOR_PAYLOAD_INVALID,
+                    "actor frame count does not match the manifest");
+            }
+        }
+        FormatManifest manifest = catalogue.manifest();
+        if ("padded".equals(manifest.worldMode)) {
+            CatalogueEntry base = findEntry(catalogue.entries(), "world_base");
+            CatalogueEntry log = findEntry(catalogue.entries(), "world_log");
+            if (base == null || log == null) {
+                throw new FormatException(FormatReason.WORLD_SECTION_MISSING,
+                    "world sections are missing");
+            }
+            if (base.length() != manifest.worldBaseBytes
+                || log.length() != manifest.worldLogBytes) {
+                throw new FormatException(FormatReason.WORLD_COUNT_MISMATCH,
+                    "world payload lengths do not match the manifest");
+            }
+        }
+    }
+
+    private static CatalogueEntry findEntry(List<CatalogueEntry> entries, String id) {
+        for (CatalogueEntry entry : entries) {
+            if (entry.id().equals(id)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static void skipFully(FormatGzip.Stream stream, long length)
+        throws IOException, FormatException {
+        byte[] buffer = new byte[8192];
+        long remaining = length;
+        while (remaining > 0L) {
+            int count = stream.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+            if (count < 0) {
+                throw new FormatException(FormatReason.TRUNCATED,
+                    "container is truncated");
+            }
+            remaining -= count;
+        }
     }
 
     private static final class CrcInput {

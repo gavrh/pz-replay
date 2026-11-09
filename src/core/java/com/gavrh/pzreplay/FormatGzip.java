@@ -10,7 +10,7 @@ import java.util.zip.GZIPOutputStream;
 import java.util.zip.Inflater;
 
 final class FormatGzip {
-    private static final int MAX_DECOMPRESSED_BYTES = 1024 * 1024 * 1024;
+    private static final long MAX_DECOMPRESSED_BYTES = 2_000_000_000L;
 
     private FormatGzip() {
     }

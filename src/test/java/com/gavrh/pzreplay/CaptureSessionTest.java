@@ -33,14 +33,6 @@ class CaptureSessionTest {
     }
 
     @Test
-    void rejectsNonFiniteMaxDuration() {
-        assertThrows(IllegalArgumentException.class,
-            () -> new CaptureSession(30.0, 10, Double.NaN));
-        assertThrows(IllegalArgumentException.class,
-            () -> new CaptureSession(30.0, 10, Double.POSITIVE_INFINITY));
-    }
-
-    @Test
     void samplesAtConfiguredRateWithoutDuplicateTicks() {
         CaptureSession session = new CaptureSession(30.0);
         session.start(1_000_000L);
@@ -104,7 +96,7 @@ class CaptureSessionTest {
 
     @Test
     void reportsDurationAndEstimatedBytes() {
-        CaptureSession session = new CaptureSession(30.0, 1000, 30.0);
+        CaptureSession session = new CaptureSession(30.0, 1000);
         session.start(0L);
 
         for (int tick = 1; tick <= 200; tick++) {
@@ -122,7 +114,7 @@ class CaptureSessionTest {
 
     @Test
     void stopsCleanlyAtMaxFrames() {
-        CaptureSession session = new CaptureSession(30.0, 10, 30.0);
+        CaptureSession session = new CaptureSession(30.0, 10);
         session.start(0L);
 
         for (int tick = 1; tick <= 100; tick++) {
@@ -139,23 +131,25 @@ class CaptureSessionTest {
     }
 
     @Test
-    void stopsCleanlyAtMaxDuration() {
-        CaptureSession session = new CaptureSession(30.0, 1000, 0.5);
+    void idleSessionKeepsRecordingWithoutADurationStop() {
+        CaptureSession session = new CaptureSession();
         session.start(0L);
 
-        for (int tick = 1; tick <= 100; tick++) {
-            session.tick(tick, tick * 10L, player(0f, 0f, tick * 0.01f), false);
+        long wall = 0L;
+        for (int tick = 1; tick <= 120_000; tick++) {
+            wall += 33L;
+            session.tick(tick, wall, player(0f, 0f, tick * 0.033f), false);
         }
 
-        CaptureSession.Summary summary = session.getLastSummary();
-        assertFalse(session.isRecording());
-        assertEquals(CaptureSession.StopReason.MAX_DURATION, summary.stopReason());
-        assertTrue(summary.durationSeconds() >= 0.5f && summary.durationSeconds() < 0.53f,
-            "duration=" + summary.durationSeconds());
+        CaptureSession.Summary summary = session.status();
+        assertTrue(session.isRecording());
+        assertTrue(summary.frameCount() > 100_000);
+        assertTrue(summary.durationSeconds() > 3_900f);
+        assertEquals(CaptureSession.StopReason.NONE, summary.stopReason());
     }
 
     @Test
-    void thirtyMinuteCaptureStopsAtDocumentedFrameCap() {
+    void frameCapIsExplicitAndHigh() {
         CaptureSession session = new CaptureSession();
         session.start(0L);
 
@@ -165,12 +159,9 @@ class CaptureSessionTest {
             session.tick(tick, wall, player(0f, 0f, tick * 0.033f), false);
         }
 
-        CaptureSession.Summary summary = session.getLastSummary();
-        assertFalse(session.isRecording());
-        assertEquals(CaptureSession.MAX_FRAMES, summary.frameCount());
-        assertEquals((long) CaptureSession.MAX_FRAMES * CaptureSession.ESTIMATED_BYTES_PER_FRAME,
-            summary.estimatedBytes());
-        assertEquals(CaptureSession.StopReason.MAX_FRAMES, summary.stopReason());
+        assertTrue(session.isRecording());
+        assertEquals(8_000_000, CaptureSession.MAX_FRAMES);
+        assertEquals(8_000_000, FormatWriter.MAX_FRAMES);
     }
 
     @Test

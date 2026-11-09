@@ -148,43 +148,58 @@ public final class WorldBaseArchive {
         if (!hasCentralDirectory(archive)) {
             throw new ReplayFormatException("base archive has no central directory");
         }
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
+            validateEntries(zip);
+        } catch (IOException exception) {
+            throw new ReplayFormatException("base archive is unreadable", exception);
+        }
+    }
+
+    public static void validate(Path archive) throws IOException, ReplayFormatException {
+        if (!hasCentralDirectory(archive)) {
+            throw new ReplayFormatException("base archive has no central directory");
+        }
+        try (InputStream input = Files.newInputStream(archive);
+            ZipInputStream zip = new ZipInputStream(input)) {
+            validateEntries(zip);
+        }
+    }
+
+    private static void validateEntries(ZipInputStream zip) throws IOException,
+        ReplayFormatException {
         Set<String> names = new HashSet<>();
         long total = 0L;
         int count = 0;
-        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
-            ZipEntry entry;
-            while ((entry = zip.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                if (entry.getMethod() != ZipEntry.STORED) {
-                    throw new ReplayFormatException("base entry is not stored: "
-                        + entry.getName());
-                }
-                validateName(entry.getName());
-                if (!names.add(entry.getName())) {
-                    throw new ReplayFormatException("base entry is duplicated: "
-                        + entry.getName());
-                }
-                long size = entry.getSize();
-                if (size < 0L || size > MAX_ENTRY_BYTES) {
-                    throw new ReplayFormatException("base entry size is invalid: "
-                        + entry.getName());
-                }
-                total += size;
-                if (total > MAX_TOTAL_BYTES) {
-                    throw new ReplayFormatException("base exceeds the total size cap");
-                }
-                count++;
-                if (count > MAX_ENTRIES) {
-                    throw new ReplayFormatException("base exceeds the entry cap");
-                }
+        ZipEntry entry;
+        while ((entry = zip.getNextEntry()) != null) {
+            if (entry.isDirectory()) {
+                continue;
             }
-            if (count == 0) {
-                throw new ReplayFormatException("base archive is empty");
+            if (entry.getMethod() != ZipEntry.STORED) {
+                throw new ReplayFormatException("base entry is not stored: "
+                    + entry.getName());
             }
-        } catch (IOException exception) {
-            throw new ReplayFormatException("base archive is unreadable", exception);
+            validateName(entry.getName());
+            if (!names.add(entry.getName())) {
+                throw new ReplayFormatException("base entry is duplicated: "
+                    + entry.getName());
+            }
+            long size = entry.getSize();
+            if (size < 0L || size > MAX_ENTRY_BYTES) {
+                throw new ReplayFormatException("base entry size is invalid: "
+                    + entry.getName());
+            }
+            total += size;
+            if (total > MAX_TOTAL_BYTES) {
+                throw new ReplayFormatException("base exceeds the total size cap");
+            }
+            count++;
+            if (count > MAX_ENTRIES) {
+                throw new ReplayFormatException("base exceeds the entry cap");
+            }
+        }
+        if (count == 0) {
+            throw new ReplayFormatException("base archive is empty");
         }
     }
 
@@ -268,6 +283,35 @@ public final class WorldBaseArchive {
         if (name.getBytes(StandardCharsets.UTF_8).length > 4_096) {
             throw new ReplayFormatException("base entry name exceeds the cap");
         }
+    }
+
+    private static boolean hasCentralDirectory(Path archive) throws IOException {
+        long size = Files.size(archive);
+        if (size < 22L) {
+            return false;
+        }
+        int length = (int) Math.min(size, 22L + 0xFFFF);
+        byte[] tail = new byte[length];
+        try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
+            archive, StandardOpenOption.READ)) {
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(tail);
+            long position = size - length;
+            while (buffer.hasRemaining()) {
+                int count = channel.read(buffer, position + buffer.position());
+                if (count < 0) {
+                    return false;
+                }
+            }
+        }
+        for (int offset = tail.length - 22; offset >= 0; offset--) {
+            if ((tail[offset] & 0xFF) == 0x50
+                && (tail[offset + 1] & 0xFF) == 0x4B
+                && (tail[offset + 2] & 0xFF) == 0x05
+                && (tail[offset + 3] & 0xFF) == 0x06) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasCentralDirectory(byte[] archive) {
