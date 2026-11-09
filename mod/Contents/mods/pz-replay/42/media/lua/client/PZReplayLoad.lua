@@ -148,7 +148,8 @@ local function worldMismatch(player)
         return T.get("UI_pzreplay_load_save_mismatch",
             "The loaded save does not match the replay.")
     end
-    local loadedMode = world:getGameMode() or ""
+    local loadedModeObject = world:getGameMode()
+    local loadedMode = loadedModeObject == nil and "" or tostring(loadedModeObject)
     if expectedMode ~= "" and loadedMode ~= "" and loadedMode ~= expectedMode then
         return T.get("UI_pzreplay_load_mode_mismatch",
             "The loaded game mode does not match the replay.")

@@ -10,6 +10,7 @@ import java.util.Locale;
 import me.zed_0xff.zombie_buddy.Exposer;
 import zombie.characters.IsoPlayer;
 import zombie.core.Core;
+import zombie.core.GameMode;
 import zombie.iso.IsoChunkMap;
 import zombie.iso.IsoWorld;
 
@@ -573,7 +574,8 @@ public final class PlaybackApi {
 
     private static String gameMode() {
         try {
-            return Core.getInstance().getGameMode();
+            GameMode mode = Core.getInstance().getGameMode();
+            return mode == null ? "" : mode.toString();
         } catch (RuntimeException exception) {
             return "";
         }

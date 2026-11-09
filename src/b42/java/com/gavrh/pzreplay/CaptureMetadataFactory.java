@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
 import zombie.characters.IsoPlayer;
 import zombie.core.Core;
+import zombie.core.GameMode;
 import zombie.iso.IsoWorld;
 
 final class CaptureMetadataFactory {
@@ -80,7 +81,8 @@ final class CaptureMetadataFactory {
 
     private static String gameMode() {
         try {
-            return Core.getInstance().getGameMode();
+            GameMode mode = Core.getInstance().getGameMode();
+            return mode == null ? "" : mode.toString();
         } catch (RuntimeException exception) {
             return "";
         }
