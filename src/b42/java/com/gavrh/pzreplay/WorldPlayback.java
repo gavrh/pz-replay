@@ -14,16 +14,19 @@ final class WorldPlayback {
     private final Consumer<String> warning;
     private final String coverageStatus;
     private final CameraBounds cameraBounds;
+    private final String replayId;
     private long applyNanos;
     private long diffRecords;
     private long seekCount;
 
     private WorldPlayback(List<WorldLogRecord> records, String coverageStatus,
-        int paddingTiles, Map<Integer, Integer> kinds, Consumer<String> warning) {
+        int paddingTiles, Map<Integer, Integer> kinds, Consumer<String> warning,
+        String replayId) {
         this.plan = new WorldApplyPlan(records);
         this.applier = new WorldApplier(warning);
         this.coverageStatus = coverageStatus == null ? "complete" : coverageStatus;
         this.warning = warning;
+        this.replayId = replayId == null ? "" : replayId;
         this.cameraBounds = CameraBounds.fromRecords(records, paddingTiles);
         applyKinds(kinds);
         applyCoverage();
@@ -33,6 +36,10 @@ final class WorldPlayback {
             System.out.println("[pz-replay] world apply T0 " + summary.text()
                 + " records=" + plan.size() + " last_ms=" + plan.lastRecordMillis());
         }
+        MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_T0_APPLY, this.replayId,
+            "records=" + plan.size(),
+            "apply_ms=" + (applyNanos / 1_000_000L),
+            "last_ms=" + plan.lastRecordMillis());
     }
 
     static WorldPlayback open(Path path, String coverageStatus, int paddingTiles,
@@ -40,7 +47,8 @@ final class WorldPlayback {
         byte[] log = FormatReader.readWorldLog(path);
         Map<Integer, Integer> kinds = WorldLogCodec.countKinds(log);
         List<WorldLogRecord> records = WorldLogCodec.decodeAll(log);
-        return new WorldPlayback(records, coverageStatus, paddingTiles, kinds, warning);
+        return new WorldPlayback(records, coverageStatus, paddingTiles, kinds, warning,
+            path.toString());
     }
 
     void applyTo(double seconds, boolean seek) {
@@ -48,6 +56,7 @@ final class WorldPlayback {
             return;
         }
         long target = Math.max(plan.appliedThroughMillis(), Math.round(seconds * 1000.0));
+        long from = plan.appliedThroughMillis();
         List<WorldLogRecord> records = plan.advanceTo(target);
         if (records.isEmpty()) {
             return;
@@ -55,11 +64,26 @@ final class WorldPlayback {
         if (seek) {
             seekCount++;
         }
+        boolean measure = MeasurementLogStore.isEnabled();
+        long applyStartNanos = measure ? System.nanoTime() : 0L;
         applyRecords(records);
         System.out.println("[pz-replay] world apply time=" + target + "ms"
             + " records=" + records.size() + " " + summary.text()
             + " apply_ms=" + (applyNanos / 1_000_000L)
             + " seek=" + seek);
+        if (measure) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_APPLY, replayId,
+                "time_ms=" + target,
+                "records=" + records.size(),
+                "apply_ms=" + MeasurementLogStore.elapsedMillis(applyStartNanos));
+            if (seek) {
+                MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_SEEK, replayId,
+                    "from_ms=" + from,
+                    "to_ms=" + target,
+                    "records=" + records.size(),
+                    "mode=memory");
+            }
+        }
     }
 
     long lastRecordMillis() {

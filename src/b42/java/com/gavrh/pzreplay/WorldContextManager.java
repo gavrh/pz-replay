@@ -155,11 +155,18 @@ final class WorldContextManager {
             if (!prepared) {
                 return;
             }
+            long cleanupStartNanos = MeasurementLogStore.isEnabled() ? System.nanoTime() : 0L;
             System.out.println("[pz-replay] context cleanup id=" + contextId
                 + " reason=" + reason);
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_CLEANUP_START, contextId,
+                "reason=" + reason);
             restoreLatestSave();
             deleteContextQuietly();
             releaseLock();
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_CLEANUP_END, contextId,
+                "ms=" + (cleanupStartNanos == 0L ? 0L
+                    : MeasurementLogStore.elapsedMillis(cleanupStartNanos)),
+                "reason=" + reason);
             prepared = false;
             contextId = "";
             folderName = "";

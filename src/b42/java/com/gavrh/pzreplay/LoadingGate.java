@@ -70,6 +70,7 @@ final class LoadingGate {
         if (action == LoadingGateClicker.Action.PRESS) {
             if (press()) {
                 System.out.println("[pz-replay] context loading gate click");
+                MeasurementLogStore.event(MeasurementLog.EVENT_LOADING_GATE_CLICK, "");
             }
         } else if (action == LoadingGateClicker.Action.RELEASE) {
             release();
