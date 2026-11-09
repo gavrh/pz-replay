@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import org.joml.Quaternionf;
 import zombie.GameTime;
 import zombie.characters.IsoPlayer;
@@ -25,6 +26,8 @@ final class CaptureRecorder {
     private final WorldCapture worldCapture = new WorldCapture();
     private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
+    private CaptureFrameStage frameStage;
+    private Path staging;
     private ReplayMetadata metadata;
     private String captureName;
     private long tickCounter;
@@ -57,11 +60,11 @@ final class CaptureRecorder {
         if (session.isRecording()) {
             return false;
         }
-        CaptureSession startedSession;
+        Path replayDirectory = ReplayStorage.directory();
         try {
-            startedSession = new CaptureSession(sampleRateHz);
-        } catch (IllegalArgumentException exception) {
-            lastError = exception.getMessage();
+            Files.createDirectories(replayDirectory);
+        } catch (IOException exception) {
+            lastError = "replay directory is unavailable: " + exception.getMessage();
             System.out.println("[pz-replay] capture start failed: " + lastError);
             return false;
         }
@@ -73,14 +76,12 @@ final class CaptureRecorder {
             return false;
         }
         try {
-            FormatWriter.cleanupOrphans(ReplayStorage.directory(),
-                System.currentTimeMillis());
+            FormatWriter.cleanupOrphans(replayDirectory, System.currentTimeMillis());
         } catch (IOException exception) {
             System.out.println("[pz-replay] replay cleanup failed: " + exception);
         }
-        session = startedSession;
 
-        String resolvedName = RecordingNames.unique(ReplayStorage.directory(),
+        String resolvedName = RecordingNames.unique(replayDirectory,
             RecordingNames.resolve(name, CaptureMetadataFactory.newCaptureId()));
         if (resolvedName.isEmpty()) {
             lastError = "recording name is unavailable";
@@ -113,9 +114,27 @@ final class CaptureRecorder {
         captureResultPath = null;
         captureResultSummary = null;
 
+        try {
+            staging = replayDirectory.resolve(".pzrp-tmp")
+                .resolve("capture-" + UUID.randomUUID());
+            Files.createDirectories(staging);
+            frameStage = new CaptureFrameStage(staging.resolve("actor_local.track"));
+            session = new CaptureSession(sampleRateHz, CaptureSession.MAX_FRAMES, frameStage);
+        } catch (IOException | IllegalArgumentException exception) {
+            lastError = "staging is unavailable: " + exception.getMessage();
+            System.out.println("[pz-replay] capture start failed: " + lastError);
+            deleteStaging();
+            return false;
+        }
+
         long nowMillis = System.currentTimeMillis();
-        session.start(nowMillis);
-        worldCapture.start(worldEnabled, worldPadding, resolvedName);
+        if (!session.start(nowMillis)) {
+            lastError = session.getWriteFailure();
+            System.out.println("[pz-replay] capture start failed: " + lastError);
+            deleteStaging();
+            return false;
+        }
+        worldCapture.start(worldEnabled, worldPadding, resolvedName, staging);
         MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_START, captureName,
             "world=" + (worldEnabled ? "padded" : "off"),
             "padding=" + worldPadding,
@@ -149,7 +168,6 @@ final class CaptureRecorder {
         System.out.println("[pz-replay] capture started name=" + captureName
             + " rate=" + sampleRateHz + "Hz"
             + " max_frames=" + CaptureSession.MAX_FRAMES
-            + " max_duration=" + (long) CaptureSession.MAX_DURATION_SECONDS + "s"
             + " x=" + metadata.startX()
             + " y=" + metadata.startY()
             + " z=" + metadata.startZ());
@@ -561,8 +579,10 @@ final class CaptureRecorder {
             lastError = "player died";
         } else if (summary.stopReason() == CaptureSession.StopReason.MAX_FRAMES) {
             lastError = "frame limit reached";
-        } else if (summary.stopReason() == CaptureSession.StopReason.MAX_DURATION) {
-            lastError = "duration limit reached";
+            System.out.println("[pz-replay] capture frame limit reached limit="
+                + CaptureSession.MAX_FRAMES);
+        } else if (summary.stopReason() == CaptureSession.StopReason.WRITE_FAILED) {
+            lastError = "capture write failed: " + session.getWriteFailure();
         } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_UNAVAILABLE
             && lastError == null) {
             lastError = "player unavailable";
@@ -669,7 +689,16 @@ final class CaptureRecorder {
     }
 
     private void persist(CaptureSession.Summary summary) {
-        if (summary.frameCount() == 0 || metadata == null) {
+        if (summary.frameCount() == 0 || metadata == null || frameStage == null) {
+            worldCapture.reset();
+            deleteStaging();
+            return;
+        }
+        if (!session.getWriteFailure().isEmpty()) {
+            System.out.println("[pz-replay] recording discarded reason="
+                + session.getWriteFailure());
+            worldCapture.reset();
+            deleteStaging();
             return;
         }
         long durationMillis = Math.round(summary.durationSeconds() * 1000.0);
@@ -693,12 +722,13 @@ final class CaptureRecorder {
             captureName = resolvedName;
         }
         Path path = ReplayStorage.pathFor(captureName);
-        WorldPackage world = worldCapture.finish();
+        WorldPackageStaged world = worldCapture.finish();
         try {
             writePackage(path, finalMetadata, world);
-            ReplayData data = ReplayReader.read(path);
+            FormatInfo info = FormatReader.readInfo(path);
             lastReplayPath = path.toString();
-            lastReplaySummary = ReplayReader.summary(data, eventsDropped);
+            lastReplaySummary = ReplayReader.summary(info.metadata(), summary.frameCount(),
+                eventsDropped);
             captureResultPath = lastReplayPath;
             captureResultSummary = lastReplaySummary;
             System.out.println("[pz-replay] recording saved"
@@ -713,7 +743,9 @@ final class CaptureRecorder {
                 "world=" + (world == null ? "off" : "padded"),
                 "changes=" + worldCapture.getChangeCount(),
                 "samples=" + worldCapture.getSampleCount(),
-                "status=" + (world == null ? "off" : worldCapture.getCoverageStatus()));
+                "status=" + (world == null ? "off" : worldCapture.getCoverageStatus()),
+                "frames=" + summary.frameCount(),
+                "staged_bytes=" + frameStage.bytes());
         } catch (IOException | ReplayFormatException exception) {
             lastError = "replay write failed: " + exception.getMessage();
             System.out.println("[pz-replay] recording failed name=" + captureName
@@ -722,24 +754,47 @@ final class CaptureRecorder {
                 "reason=" + lastError);
         } finally {
             worldCapture.reset();
+            deleteStaging();
         }
     }
 
-    private void writePackage(Path path, ReplayMetadata finalMetadata, WorldPackage world)
+    private void writePackage(Path path, ReplayMetadata finalMetadata, WorldPackageStaged world)
         throws IOException, ReplayFormatException {
         if (world == null) {
-            FormatWriter.write(path, finalMetadata, session.frames());
+            FormatWriter.writeStaged(path, finalMetadata, frameStage, List.of(), null, null);
             return;
         }
         try {
-            FormatWriter.write(path, finalMetadata, session.frames(), List.of(), null, world);
+            FormatWriter.writeStaged(path, finalMetadata, frameStage, List.of(), null, world);
         } catch (IOException | ReplayFormatException exception) {
             lastError = "world capture could not be written: " + exception.getMessage();
             System.out.println("[pz-replay] world package failed name=" + captureName
                 + " error=" + lastError);
             Files.deleteIfExists(path);
-            FormatWriter.write(path, finalMetadata, session.frames());
+            FormatWriter.writeStaged(path, finalMetadata, frameStage, List.of(), null, null);
         }
+    }
+
+    private void deleteStaging() {
+        if (staging != null) {
+            try {
+                if (Files.isDirectory(staging)) {
+                    try (java.util.stream.Stream<Path> stream = Files.walk(staging)) {
+                        stream.sorted(java.util.Comparator.reverseOrder()).forEach(entry -> {
+                            try {
+                                Files.deleteIfExists(entry);
+                            } catch (IOException ignored) {
+                            }
+                        });
+                    }
+                } else {
+                    Files.deleteIfExists(staging);
+                }
+            } catch (IOException ignored) {
+            }
+            staging = null;
+        }
+        frameStage = null;
     }
 
     private void recordCost(long tickStartNanos) {

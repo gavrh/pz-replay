@@ -23,7 +23,7 @@ class CaptureSessionGapTest {
     }
 
     private static CaptureSession started() {
-        CaptureSession session = new CaptureSession(30.0, 1000, 60.0);
+        CaptureSession session = new CaptureSession(30.0, 1000);
         session.start(0L);
         return session;
     }

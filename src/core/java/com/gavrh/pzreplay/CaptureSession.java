@@ -1,5 +1,6 @@
 package com.gavrh.pzreplay;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -8,8 +9,7 @@ public final class CaptureSession {
     public static final double DEFAULT_SAMPLE_RATE_HZ = 30.0;
     public static final double MIN_SAMPLE_RATE_HZ = 20.0;
     public static final double MAX_SAMPLE_RATE_HZ = 30.0;
-    public static final int MAX_FRAMES = 54_000;
-    public static final double MAX_DURATION_SECONDS = 30.0 * 60.0;
+    public static final int MAX_FRAMES = 8_000_000;
     public static final int ESTIMATED_BYTES_PER_FRAME = FormatWriter.RECORD_BYTES;
     public static final int MAX_EVENTS = ActionEventCodec.MAX_EVENTS;
     static final long MAX_ACTIVE_WALL_DELTA_MILLIS = 250L;
@@ -24,7 +24,8 @@ public final class CaptureSession {
         REQUESTED,
         NO_FRAMES,
         MAX_FRAMES,
-        MAX_DURATION,
+        DISK_FULL,
+        WRITE_FAILED,
         PLAYER_DEAD,
         PLAYER_UNAVAILABLE,
         LOADING
@@ -75,12 +76,14 @@ public final class CaptureSession {
     private final double sampleRateHz;
     private final double sampleIntervalSeconds;
     private final int maxFrames;
-    private final double maxDurationSeconds;
+    private final CaptureFrameStage stage;
     private final List<CaptureSample> frames;
     private final List<ActionEvent> events;
     private final List<GapDraft> gaps;
     private final List<String> warnings;
 
+    private long frameCount;
+    private String writeFailure = "";
     private boolean recording;
     private boolean pausedLastTick;
     private GapDraft openGap;
@@ -102,10 +105,14 @@ public final class CaptureSession {
     }
 
     public CaptureSession(double sampleRateHz) {
-        this(sampleRateHz, MAX_FRAMES, MAX_DURATION_SECONDS);
+        this(sampleRateHz, MAX_FRAMES, null);
     }
 
-    CaptureSession(double sampleRateHz, int maxFrames, double maxDurationSeconds) {
+    public CaptureSession(double sampleRateHz, int maxFrames) {
+        this(sampleRateHz, maxFrames, null);
+    }
+
+    public CaptureSession(double sampleRateHz, int maxFrames, CaptureFrameStage stage) {
         if (!Double.isFinite(sampleRateHz)
             || sampleRateHz < MIN_SAMPLE_RATE_HZ
             || sampleRateHz > MAX_SAMPLE_RATE_HZ) {
@@ -115,14 +122,11 @@ public final class CaptureSession {
         if (maxFrames < 1) {
             throw new IllegalArgumentException("max frames must be positive");
         }
-        if (!Double.isFinite(maxDurationSeconds) || maxDurationSeconds <= 0.0) {
-            throw new IllegalArgumentException("max duration must be positive");
-        }
         this.sampleRateHz = sampleRateHz;
         this.sampleIntervalSeconds = 1.0 / sampleRateHz;
         this.maxFrames = maxFrames;
-        this.maxDurationSeconds = maxDurationSeconds;
-        this.frames = new ArrayList<>(Math.min(maxFrames, 4096));
+        this.stage = stage;
+        this.frames = new ArrayList<>(stage == null ? Math.min(maxFrames, 4096) : 0);
         this.events = new ArrayList<>();
         this.gaps = new ArrayList<>();
         this.warnings = new ArrayList<>();
@@ -134,6 +138,22 @@ public final class CaptureSession {
             return false;
         }
         frames.clear();
+        frameCount = 0L;
+        writeFailure = "";
+        if (stage != null) {
+            try {
+                stage.reset();
+            } catch (IOException exception) {
+                writeFailure = message(exception);
+                frames.clear();
+                events.clear();
+                gaps.clear();
+                warnings.clear();
+                recording = true;
+                stop(StopReason.WRITE_FAILED);
+                return false;
+            }
+        }
         events.clear();
         gaps.clear();
         warnings.clear();
@@ -180,11 +200,7 @@ public final class CaptureSession {
             stop(StopReason.PLAYER_UNAVAILABLE);
             return;
         }
-        if (activeSeconds >= maxDurationSeconds) {
-            stop(StopReason.MAX_DURATION);
-            return;
-        }
-        if (frames.size() >= maxFrames) {
+        if (frameCount >= maxFrames) {
             stop(StopReason.MAX_FRAMES);
             return;
         }
@@ -211,7 +227,7 @@ public final class CaptureSession {
 
         float speed = speed(player);
         closeOpenGap((float) activeSeconds, player.x(), player.y(), player.z());
-        frames.add(new CaptureSample(
+        CaptureSample sample = new CaptureSample(
             tick,
             (float) activeSeconds,
             player.gameTimeSeconds(),
@@ -223,7 +239,19 @@ public final class CaptureSession {
             player.locomotion(),
             player.stance(),
             player.flags()
-        ));
+        );
+        if (stage == null) {
+            frames.add(sample);
+        } else {
+            try {
+                stage.append(sample);
+            } catch (IOException | ReplayFormatException exception) {
+                writeFailure = message(exception);
+                stop(StopReason.WRITE_FAILED);
+                return;
+            }
+        }
+        frameCount++;
 
         lastSampleSeconds = activeSeconds;
         lastX = player.x();
@@ -231,7 +259,7 @@ public final class CaptureSession {
         lastZ = player.z();
         hasLastPosition = true;
 
-        if (frames.size() >= maxFrames) {
+        if (frameCount >= maxFrames) {
             stop(StopReason.MAX_FRAMES);
         }
     }
@@ -247,7 +275,16 @@ public final class CaptureSession {
         }
         closeOpenGap((float) activeSeconds, lastX, lastY, lastZ);
         recording = false;
-        if (reason == StopReason.REQUESTED && frames.isEmpty()) {
+        if (stage != null) {
+            try {
+                stage.close();
+            } catch (IOException exception) {
+                if (writeFailure.isEmpty()) {
+                    writeFailure = message(exception);
+                }
+            }
+        }
+        if (reason == StopReason.REQUESTED && frameCount == 0L) {
             reason = StopReason.NO_FRAMES;
         }
         stopReason = reason;
@@ -269,6 +306,14 @@ public final class CaptureSession {
 
     public List<CaptureSample> frames() {
         return List.copyOf(frames);
+    }
+
+    public long frameCount() {
+        return frameCount;
+    }
+
+    public String getWriteFailure() {
+        return writeFailure == null ? "" : writeFailure;
     }
 
     public List<ActionEvent> events() {
@@ -450,17 +495,23 @@ public final class CaptureSession {
     }
 
     private Summary summary(boolean isRecording) {
-        double actualRate = activeSeconds > 0.0 ? frames.size() / activeSeconds : 0.0;
+        double actualRate = activeSeconds > 0.0 ? frameCount / activeSeconds : 0.0;
         return new Summary(
             isRecording,
-            frames.size(),
+            (int) frameCount,
             (float) activeSeconds,
             sampleRateHz,
             actualRate,
-            (long) frames.size() * ESTIMATED_BYTES_PER_FRAME,
+            frameCount * ESTIMATED_BYTES_PER_FRAME,
             (float) pausedSeconds,
             (float) gapSeconds,
             isRecording ? StopReason.NONE : stopReason
         );
+    }
+
+    private static String message(Exception exception) {
+        String value = exception.getMessage();
+        return value == null || value.isBlank()
+            ? exception.getClass().getSimpleName() : value;
     }
 }
