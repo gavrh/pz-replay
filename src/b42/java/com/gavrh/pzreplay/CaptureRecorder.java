@@ -17,6 +17,7 @@ import zombie.vehicles.BaseVehicle;
 final class CaptureRecorder {
     static final CaptureRecorder INSTANCE = new CaptureRecorder();
     private static final long STATUS_LOG_INTERVAL_MILLIS = 5000L;
+    private static final long DISK_CHECK_INTERVAL_MILLIS = 5000L;
     private static final long APPEARANCE_CHECK_INTERVAL_MILLIS = 1000L;
     private static final long EQUIPMENT_CHECK_INTERVAL_MILLIS = 1000L;
 
@@ -27,9 +28,11 @@ final class CaptureRecorder {
     private final Quaternionf vehicleRotation = new Quaternionf();
     private CaptureSession session = new CaptureSession();
     private CaptureFrameStage frameStage;
+    private CaptureDiskGuard runningDiskGuard;
     private Path staging;
     private ReplayMetadata metadata;
     private String captureName;
+    private long nextDiskCheckMillis;
     private long tickCounter;
     private long nextStatusLogMillis;
     private long nextAppearanceCheckMillis;
@@ -65,6 +68,11 @@ final class CaptureRecorder {
             Files.createDirectories(replayDirectory);
         } catch (IOException exception) {
             lastError = "replay directory is unavailable: " + exception.getMessage();
+            System.out.println("[pz-replay] capture start failed: " + lastError);
+            return false;
+        }
+        if (!new CaptureDiskGuard(replayDirectory, CaptureDiskGuard.MIN_START_BYTES).hasSpace()) {
+            lastError = "not enough free disk to start recording";
             System.out.println("[pz-replay] capture start failed: " + lastError);
             return false;
         }
@@ -135,6 +143,9 @@ final class CaptureRecorder {
             return false;
         }
         worldCapture.start(worldEnabled, worldPadding, resolvedName, staging);
+        runningDiskGuard = new CaptureDiskGuard(replayDirectory,
+            CaptureDiskGuard.MIN_RUNNING_BYTES);
+        nextDiskCheckMillis = nowMillis + DISK_CHECK_INTERVAL_MILLIS;
         MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_START, captureName,
             "world=" + (worldEnabled ? "padded" : "off"),
             "padding=" + worldPadding,
@@ -168,6 +179,7 @@ final class CaptureRecorder {
         System.out.println("[pz-replay] capture started name=" + captureName
             + " rate=" + sampleRateHz + "Hz"
             + " max_frames=" + CaptureSession.MAX_FRAMES
+            + " min_free_bytes=" + CaptureDiskGuard.MIN_RUNNING_BYTES
             + " x=" + metadata.startX()
             + " y=" + metadata.startY()
             + " z=" + metadata.startZ());
@@ -182,6 +194,10 @@ final class CaptureRecorder {
         long tickStartNanos = System.nanoTime();
         long nowMillis = System.currentTimeMillis();
         tickCounter++;
+        if (checkDisk(nowMillis)) {
+            recordCost(tickStartNanos);
+            return;
+        }
 
         IsoPlayer player = IsoPlayer.getInstance();
         if (player instanceof GhostActor) {
@@ -235,6 +251,10 @@ final class CaptureRecorder {
         long tickStartNanos = System.nanoTime();
         long nowMillis = System.currentTimeMillis();
         tickCounter++;
+        if (checkDisk(nowMillis)) {
+            recordCost(tickStartNanos);
+            return;
+        }
         session.tick(tickCounter, nowMillis, null, true);
         worldCapture.tick(recordingMillis());
         recordCost(tickStartNanos);
@@ -554,6 +574,18 @@ final class CaptureRecorder {
         logStopped();
     }
 
+    private boolean checkDisk(long nowMillis) {
+        if (runningDiskGuard == null || nowMillis < nextDiskCheckMillis) {
+            return false;
+        }
+        nextDiskCheckMillis = nowMillis + DISK_CHECK_INTERVAL_MILLIS;
+        if (runningDiskGuard.hasSpace()) {
+            return false;
+        }
+        stopWithReason(CaptureSession.StopReason.DISK_FULL);
+        return true;
+    }
+
     private void afterTick(long nowMillis) {
         if (!session.isRecording()) {
             logStopped();
@@ -581,6 +613,10 @@ final class CaptureRecorder {
             lastError = "frame limit reached";
             System.out.println("[pz-replay] capture frame limit reached limit="
                 + CaptureSession.MAX_FRAMES);
+        } else if (summary.stopReason() == CaptureSession.StopReason.DISK_FULL) {
+            lastError = "disk space is low";
+            System.out.println("[pz-replay] capture stopped for low disk space free_below_bytes="
+                + CaptureDiskGuard.MIN_RUNNING_BYTES);
         } else if (summary.stopReason() == CaptureSession.StopReason.WRITE_FAILED) {
             lastError = "capture write failed: " + session.getWriteFailure();
         } else if (summary.stopReason() == CaptureSession.StopReason.PLAYER_UNAVAILABLE
@@ -795,6 +831,7 @@ final class CaptureRecorder {
             staging = null;
         }
         frameStage = null;
+        runningDiskGuard = null;
     }
 
     private void recordCost(long tickStartNanos) {

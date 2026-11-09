@@ -90,6 +90,19 @@ class CaptureStreamingTest {
     }
 
     @Test
+    void diskGuardUsesTheCurrentUsableSpace() {
+        CaptureDiskGuard empty = new CaptureDiskGuard(() -> 100L, 200L);
+        CaptureDiskGuard ready = new CaptureDiskGuard(() -> 300L, 200L);
+        CaptureDiskGuard unavailable = new CaptureDiskGuard(() -> {
+            throw new IllegalStateException("no store");
+        }, 200L);
+
+        assertFalse(empty.hasSpace());
+        assertTrue(ready.hasSpace());
+        assertFalse(unavailable.hasSpace());
+    }
+
+    @Test
     void stagedWriterMatchesTheInMemoryOutput() throws Exception {
         Path memoryFile = tempDir.resolve("memory.pzrp.gz");
         Path stagedFile = tempDir.resolve("staged.pzrp.gz");
