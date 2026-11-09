@@ -1,6 +1,7 @@
 package com.gavrh.pzreplay;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -75,6 +76,63 @@ class WorldFormatTest {
         assertEquals(1089L, manifest.worldCoverageSquares);
         assertEquals("complete", manifest.worldCoverageStatus);
         WorldLogCodec.validate(log, manifest.worldLogChanges, manifest.worldCoverageObjects);
+    }
+
+    @Test
+    void streamsWorldRecordsToDiskInOrder() throws Exception {
+        WorldDoorState closed = new WorldDoorState(WorldTarget.door(10, 20, 0, 0),
+            "door", 0, true, false, false, 100, 7L, true);
+        WorldDoorState open = new WorldDoorState(WorldTarget.door(10, 20, 0, 0),
+            "door", 0, true, false, true, 100, 7L, true);
+        Path log = tempDir.resolve("ordered.pzwlog");
+        WorldLogBuilder builder = new WorldLogBuilder(log);
+        builder.appendT0(List.of(closed));
+        WorldDiffSampler sampler = new WorldDiffSampler();
+        sampler.seedT0(List.of(closed));
+        List<WorldLogEntry> diff = sampler.diff(WorldDiffSample.of(List.of(open),
+            Set.of(WorldDiffSampler.squareKey(10, 20, 0)), Set.of(), Set.of()));
+        assertTrue(builder.append(diff, 500L));
+        builder.close();
+
+        WorldLogCodec.validate(log, 2L, 1L);
+        List<WorldLogRecord> records = WorldLogCodec.decodeAll(Files.readAllBytes(log));
+        assertEquals(2, records.size());
+        assertEquals(1L, records.get(0).sequence());
+        assertEquals(0L, records.get(0).timeMillis());
+        assertEquals(2L, records.get(1).sequence());
+        assertEquals(500L, records.get(1).timeMillis());
+    }
+
+    @Test
+    void writesAndReadsAStagedWorldPackage() throws Exception {
+        Path source = tempDir.resolve("base-source");
+        Files.createDirectories(source);
+        Files.writeString(source.resolve("WorldDictionary.bin"), "dictionary");
+        Path base = tempDir.resolve("base.zip");
+        WorldBaseArchive.writeFromDirectory(source, base);
+        Path log = tempDir.resolve("world.pzwlog");
+        WorldLogBuilder builder = new WorldLogBuilder(log);
+        builder.appendT0(List.of(new WorldDoorState(WorldTarget.door(10, 20, 0, 0),
+            "door", 0, true, false, false, 100, 7L, true)));
+        builder.close();
+
+        Path track = tempDir.resolve("actor.track");
+        CaptureFrameStage stage = new CaptureFrameStage(track);
+        stage.append(new CaptureSample(1L, 0f, 10f, 1000.5f, 2000.25f, 0f, 45.5f,
+            0f, CaptureSample.Locomotion.WALK, CaptureSample.Stance.STAND, 0));
+        stage.close();
+
+        WorldPackageStaged world = new WorldPackageStaged(base, log, Files.size(base),
+            Files.size(log), 16, 2, "complete", 1089L, 1L, 1L, 249);
+        Path file = tempDir.resolve("staged-world.pzrp.gz");
+        FormatWriter.writeStaged(file, metadata(), stage, List.of(), null, world);
+
+        FormatReadResult result = FormatReader.readPackage(file);
+        assertEquals("padded", result.worldStatus());
+        assertEquals("", result.worldReason());
+        assertEquals(1, result.frames().size());
+        assertEquals(1, WorldLogCodec.decodeT0(FormatReader.readWorldLog(file)).size());
+        assertEquals("249", FormatReader.readSourceWorldVersion(file));
     }
 
     @Test

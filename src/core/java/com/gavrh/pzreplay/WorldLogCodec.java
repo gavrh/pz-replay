@@ -1,9 +1,14 @@
 package com.gavrh.pzreplay;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -33,8 +38,8 @@ public final class WorldLogCodec {
     public static final int MAX_STATE_BODY_BYTES = 512;
     public static final int MAX_COMPLEX_BODY_BYTES = 768;
     public static final int MAX_STRING_BYTES = 96;
-    public static final long MAX_RECORDS = 2_000_000L;
-    public static final long MAX_PAYLOAD_BYTES = 256L * 1024 * 1024;
+    public static final long MAX_RECORDS = 4_000_000L;
+    public static final long MAX_PAYLOAD_BYTES = 512L * 1024 * 1024;
 
     private static final int BODY_HEADER_BYTES = 16;
     private static final String ASCII8_ALLOWED =
@@ -206,6 +211,95 @@ public final class WorldLogCodec {
                 throw new ReplayFormatException("world log time is decreasing");
             }
             int remaining = body.remaining();
+            if (kind == KIND_OBJECT_STATE || kind == KIND_VEHICLE_STATE) {
+                if (remaining > MAX_STATE_BODY_BYTES) {
+                    throw new ReplayFormatException("world log state record exceeds the cap");
+                }
+                if (time == 0L) {
+                    t0Objects++;
+                }
+            } else if (kind == KIND_OBJECT_MOVED || kind == KIND_OBJECT_DESTROYED
+                || kind == KIND_OBJECT_ADDED) {
+                if (remaining > MAX_COMPLEX_BODY_BYTES) {
+                    throw new ReplayFormatException("world log record exceeds the cap");
+                }
+            } else if (kind == KIND_CHECKPOINT) {
+                if (remaining > 8_192) {
+                    throw new ReplayFormatException("world log checkpoint exceeds the cap");
+                }
+            }
+            count++;
+            if (count > MAX_RECORDS) {
+                throw new ReplayFormatException("world log record count exceeds the cap");
+            }
+            sequence++;
+            previousTime = time;
+        }
+        if (expectedRecords >= 0L && count != expectedRecords) {
+            throw new ReplayFormatException("world log count does not match the manifest");
+        }
+        if (expectedObjects >= 0L && t0Objects != expectedObjects) {
+            throw new ReplayFormatException("world log T0 count does not match the manifest");
+        }
+    }
+
+    public static void validate(Path path, long expectedRecords, long expectedObjects)
+        throws IOException, ReplayFormatException {
+        try (InputStream input = new BufferedInputStream(Files.newInputStream(path))) {
+            validate(input, expectedRecords, expectedObjects);
+        }
+    }
+
+    public static void validate(InputStream input, long expectedRecords, long expectedObjects)
+        throws IOException, ReplayFormatException {
+        long sequence = 1L;
+        long previousTime = 0L;
+        long count = 0L;
+        long t0Objects = 0L;
+        byte[] lengthBytes = new byte[4];
+        byte[] body = new byte[MAX_BODY_BYTES];
+        while (true) {
+            int read = 0;
+            while (read < lengthBytes.length) {
+                int chunk = input.read(lengthBytes, read, lengthBytes.length - read);
+                if (chunk < 0) {
+                    break;
+                }
+                read += chunk;
+            }
+            if (read == 0) {
+                break;
+            }
+            if (read < lengthBytes.length) {
+                throw new ReplayFormatException("world log record length is truncated");
+            }
+            long bodyLength = ((long) (lengthBytes[0] & 0xFF) << 24)
+                | ((long) (lengthBytes[1] & 0xFF) << 16)
+                | ((long) (lengthBytes[2] & 0xFF) << 8)
+                | (lengthBytes[3] & 0xFF);
+            if (bodyLength < BODY_HEADER_BYTES || bodyLength > MAX_BODY_BYTES) {
+                throw new ReplayFormatException("world log record length is invalid");
+            }
+            int bodyBytes = (int) bodyLength;
+            int offset = 0;
+            while (offset < bodyBytes) {
+                int chunk = input.read(body, offset, bodyBytes - offset);
+                if (chunk < 0) {
+                    throw new ReplayFormatException("world log record is truncated");
+                }
+                offset += chunk;
+            }
+            ByteBuffer buffer = ByteBuffer.wrap(body, 0, bodyBytes).order(ByteOrder.BIG_ENDIAN);
+            long kind = uint32(buffer);
+            long recordSequence = uint32(buffer);
+            long time = buffer.getLong();
+            if (recordSequence != sequence) {
+                throw new ReplayFormatException("world log sequence is not contiguous");
+            }
+            if (time < previousTime) {
+                throw new ReplayFormatException("world log time is decreasing");
+            }
+            int remaining = bodyBytes - BODY_HEADER_BYTES;
             if (kind == KIND_OBJECT_STATE || kind == KIND_VEHICLE_STATE) {
                 if (remaining > MAX_STATE_BODY_BYTES) {
                     throw new ReplayFormatException("world log state record exceeds the cap");

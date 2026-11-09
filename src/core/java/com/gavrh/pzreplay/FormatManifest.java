@@ -90,12 +90,37 @@ final class FormatManifest {
     static FormatManifest fromMetadata(ReplayMetadata metadata, int frameCount,
         boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent) {
         return fromMetadata(metadata, frameCount, actorMetaPresent, modsCount, modsVersion,
-            modsPresent, null);
+            modsPresent, (WorldPackage) null);
     }
 
     static FormatManifest fromMetadata(ReplayMetadata metadata, int frameCount,
         boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent,
         WorldPackage world) {
+        FormatManifest manifest = base(metadata, frameCount, actorMetaPresent, modsCount,
+            modsVersion, modsPresent);
+        if (world != null && world.baseBytes() > 0L) {
+            applyWorld(manifest, world.baseBytes(), world.logBytes(), world.paddingTiles(),
+                world.sampleRateHz(), world.coverageStatus(), world.coverageSquares(),
+                world.coverageObjects(), world.logChanges(), world.worldVersion());
+        }
+        return manifest;
+    }
+
+    static FormatManifest fromMetadata(ReplayMetadata metadata, int frameCount,
+        boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent,
+        WorldPackageStaged world) {
+        FormatManifest manifest = base(metadata, frameCount, actorMetaPresent, modsCount,
+            modsVersion, modsPresent);
+        if (world != null && world.baseBytes() > 0L) {
+            applyWorld(manifest, world.baseBytes(), world.logBytes(), world.paddingTiles(),
+                world.sampleRateHz(), world.coverageStatus(), world.coverageSquares(),
+                world.coverageObjects(), world.logChanges(), world.worldVersion());
+        }
+        return manifest;
+    }
+
+    private static FormatManifest base(ReplayMetadata metadata, int frameCount,
+        boolean actorMetaPresent, int modsCount, String modsVersion, boolean modsPresent) {
         FormatManifest manifest = new FormatManifest();
         manifest.manifestVersion = 1;
         manifest.minReaderFormat = 1;
@@ -128,23 +153,26 @@ final class FormatManifest {
         manifest.modsSection = modsPresent ? "mods" : "";
         manifest.worldIssue = "";
         manifest.warnings = List.of();
-        if (world != null && world.base().length > 0) {
-            manifest.worldMode = "padded";
-            manifest.worldPaddingTiles = world.paddingTiles();
-            manifest.worldSampleRateHz = world.sampleRateHz();
-            manifest.worldCoverageStatus = world.coverageStatus();
-            manifest.worldCoverageSquares = world.coverageSquares();
-            manifest.worldCoverageObjects = world.coverageObjects();
-            manifest.worldLogChanges = world.logChanges();
-            manifest.worldLogBytes = world.logBytes();
-            manifest.worldBaseBytes = world.baseBytes();
-            manifest.worldBaseFormat = "zip-store-1";
-            manifest.worldLogFormat = "pzwlog-1";
-            manifest.worldFirstSample = "full";
-            manifest.worldIndexFormat = "";
-            manifest.sourceWorldVersion = Integer.toString(world.worldVersion());
-        }
         return manifest;
+    }
+
+    private static void applyWorld(FormatManifest manifest, long baseBytes, long logBytes,
+        int paddingTiles, int sampleRateHz, String coverageStatus, long coverageSquares,
+        long coverageObjects, long logChanges, int worldVersion) {
+        manifest.worldMode = "padded";
+        manifest.worldPaddingTiles = paddingTiles;
+        manifest.worldSampleRateHz = sampleRateHz;
+        manifest.worldCoverageStatus = coverageStatus;
+        manifest.worldCoverageSquares = coverageSquares;
+        manifest.worldCoverageObjects = coverageObjects;
+        manifest.worldLogChanges = logChanges;
+        manifest.worldLogBytes = logBytes;
+        manifest.worldBaseBytes = baseBytes;
+        manifest.worldBaseFormat = "zip-store-1";
+        manifest.worldLogFormat = "pzwlog-1";
+        manifest.worldFirstSample = "full";
+        manifest.worldIndexFormat = "";
+        manifest.sourceWorldVersion = Integer.toString(worldVersion);
     }
 
     static FormatManifest parse(byte[] bytes) throws FormatException {
@@ -377,8 +405,8 @@ final class FormatManifest {
                 0, 500_000);
             manifest.worldCoverageObjects = uint(values, "world_coverage_objects",
                 0, 1_000_000);
-            manifest.worldLogChanges = uint(values, "world_log_changes", 0, 2_000_000);
-            manifest.worldLogBytes = uint(values, "world_log_bytes", 0, 268_435_456);
+            manifest.worldLogChanges = uint(values, "world_log_changes", 0, 4_000_000);
+            manifest.worldLogBytes = uint(values, "world_log_bytes", 0, 536_870_912);
             manifest.worldBaseBytes = uint(values, "world_base_bytes", 0, 805_306_368);
             manifest.worldBaseFormat = enumValue(
                 required(values, "world_base_format"), "zip-store-1");
@@ -482,7 +510,7 @@ final class FormatManifest {
                 throw new FormatException(FormatReason.MANIFEST_FIELD_INVALID,
                     "actor known_coverage is invalid: " + knownCoverage);
             }
-            long frameCount = uint(row, "frame_count", 1, 1_000_000);
+            long frameCount = uint(row, "frame_count", 1, FormatWriter.MAX_FRAMES);
             String metaSection = "";
             if (row.containsKey("meta_section")) {
                 metaSection = sectionReference(row, "meta_section");
