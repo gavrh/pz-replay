@@ -27,6 +27,7 @@ class ReplaySettingsTest {
         assertFalse(settings.isDebugControls());
         assertFalse(settings.isKillSwitch());
         assertFalse(settings.isWorldCaptureEnabled());
+        assertFalse(settings.isMeasurementLogEnabled());
         assertEquals(ReplaySettings.DEFAULT_WORLD_PADDING_TILES,
             settings.getWorldPaddingTiles());
         assertEquals(ReplaySettings.DEFAULT_KEY_RECORD,
@@ -96,6 +97,18 @@ class ReplaySettingsTest {
     }
 
     @Test
+    void measurementLogIsOffByDefaultAndAcceptsAnExplicitTrue() throws Exception {
+        Path path = tempDir.resolve("measurement.properties");
+        assertFalse(ReplaySettings.load(path).isMeasurementLogEnabled());
+
+        Files.writeString(path, "measurement_log_enabled=true\n");
+        assertTrue(ReplaySettings.load(path).isMeasurementLogEnabled());
+
+        Files.writeString(path, "measurement_log_enabled=maybe\n");
+        assertFalse(ReplaySettings.load(path).isMeasurementLogEnabled());
+    }
+
+    @Test
     void malformedWorldSettingsFallBackToSafeDefaults() throws Exception {
         Path path = tempDir.resolve("world.properties");
         Files.writeString(path, "world_capture=maybe\nworld_padding_tiles=999\n");
@@ -141,6 +154,7 @@ class ReplaySettingsTest {
         settings.setKillSwitch(true);
         settings.setWorldCaptureEnabled(true);
         settings.setWorldPaddingTiles(24);
+        settings.setMeasurementLogEnabled(true);
         assertTrue(settings.bind(ReplaySettings.ACTION_RECORD, 210));
         settings.save(path);
 
@@ -153,6 +167,7 @@ class ReplaySettingsTest {
         assertTrue(loaded.isKillSwitch());
         assertTrue(loaded.isWorldCaptureEnabled());
         assertEquals(24, loaded.getWorldPaddingTiles());
+        assertTrue(loaded.isMeasurementLogEnabled());
         assertEquals(210, loaded.key(ReplaySettings.ACTION_RECORD));
         assertEquals(ReplaySettings.DEFAULT_KEY_PLAY,
             loaded.key(ReplaySettings.ACTION_PLAY));
@@ -173,6 +188,7 @@ class ReplaySettingsTest {
         assertFalse(corruptSettings.isCameraFollowDefault());
         assertFalse(corruptSettings.isDebugControls());
         assertFalse(corruptSettings.isKillSwitch());
+        assertFalse(corruptSettings.isMeasurementLogEnabled());
         Set<Integer> keys = new HashSet<>();
         for (String action : ReplaySettings.ACTIONS) {
             assertTrue(corruptSettings.key(action) > 0);

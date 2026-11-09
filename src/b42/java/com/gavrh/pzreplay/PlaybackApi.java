@@ -189,6 +189,10 @@ public final class PlaybackApi {
             + " gaps=" + loaded.getGapCount()
             + " items=" + (data.metadata().equipment().isPresent() ? "recorded" : "none")
             + " camera_mode=" + loadedController.getCameraMode().id());
+        MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_START, requested,
+            "duration_ms=" + Math.round(loaded.getDuration() * 1000.0),
+            "frames=" + loaded.getFrameCount(),
+            "world=" + (loadedWorld == null ? "off" : "padded"));
         return true;
     }
 
@@ -198,7 +202,8 @@ public final class PlaybackApi {
         if (active != null) {
             double currentTime = active.getCurrentTime();
             String path = lastPath;
-            String worldSummary = worldPlayback == null ? null : worldPlayback.summaryText();
+            WorldPlayback stoppingWorld = worldPlayback;
+            String worldSummary = stoppingWorld == null ? null : stoppingWorld.summaryText();
             controller = null;
             timeline = null;
             worldPlayback = null;
@@ -211,6 +216,11 @@ public final class PlaybackApi {
                 + " time=" + format(currentTime) + "s");
             if (worldSummary != null) {
                 System.out.println("[pz-replay] world playback summary " + worldSummary);
+            }
+            MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_STOP, path,
+                "time_ms=" + Math.round(currentTime * 1000.0));
+            if (stoppingWorld != null) {
+                measureSummary(MeasurementLog.EVENT_PLAYBACK_SUMMARY, path, stoppingWorld);
             }
         } else {
             state.playbackStopped();
@@ -257,6 +267,10 @@ public final class PlaybackApi {
         }
         if (worldPlayback != null && WorldSeekDecision.seek(true, controller.getCurrentTime(),
             seconds) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_SEEK, lastPath,
+                "from_ms=" + Math.round(controller.getCurrentTime() * 1000.0),
+                "to_ms=" + Math.round(seconds * 1000.0),
+                "mode=reload");
             LoadApi.requestReload(lastPath, seconds);
             return true;
         }
@@ -280,6 +294,8 @@ public final class PlaybackApi {
         }
         if (worldPlayback != null
             && WorldSeekDecision.restart(true) == WorldSeekDecision.Action.RELOAD_REQUIRED) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_RESTART, lastPath,
+                "target_ms=0");
             LoadApi.requestReload(lastPath, 0.0);
             return true;
         }
@@ -288,6 +304,8 @@ public final class PlaybackApi {
         }
         reportedFinished = false;
         syncTransportState();
+        MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_RESTART, lastPath,
+            "target_ms=0");
         return true;
     }
 
@@ -454,6 +472,7 @@ public final class PlaybackApi {
             reportedWorldFinished = true;
             System.out.println("[pz-replay] world playback finished "
                 + worldPlayback.summaryText());
+            measureSummary(MeasurementLog.EVENT_PLAYBACK_FINISHED, lastPath, worldPlayback);
         }
     }
 
@@ -564,6 +583,23 @@ public final class PlaybackApi {
         PZReplayLua.state().playbackFailed(message);
         System.out.println("[pz-replay] replay playback failed path="
             + (path == null ? "" : path) + " error=" + message);
+        MeasurementLogStore.event(MeasurementLog.EVENT_PLAYBACK_FAILED, path,
+            "reason=" + message);
+    }
+
+    private static void measureSummary(String event, String path, WorldPlayback world) {
+        WorldApplySummary summary = world.summary();
+        MeasurementLogStore.event(event, path,
+            "applied=" + summary.appliedCount(),
+            "recorded_only=" + summary.recordedOnlyCount(),
+            "partial=" + summary.partialCount(),
+            "skipped=" + summary.skippedCount(),
+            "missing=" + summary.missingCount(),
+            "mismatched=" + summary.mismatchedCount(),
+            "unsupported=" + summary.unsupportedCount(),
+            "unknown=" + summary.unknownKindCount(),
+            "reload_required=" + summary.reloadRequiredCount(),
+            "duplicate=" + summary.duplicateCount());
     }
 
     private static String format(double seconds) {

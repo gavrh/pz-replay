@@ -42,6 +42,7 @@ public final class ReplaySettings {
     private boolean killSwitch;
     private boolean worldCaptureEnabled;
     private int worldPaddingTiles = DEFAULT_WORLD_PADDING_TILES;
+    private boolean measurementLogEnabled;
 
     public ReplaySettings() {
         resetKeys();
@@ -86,6 +87,7 @@ public final class ReplaySettings {
         settings.debugControls = parseBoolean(values.get("debug_controls"));
         settings.killSwitch = parseBoolean(values.get("kill_switch"));
         settings.worldCaptureEnabled = parseBoolean(values.get("world_capture"));
+        settings.measurementLogEnabled = parseBoolean(values.get("measurement_log_enabled"));
         int padding = parseInt(values.get("world_padding_tiles"),
             DEFAULT_WORLD_PADDING_TILES);
         if (isValidWorldPadding(padding)) {
@@ -116,6 +118,7 @@ public final class ReplaySettings {
         text.append("kill_switch=").append(killSwitch).append('\n');
         text.append("world_capture=").append(worldCaptureEnabled).append('\n');
         text.append("world_padding_tiles=").append(worldPaddingTiles).append('\n');
+        text.append("measurement_log_enabled=").append(measurementLogEnabled).append('\n');
         for (String action : ACTIONS) {
             text.append("key.").append(action).append('=').append(key(action)).append('\n');
         }
@@ -198,6 +201,14 @@ public final class ReplaySettings {
 
     public int getWorldPaddingTiles() {
         return worldPaddingTiles;
+    }
+
+    public boolean isMeasurementLogEnabled() {
+        return measurementLogEnabled;
+    }
+
+    public void setMeasurementLogEnabled(boolean enabled) {
+        measurementLogEnabled = enabled;
     }
 
     public int key(String action) {

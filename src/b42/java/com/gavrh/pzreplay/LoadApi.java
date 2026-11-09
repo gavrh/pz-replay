@@ -32,6 +32,8 @@ public final class LoadApi {
     private static double reloadTargetSeconds;
     private static boolean reloadExiting;
     private static boolean reloadStarted;
+    private static long reloadRequestNanos;
+    private static long loadStartNanos;
 
     private LoadApi() {
     }
@@ -124,6 +126,12 @@ public final class LoadApi {
         if (!worldReplay || contextPrepared || !result.resolved()) {
             return contextPrepared;
         }
+        boolean measure = MeasurementLogStore.isEnabled();
+        long prepareStartNanos = measure ? System.nanoTime() : 0L;
+        if (measure) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_PREPARE_START,
+                lastReplayPath);
+        }
         try {
             FormatInfo info = FormatReader.readInfo(Paths.get(lastReplayPath));
             LoadingGate.start();
@@ -133,10 +141,16 @@ public final class LoadApi {
             System.out.println("[pz-replay] load-play context prepared replay=" + lastReplayPath
                 + " folder=" + WorldContextManager.getFolderName()
                 + " mode=" + WorldContextManager.getGameMode());
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_PREPARE_END, lastReplayPath,
+                "ms=" + (measure ? MeasurementLogStore.elapsedMillis(prepareStartNanos) : 0L));
             return true;
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
             System.out.println("[pz-replay] load-play context failed replay=" + lastReplayPath
                 + " error=" + message(exception));
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_PREPARE_FAILED,
+                lastReplayPath,
+                "ms=" + (measure ? MeasurementLogStore.elapsedMillis(prepareStartNanos) : 0L),
+                "reason=" + message(exception));
             VEHICLE_WINDOW.end();
             WorldContextManager.cleanup("prepare failed");
             return false;
@@ -179,6 +193,11 @@ public final class LoadApi {
     public static void markContextLoaded() {
         if (isContextPrepared()) {
             WorldContextManager.markLoaded();
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_LOAD_END,
+                lastReplayPath,
+                "ms=" + (loadStartNanos == 0L ? 0L
+                    : MeasurementLogStore.elapsedMillis(loadStartNanos)));
+            loadStartNanos = 0L;
         }
     }
 
@@ -249,8 +268,11 @@ public final class LoadApi {
         reloadTargetSeconds = Math.max(0.0, seconds);
         reloadExiting = false;
         reloadStarted = false;
+        reloadRequestNanos = MeasurementLogStore.isEnabled() ? System.nanoTime() : 0L;
         System.out.println("[pz-replay] world reload requested path=" + reloadPath
             + " target=" + reloadTargetSeconds);
+        MeasurementLogStore.event(MeasurementLog.EVENT_RELOAD_REQUESTED, reloadPath,
+            "target=" + reloadTargetSeconds);
     }
 
     public static boolean hasReloadRequest() {
@@ -279,6 +301,8 @@ public final class LoadApi {
 
     public static void markReloadStarted() {
         reloadStarted = true;
+        MeasurementLogStore.event(MeasurementLog.EVENT_RELOAD_STARTED, reloadPath,
+            "target=" + reloadTargetSeconds);
     }
 
     public static double getPendingSeekSeconds() {
@@ -291,11 +315,16 @@ public final class LoadApi {
         }
         System.out.println("[pz-replay] world reload finished path=" + reloadPath
             + " target=" + reloadTargetSeconds);
+        MeasurementLogStore.event(MeasurementLog.EVENT_RELOAD_FINISHED, reloadPath,
+            "target=" + reloadTargetSeconds,
+            "ms=" + (reloadRequestNanos == 0L ? 0L
+                : MeasurementLogStore.elapsedMillis(reloadRequestNanos)));
         reloadPending = false;
         reloadPath = "";
         reloadTargetSeconds = 0.0;
         reloadExiting = false;
         reloadStarted = false;
+        reloadRequestNanos = 0L;
     }
 
     public static void failReload(String reason) {
@@ -305,11 +334,17 @@ public final class LoadApi {
         System.out.println("[pz-replay] world reload failed path=" + reloadPath
             + " target=" + reloadTargetSeconds
             + " reason=" + (reason == null ? "" : reason));
+        MeasurementLogStore.event(MeasurementLog.EVENT_RELOAD_FAILED, reloadPath,
+            "target=" + reloadTargetSeconds,
+            "ms=" + (reloadRequestNanos == 0L ? 0L
+                : MeasurementLogStore.elapsedMillis(reloadRequestNanos)),
+            "reason=" + (reason == null ? "" : reason));
         reloadPending = false;
         reloadPath = "";
         reloadTargetSeconds = 0.0;
         reloadExiting = false;
         reloadStarted = false;
+        reloadRequestNanos = 0L;
         PZReplayLua.state().playbackFailed("world replay reload failed: "
             + (reason == null ? "" : reason));
     }
@@ -359,6 +394,13 @@ public final class LoadApi {
         pending = true;
         pendingPath = lastReplayPath;
         pendingStartedMillis = System.currentTimeMillis();
+        if (worldReplay) {
+            loadStartNanos = System.nanoTime();
+            MeasurementLogStore.event(MeasurementLog.EVENT_CONTEXT_LOAD_START, pendingPath,
+                "world=true",
+                "mode=" + result.gameMode(),
+                "save=" + result.saveName());
+        }
         System.out.println("[pz-replay] load-play pending path=" + pendingPath
             + " mode=" + result.gameMode()
             + " save=" + result.saveName()

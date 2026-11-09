@@ -43,6 +43,7 @@ final class WorldCapture {
 
     private Future<Build> future;
     private Path staging;
+    private String captureName = "";
     private int paddingTiles;
     private boolean requested;
     private boolean t0Complete;
@@ -66,6 +67,7 @@ final class WorldCapture {
         }
         requested = true;
         paddingTiles = padding;
+        this.captureName = captureName == null ? "" : captureName;
         Path replayDirectory = ReplayStorage.directory();
         try {
             Files.createDirectories(replayDirectory);
@@ -87,7 +89,7 @@ final class WorldCapture {
             fail("current save directory does not exist");
             return;
         }
-        future = executor.submit(() -> build(source, archive, replayDirectory));
+        future = executor.submit(() -> build(source, archive, replayDirectory, this.captureName));
     }
 
     synchronized void tick(long recordingMillis) {
@@ -146,6 +148,18 @@ final class WorldCapture {
         return summary;
     }
 
+    synchronized long getSampleCount() {
+        return sampleCount;
+    }
+
+    synchronized long getChangeCount() {
+        return logBuilder == null ? 0L : logBuilder.changes();
+    }
+
+    synchronized String getCoverageStatus() {
+        return coverageStatus;
+    }
+
     synchronized void reset() {
         if (future != null) {
             future.cancel(true);
@@ -161,6 +175,7 @@ final class WorldCapture {
         packageData = null;
         readyBuild = null;
         logBuilder = null;
+        captureName = "";
         coverageObjects = 0L;
         nextSampleMillis = 0L;
         lastRecordingMillis = 0L;
@@ -197,11 +212,24 @@ final class WorldCapture {
             return;
         }
         WorldScanner.Result scan;
+        boolean measure = MeasurementLogStore.isEnabled();
+        long scanStartNanos = measure ? System.nanoTime() : 0L;
+        if (measure) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_T0_SCAN_START, captureName);
+        }
         try {
             scan = scanner.scan(player, paddingTiles);
         } catch (RuntimeException exception) {
+            if (measure) {
+                MeasurementLogStore.event(MeasurementLog.EVENT_T0_SCAN_END, captureName,
+                    "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos), "failed=true");
+            }
             fail("T0 sample failed: " + message(exception));
             return;
+        }
+        if (measure) {
+            MeasurementLogStore.event(MeasurementLog.EVENT_T0_SCAN_END, captureName,
+                "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos));
         }
         List<WorldStateRecord> t0Records = new ArrayList<>();
         for (WorldStateRecord record : scan.records()) {
@@ -227,6 +255,12 @@ final class WorldCapture {
         summary = formatSummary();
         System.out.println("[pz-replay] world capture ready " + summary
             + " t0_ms=" + scan.durationMillis());
+        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_READY, captureName,
+            "objects=" + coverageObjects,
+            "squares=" + coveredSquares.size(),
+            "changes=" + logBuilder.changes(),
+            "status=" + coverageStatus,
+            "t0_ms=" + scan.durationMillis());
         deleteStaging();
     }
 
@@ -332,7 +366,7 @@ final class WorldCapture {
         return ((recordingMillis / SAMPLE_INTERVAL_MILLIS) + 1L) * SAMPLE_INTERVAL_MILLIS;
     }
 
-    private Build build(Path source, Path archive, Path replayDirectory) {
+    private Build build(Path source, Path archive, Path replayDirectory, String captureId) {
         try {
             WorldBaseArchive.Inventory inventory = WorldBaseArchive.inventory(source);
             long required = inventory.totalBytes() * 2L + DISK_MARGIN_BYTES;
@@ -341,12 +375,18 @@ final class WorldCapture {
                 return Build.failed("not enough free disk for the world base");
             }
             Path copyRoot = archive.getParent().resolve("raw");
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_COPY_START, captureId);
             long copyStart = System.nanoTime();
             WorldBaseArchive.copyFiltered(source, copyRoot);
             long copyMillis = (System.nanoTime() - copyStart) / 1_000_000L;
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_COPY_END, captureId,
+                "ms=" + copyMillis);
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_START, captureId);
             long packStart = System.nanoTime();
             WorldBaseArchive.writeFromDirectory(copyRoot, archive);
             long packMillis = (System.nanoTime() - packStart) / 1_000_000L;
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_END, captureId,
+                "ms=" + packMillis);
             deleteRecursively(copyRoot);
             byte[] bytes = Files.readAllBytes(archive);
             return new Build(bytes, inventory.totalBytes(), copyMillis, packMillis, "");
@@ -368,6 +408,8 @@ final class WorldCapture {
         failure = message;
         summary = "world=failed reason=" + message;
         System.out.println("[pz-replay] world capture unavailable: " + message);
+        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_FAILED, captureName,
+            "reason=" + message);
         future = null;
         deleteStaging();
     }

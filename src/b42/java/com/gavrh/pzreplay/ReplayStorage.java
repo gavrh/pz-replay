@@ -28,4 +28,8 @@ final class ReplayStorage {
     static Path favoritesPath() {
         return directory().resolve(FAVORITES_FILE);
     }
+
+    static Path measurementDirectory() {
+        return directory().resolve("measurement");
+    }
 }
