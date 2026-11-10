@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'com.diffplug.spotless' version '8.11.0'
 }
 
 group = 'com.gavrh'
@@ -172,4 +173,12 @@ tasks.named('assemble') {
 
 tasks.named('build') {
     dependsOn 'stageMod'
+}
+
+spotless {
+    ratchetFrom 'origin/master'
+    java {
+        target 'src/**/*.java'
+        palantirJavaFormat()
+    }
 }
