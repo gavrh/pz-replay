@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 public final class MeasurementLog {
-    public static final long DEFAULT_MAX_BYTES = 256L * 1024L;
+    public static final long DEFAULT_MAX_BYTES = 4L * 1024L * 1024L;
 
     public static final String EVENT_SESSION = "session";
     public static final String EVENT_LOG_TRUNCATED = "log_truncated";
@@ -57,8 +57,7 @@ public final class MeasurementLog {
     private long lastMonotonicNanos;
     private long lastWallMillis;
 
-    private MeasurementLog(Path path, long startNanos, long maxBytes, OutputStream stream,
-        long bytes) {
+    private MeasurementLog(Path path, long startNanos, long maxBytes, OutputStream stream, long bytes) {
         this.path = path;
         this.startNanos = startNanos;
         this.maxBytes = maxBytes;
@@ -74,30 +73,26 @@ public final class MeasurementLog {
         if (!enabled) {
             return disabled();
         }
-        return open(directory, runId, System.nanoTime(), System.currentTimeMillis(),
-            DEFAULT_MAX_BYTES);
+        return open(directory, runId, System.nanoTime(), System.currentTimeMillis(), DEFAULT_MAX_BYTES);
     }
 
     public static MeasurementLog open(Path directory, String runId) {
-        return open(directory, runId, System.nanoTime(), System.currentTimeMillis(),
-            DEFAULT_MAX_BYTES);
+        return open(directory, runId, System.nanoTime(), System.currentTimeMillis(), DEFAULT_MAX_BYTES);
     }
 
-    public static MeasurementLog open(Path directory, String runId, long startNanos,
-        long startWallMillis, long maxBytes) {
+    public static MeasurementLog open(
+            Path directory, String runId, long startNanos, long startWallMillis, long maxBytes) {
         if (directory == null || maxBytes <= 0L) {
             return disabled();
         }
         try {
             Files.createDirectories(directory);
             Path target = directory.resolve(FILE_PREFIX + token(runId) + FILE_EXTENSION);
-            OutputStream stream = Files.newOutputStream(target, StandardOpenOption.CREATE,
-                StandardOpenOption.WRITE, StandardOpenOption.APPEND);
+            OutputStream stream = Files.newOutputStream(
+                    target, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
             long existingBytes = Files.size(target);
-            MeasurementLog log = new MeasurementLog(target, startNanos, maxBytes, stream,
-                existingBytes);
-            log.event(EVENT_SESSION, runId, startNanos, startWallMillis,
-                "run=" + runId);
+            MeasurementLog log = new MeasurementLog(target, startNanos, maxBytes, stream, existingBytes);
+            log.event(EVENT_SESSION, runId, startNanos, startWallMillis, "run=" + runId);
             return log;
         } catch (IOException | RuntimeException exception) {
             return disabled();
@@ -112,17 +107,19 @@ public final class MeasurementLog {
         return path;
     }
 
-    public synchronized void event(String name, String id, long monotonicNanos,
-        long wallClockMillis, String... values) {
+    public synchronized void event(
+            String name, String id, long monotonicNanos, long wallClockMillis, String... values) {
         if (stream == null) {
             return;
         }
         lastMonotonicNanos = monotonicNanos;
         lastWallMillis = wallClockMillis;
         StringBuilder line = new StringBuilder("mono_ms=")
-            .append(Math.max(0L, (monotonicNanos - startNanos) / 1_000_000L))
-            .append(" wall_ms=").append(wallClockMillis)
-            .append(" event=").append(token(name));
+                .append(Math.max(0L, (monotonicNanos - startNanos) / 1_000_000L))
+                .append(" wall_ms=")
+                .append(wallClockMillis)
+                .append(" event=")
+                .append(token(name));
         if (id != null && !id.isBlank()) {
             line.append(" id=").append(token(id));
         }
@@ -166,11 +163,10 @@ public final class MeasurementLog {
     private void appendTruncated() {
         if (!truncated) {
             truncated = true;
-            byte[] marker = (EVENT_LOG_TRUNCATED + " reason=size_limit\n")
-                .getBytes(StandardCharsets.UTF_8);
-            byte[] line = ("mono_ms=" + Math.max(0L, (lastMonotonicNanos - startNanos)
-                / 1_000_000L) + " wall_ms=" + lastWallMillis + " event=")
-                .getBytes(StandardCharsets.UTF_8);
+            byte[] marker = (EVENT_LOG_TRUNCATED + " reason=size_limit\n").getBytes(StandardCharsets.UTF_8);
+            byte[] line = ("mono_ms=" + Math.max(0L, (lastMonotonicNanos - startNanos) / 1_000_000L) + " wall_ms="
+                            + lastWallMillis + " event=")
+                    .getBytes(StandardCharsets.UTF_8);
             if (bytes + line.length + marker.length <= maxBytes) {
                 try {
                     stream.write(line);
