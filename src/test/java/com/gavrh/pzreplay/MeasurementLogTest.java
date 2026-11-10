@@ -1,16 +1,16 @@
 package com.gavrh.pzreplay;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MeasurementLogTest {
     private static final long START_NANOS = 1_000_000_000L;
@@ -20,14 +20,18 @@ class MeasurementLogTest {
     Path tempDir;
 
     @Test
+    void defaultCapIsFourMebibytes() {
+        assertEquals(4L * 1024L * 1024L, MeasurementLog.DEFAULT_MAX_BYTES);
+    }
+
+    @Test
     void disabledWritesNothingAndOpensNoFile() {
         Path directory = tempDir.resolve("measurement");
         MeasurementLog log = MeasurementLog.open(false, directory, "run-disabled");
 
         assertFalse(log.isEnabled());
         assertNull(log.path());
-        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS,
-            START_WALL_MILLIS, "world=padded");
+        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS, START_WALL_MILLIS, "world=padded");
         log.close();
 
         assertFalse(Files.exists(directory));
@@ -35,21 +39,23 @@ class MeasurementLogTest {
 
     @Test
     void enabledWritesEventsInOrder() throws Exception {
-        MeasurementLog log = MeasurementLog.open(tempDir, "run-order", START_NANOS,
-            START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+        MeasurementLog log = MeasurementLog.open(
+                tempDir, "run-order", START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
 
-        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS,
-            START_WALL_MILLIS, "world=padded", "padding=16");
-        log.event(MeasurementLog.EVENT_BASE_COPY_START, "capture", START_NANOS + 1_000_000L,
-            START_WALL_MILLIS);
-        log.event(MeasurementLog.EVENT_BASE_COPY_END, "capture", START_NANOS + 6_000_000L,
-            START_WALL_MILLIS, "ms=5");
+        log.event(
+                MeasurementLog.EVENT_CAPTURE_START,
+                "capture",
+                START_NANOS,
+                START_WALL_MILLIS,
+                "world=padded",
+                "padding=16");
+        log.event(MeasurementLog.EVENT_BASE_COPY_START, "capture", START_NANOS + 1_000_000L, START_WALL_MILLIS);
+        log.event(MeasurementLog.EVENT_BASE_COPY_END, "capture", START_NANOS + 6_000_000L, START_WALL_MILLIS, "ms=5");
         log.close();
 
         List<String> lines = Files.readAllLines(log.path());
         assertEquals(4, lines.size());
-        assertEquals(List.of("session", "capture_start", "base_copy_start", "base_copy_end"),
-            events(lines));
+        assertEquals(List.of("session", "capture_start", "base_copy_start", "base_copy_end"), events(lines));
         assertTrue(lines.get(1).contains("id=capture"));
         assertTrue(lines.get(1).contains("world=padded"));
         assertTrue(lines.get(3).contains("mono_ms=6"));
@@ -58,15 +64,12 @@ class MeasurementLogTest {
 
     @Test
     void monotonicTimestampsAreNonNegativeAndOrdered() throws Exception {
-        MeasurementLog log = MeasurementLog.open(tempDir, "run-monotonic", START_NANOS,
-            START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+        MeasurementLog log = MeasurementLog.open(
+                tempDir, "run-monotonic", START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
 
-        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS - 1_000_000L,
-            START_WALL_MILLIS);
-        log.event(MeasurementLog.EVENT_T0_SCAN_START, "capture", START_NANOS + 2_000_000L,
-            START_WALL_MILLIS);
-        log.event(MeasurementLog.EVENT_T0_SCAN_END, "capture", START_NANOS + 5_000_000L,
-            START_WALL_MILLIS);
+        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS - 1_000_000L, START_WALL_MILLIS);
+        log.event(MeasurementLog.EVENT_T0_SCAN_START, "capture", START_NANOS + 2_000_000L, START_WALL_MILLIS);
+        log.event(MeasurementLog.EVENT_T0_SCAN_END, "capture", START_NANOS + 5_000_000L, START_WALL_MILLIS);
         log.close();
 
         List<Long> values = new ArrayList<>();
@@ -85,23 +88,105 @@ class MeasurementLogTest {
     }
 
     @Test
-    void fileSizeIsBoundedAndTruncationIsRecorded() throws Exception {
+    void logUnderTheCapIsComplete() throws Exception {
+        MeasurementLog log = MeasurementLog.open(
+                tempDir, "run-under-cap", START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+
+        for (int index = 0; index < 200; index++) {
+            log.event(
+                    MeasurementLog.EVENT_PLAYBACK_APPLY,
+                    "replay",
+                    START_NANOS + index * 1_000_000L,
+                    START_WALL_MILLIS,
+                    "time_ms=" + index,
+                    "records=3",
+                    "apply_ms=1");
+        }
+        log.close();
+
+        List<String> lines = Files.readAllLines(log.path());
+        assertEquals(201, lines.size());
+        assertEquals(200, countEvents(lines, MeasurementLog.EVENT_PLAYBACK_APPLY));
+        assertFalse(events(lines).contains(MeasurementLog.EVENT_LOG_TRUNCATED));
+    }
+
+    @Test
+    void defaultCapStopsAtFourMebibytes() throws Exception {
+        int attempted = 60_000;
+        MeasurementLog log = MeasurementLog.open(
+                tempDir, "run-default-bound", START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+
+        for (int index = 0; index < attempted; index++) {
+            log.event(
+                    MeasurementLog.EVENT_PLAYBACK_APPLY,
+                    "replay",
+                    START_NANOS + index * 1_000_000L,
+                    START_WALL_MILLIS,
+                    "time_ms=" + index,
+                    "records=3",
+                    "apply_ms=1");
+        }
+        log.close();
+
+        assertTrue(Files.size(log.path()) <= MeasurementLog.DEFAULT_MAX_BYTES);
+        List<String> lines = Files.readAllLines(log.path());
+        assertEquals(1, countEvents(lines, MeasurementLog.EVENT_LOG_TRUNCATED));
+        assertEquals(MeasurementLog.EVENT_LOG_TRUNCATED, events(lines).get(lines.size() - 1));
+        assertTrue(countEvents(lines, MeasurementLog.EVENT_PLAYBACK_APPLY) < attempted);
+    }
+
+    @Test
+    void fileSizeIsBoundedAndTruncationIsRecordedOnce() throws Exception {
         long maxBytes = 640L;
-        MeasurementLog log = MeasurementLog.open(tempDir, "run-bound", START_NANOS,
-            START_WALL_MILLIS, maxBytes);
+        MeasurementLog log = MeasurementLog.open(tempDir, "run-bound", START_NANOS, START_WALL_MILLIS, maxBytes);
 
         for (int index = 0; index < 100; index++) {
-            log.event(MeasurementLog.EVENT_PLAYBACK_APPLY, "replay",
-                START_NANOS + index * 1_000_000L, START_WALL_MILLIS,
-                "time_ms=" + index,
-                "records=3",
-                "apply_ms=1");
+            log.event(
+                    MeasurementLog.EVENT_PLAYBACK_APPLY,
+                    "replay",
+                    START_NANOS + index * 1_000_000L,
+                    START_WALL_MILLIS,
+                    "time_ms=" + index,
+                    "records=3",
+                    "apply_ms=1");
         }
         log.close();
 
         assertTrue(Files.size(log.path()) <= maxBytes);
         List<String> lines = Files.readAllLines(log.path());
+        assertEquals(1, countEvents(lines, MeasurementLog.EVENT_LOG_TRUNCATED));
         assertEquals(MeasurementLog.EVENT_LOG_TRUNCATED, events(lines).get(lines.size() - 1));
+        assertTrue(countEvents(lines, MeasurementLog.EVENT_PLAYBACK_APPLY) < 100);
+    }
+
+    @Test
+    void truncationLeavesNoPartialLine() throws Exception {
+        long maxBytes = 521L;
+        MeasurementLog log = MeasurementLog.open(tempDir, "run-partial", START_NANOS, START_WALL_MILLIS, maxBytes);
+
+        for (int index = 0; index < 100; index++) {
+            log.event(
+                    MeasurementLog.EVENT_PLAYBACK_APPLY,
+                    "replay",
+                    START_NANOS + index * 1_000_000L,
+                    START_WALL_MILLIS,
+                    "time_ms=" + index,
+                    "records=3",
+                    "apply_ms=1");
+        }
+        log.close();
+
+        assertTrue(Files.size(log.path()) <= maxBytes);
+        String content = Files.readString(log.path());
+        assertTrue(content.endsWith("\n"));
+        List<String> lines = Files.readAllLines(log.path());
+        assertEquals(MeasurementLog.EVENT_LOG_TRUNCATED, events(lines).get(lines.size() - 1));
+        for (String line : lines) {
+            assertTrue(line.startsWith("mono_ms="));
+            assertTrue(line.contains(" wall_ms="));
+            assertTrue(line.contains(" event="));
+            monoMillis(line);
+        }
     }
 
     @Test
@@ -109,13 +194,16 @@ class MeasurementLogTest {
         Path blocked = tempDir.resolve("blocked");
         Files.writeString(blocked, "not a directory");
 
-        MeasurementLog log = MeasurementLog.open(blocked.resolve("measurement"), "run-failed",
-            START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+        MeasurementLog log = MeasurementLog.open(
+                blocked.resolve("measurement"),
+                "run-failed",
+                START_NANOS,
+                START_WALL_MILLIS,
+                MeasurementLog.DEFAULT_MAX_BYTES);
 
         assertFalse(log.isEnabled());
         assertNull(log.path());
-        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS,
-            START_WALL_MILLIS);
+        log.event(MeasurementLog.EVENT_CAPTURE_START, "capture", START_NANOS, START_WALL_MILLIS);
         log.close();
     }
 
@@ -125,10 +213,9 @@ class MeasurementLogTest {
         Path saves = tempDir.resolve("Saves").resolve("Sandbox");
         Files.createDirectories(saves);
 
-        MeasurementLog log = MeasurementLog.open(directory, "run-path", START_NANOS,
-            START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
-        log.event(MeasurementLog.EVENT_CONTEXT_LOAD_START, "replay", START_NANOS,
-            START_WALL_MILLIS);
+        MeasurementLog log = MeasurementLog.open(
+                directory, "run-path", START_NANOS, START_WALL_MILLIS, MeasurementLog.DEFAULT_MAX_BYTES);
+        log.event(MeasurementLog.EVENT_CONTEXT_LOAD_START, "replay", START_NANOS, START_WALL_MILLIS);
         log.close();
 
         assertTrue(log.path().toAbsolutePath().startsWith(directory.toAbsolutePath()));
@@ -144,6 +231,16 @@ class MeasurementLogTest {
             events.add(end < 0 ? line.substring(start) : line.substring(start, end));
         }
         return events;
+    }
+
+    private static int countEvents(List<String> lines, String name) {
+        int count = 0;
+        for (String event : events(lines)) {
+            if (event.equals(name)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static long monoMillis(String line) {
