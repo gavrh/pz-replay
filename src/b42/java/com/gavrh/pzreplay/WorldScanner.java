@@ -24,13 +24,12 @@ final class WorldScanner {
     private static final int Z_RADIUS = 1;
 
     record Result(
-        List<WorldStateRecord> records,
-        Set<Long> observableSquares,
-        Set<String> presentVehicleIdentities,
-        Set<String> duplicateIdentities,
-        String coverageStatus,
-        long durationMillis
-    ) {
+            List<WorldStateRecord> records,
+            Set<Long> observableSquares,
+            Set<String> presentVehicleIdentities,
+            Set<String> duplicateIdentities,
+            String coverageStatus,
+            long durationMillis) {
         Result {
             records = List.copyOf(records);
             observableSquares = Set.copyOf(observableSquares);
@@ -58,14 +57,19 @@ final class WorldScanner {
         Set<String> seen = new HashSet<>();
         Set<String> duplicates = new HashSet<>();
         Set<Long> observableSquares = new HashSet<>();
-        boolean partial = false;
+        int missingInterior = 0;
+        int missingBoundary = 0;
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
                     IsoGridSquare square = cell.getGridSquare(x, y, z);
                     if (square == null) {
                         if (z == centerZ) {
-                            partial = true;
+                            if (x == minX || x == maxX || y == minY || y == maxY) {
+                                missingBoundary++;
+                            } else {
+                                missingInterior++;
+                            }
                         }
                         continue;
                     }
@@ -76,8 +80,7 @@ final class WorldScanner {
                             captureDoor(door, records, seen, duplicates);
                         } else if (object instanceof IsoWindow window) {
                             captureWindow(window, records, seen, duplicates);
-                        } else if (!(object instanceof IsoBarricade)
-                            && !(object instanceof IsoMovingObject)) {
+                        } else if (!(object instanceof IsoBarricade) && !(object instanceof IsoMovingObject)) {
                             captureGeneric(object, records, seen, duplicates);
                         }
                     }
@@ -105,19 +108,19 @@ final class WorldScanner {
             captureVehicle(vehicle, records, seen, duplicates);
         }
         long durationMillis = (System.nanoTime() - startedNanos) / 1_000_000L;
-        return new Result(records, observableSquares, presentVehicleIdentities, duplicates,
-            partial ? "partial" : "complete", durationMillis);
+        int expectedSquares = (maxX - minX + 1) * (maxY - minY + 1);
+        String coverageStatus = WorldCoverageStatus.classify(expectedSquares, missingInterior, missingBoundary);
+        return new Result(
+                records, observableSquares, presentVehicleIdentities, duplicates, coverageStatus, durationMillis);
     }
 
-    private void captureDoor(IsoDoor door, List<WorldStateRecord> records, Set<String> seen,
-        Set<String> duplicates) {
+    private void captureDoor(IsoDoor door, List<WorldStateRecord> records, Set<String> seen, Set<String> duplicates) {
         IsoGridSquare square = door.getSquare();
         if (square == null) {
             return;
         }
         int orientation = door.getNorth() ? 0 : 2;
-        String key = "1:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
-            + ":" + orientation;
+        String key = "1:" + square.getX() + ":" + square.getY() + ":" + square.getZ() + ":" + orientation;
         if (!seen.add(key)) {
             duplicates.add(key);
             return;
@@ -125,42 +128,54 @@ final class WorldScanner {
         int keyId = door.getKeyId();
         boolean hasKey = keyId >= 0;
         records.add(new WorldDoorState(
-            WorldTarget.door(square.getX(), square.getY(), square.getZ(), orientation),
-            spriteName(door), door.getObjectIndex(), door.isLocked(),
-            door.isLockedByKey(), door.isOpen(), door.getHealth(),
-            hasKey ? Integer.toUnsignedLong(keyId) : 0L, hasKey));
-        captureBarricade(door.getBarricadeOnSameSquare(), door, square, orientation, 0,
-            records, seen, duplicates);
-        captureBarricade(door.getBarricadeOnOppositeSquare(), door, square, orientation, 1,
-            records, seen, duplicates);
+                WorldTarget.door(square.getX(), square.getY(), square.getZ(), orientation),
+                spriteName(door),
+                door.getObjectIndex(),
+                door.isLocked(),
+                door.isLockedByKey(),
+                door.isOpen(),
+                door.getHealth(),
+                hasKey ? Integer.toUnsignedLong(keyId) : 0L,
+                hasKey));
+        captureBarricade(door.getBarricadeOnSameSquare(), door, square, orientation, 0, records, seen, duplicates);
+        captureBarricade(door.getBarricadeOnOppositeSquare(), door, square, orientation, 1, records, seen, duplicates);
     }
 
-    private void captureWindow(IsoWindow window, List<WorldStateRecord> records,
-        Set<String> seen, Set<String> duplicates) {
+    private void captureWindow(
+            IsoWindow window, List<WorldStateRecord> records, Set<String> seen, Set<String> duplicates) {
         IsoGridSquare square = window.getSquare();
         if (square == null) {
             return;
         }
         int orientation = window.isNorth() ? 0 : 2;
-        String key = "2:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
-            + ":" + orientation;
+        String key = "2:" + square.getX() + ":" + square.getY() + ":" + square.getZ() + ":" + orientation;
         if (!seen.add(key)) {
             duplicates.add(key);
             return;
         }
         records.add(new WorldWindowState(
-            WorldTarget.window(square.getX(), square.getY(), square.getZ(), orientation),
-            spriteName(window), window.getObjectIndex(), window.IsOpen(), window.isSmashed(),
-            window.isLocked(), window.isGlassRemoved(), window.isPermaLocked() ? 1 : 0));
-        captureBarricade(window.getBarricadeOnSameSquare(), window, square, orientation, 0,
-            records, seen, duplicates);
-        captureBarricade(window.getBarricadeOnOppositeSquare(), window, square, orientation,
-            1, records, seen, duplicates);
+                WorldTarget.window(square.getX(), square.getY(), square.getZ(), orientation),
+                spriteName(window),
+                window.getObjectIndex(),
+                window.IsOpen(),
+                window.isSmashed(),
+                window.isLocked(),
+                window.isGlassRemoved(),
+                window.isPermaLocked() ? 1 : 0));
+        captureBarricade(window.getBarricadeOnSameSquare(), window, square, orientation, 0, records, seen, duplicates);
+        captureBarricade(
+                window.getBarricadeOnOppositeSquare(), window, square, orientation, 1, records, seen, duplicates);
     }
 
-    private void captureBarricade(IsoBarricade barricade, IsoObject parent,
-        IsoGridSquare square, int orientation, int opposite, List<WorldStateRecord> records,
-        Set<String> seen, Set<String> duplicates) {
+    private void captureBarricade(
+            IsoBarricade barricade,
+            IsoObject parent,
+            IsoGridSquare square,
+            int orientation,
+            int opposite,
+            List<WorldStateRecord> records,
+            Set<String> seen,
+            Set<String> duplicates) {
         if (barricade == null) {
             return;
         }
@@ -174,10 +189,9 @@ final class WorldScanner {
         } else {
             return;
         }
-        int parentClass = parent instanceof IsoDoor
-            ? WorldLogCodec.CLASS_DOOR : WorldLogCodec.CLASS_WINDOW;
-        String key = "3:" + square.getX() + ":" + square.getY() + ":" + square.getZ()
-            + ":" + parentClass + ":" + orientation + ":" + opposite;
+        int parentClass = parent instanceof IsoDoor ? WorldLogCodec.CLASS_DOOR : WorldLogCodec.CLASS_WINDOW;
+        String key = "3:" + square.getX() + ":" + square.getY() + ":" + square.getZ() + ":" + parentClass + ":"
+                + orientation + ":" + opposite;
         if (!seen.add(key)) {
             duplicates.add(key);
             return;
@@ -185,34 +199,38 @@ final class WorldScanner {
         int[] health = plankHealth(barricade);
         boolean aggregateOnly = health.length == 0;
         records.add(new WorldBarricadeState(
-            WorldTarget.barricade(square.getX(), square.getY(), square.getZ(), orientation,
-                parentClass, opposite),
-            spriteName(barricade), barricade.getObjectIndex(), material,
-            barricade.getNumPlanks(), barricade.getHealth(), health, aggregateOnly));
+                WorldTarget.barricade(square.getX(), square.getY(), square.getZ(), orientation, parentClass, opposite),
+                spriteName(barricade),
+                barricade.getObjectIndex(),
+                material,
+                barricade.getNumPlanks(),
+                barricade.getHealth(),
+                health,
+                aggregateOnly));
     }
 
-    private void captureGeneric(IsoObject object, List<WorldStateRecord> records,
-        Set<String> seen, Set<String> duplicates) {
+    private void captureGeneric(
+            IsoObject object, List<WorldStateRecord> records, Set<String> seen, Set<String> duplicates) {
         IsoGridSquare square = object.getSquare();
         if (square == null) {
             return;
         }
         int orientation = directionIndex(object.getDir());
         String type = object.getClass().getName();
-        String key = "5:" + type + ":" + square.getX() + ":" + square.getY() + ":"
-            + square.getZ() + ":" + orientation;
+        String key = "5:" + type + ":" + square.getX() + ":" + square.getY() + ":" + square.getZ() + ":" + orientation;
         if (!seen.add(key)) {
             duplicates.add(key);
             return;
         }
         records.add(new WorldGenericState(
-            WorldTarget.generic(square.getX(), square.getY(), square.getZ(), orientation,
-                type),
-            spriteName(object), object.getObjectIndex(), !isSimpleGeneric(object)));
+                WorldTarget.generic(square.getX(), square.getY(), square.getZ(), orientation, type),
+                spriteName(object),
+                object.getObjectIndex(),
+                !isSimpleGeneric(object)));
     }
 
-    private void captureVehicle(BaseVehicle vehicle, List<WorldStateRecord> records,
-        Set<String> seen, Set<String> duplicates) {
+    private void captureVehicle(
+            BaseVehicle vehicle, List<WorldStateRecord> records, Set<String> seen, Set<String> duplicates) {
         int sqlId = vehicle.getSqlId();
         String script = vehicle.getScriptName();
         if (sqlId <= 0 || script == null || script.isBlank()) {
@@ -227,15 +245,25 @@ final class WorldScanner {
         vehicle.getWorldTransform(transform);
         transform.getRotation(rotation);
         records.add(new WorldVehicleState(
-            WorldTarget.vehicle((int) Math.floor(vehicle.getX()),
-                (int) Math.floor(vehicle.getY()), (int) Math.floor(vehicle.getZ()), id, script),
-            !vehicle.isRemovedFromWorld(), vehicle.getHeadlightsOn(),
-            vehicle.getX(), vehicle.getY(), vehicle.getZ(), transform.origin.y,
-            rotation.x, rotation.y, rotation.z, rotation.w));
+                WorldTarget.vehicle(
+                        (int) Math.floor(vehicle.getX()),
+                        (int) Math.floor(vehicle.getY()),
+                        (int) Math.floor(vehicle.getZ()),
+                        id,
+                        script),
+                !vehicle.isRemovedFromWorld(),
+                vehicle.getHeadlightsOn(),
+                vehicle.getX(),
+                vehicle.getY(),
+                vehicle.getZ(),
+                transform.origin.y,
+                rotation.x,
+                rotation.y,
+                rotation.z,
+                rotation.w));
     }
 
-    private boolean vehicleCovered(BaseVehicle vehicle, int minX, int maxX, int minY,
-        int maxY) {
+    private boolean vehicleCovered(BaseVehicle vehicle, int minX, int maxX, int minY, int maxY) {
         VehiclePoly poly = vehicle.getPoly();
         if (poly == null) {
             return false;
@@ -244,8 +272,7 @@ final class WorldScanner {
         float highestX = Math.max(Math.max(poly.x1, poly.x2), Math.max(poly.x3, poly.x4));
         float lowestY = Math.min(Math.min(poly.y1, poly.y2), Math.min(poly.y3, poly.y4));
         float highestY = Math.max(Math.max(poly.y1, poly.y2), Math.max(poly.y3, poly.y4));
-        return highestX >= minX && lowestX <= maxX + 1
-            && highestY >= minY && lowestY <= maxY + 1;
+        return highestX >= minX && lowestX <= maxX + 1 && highestY >= minY && lowestY <= maxY + 1;
     }
 
     private static boolean isSimpleGeneric(IsoObject object) {
