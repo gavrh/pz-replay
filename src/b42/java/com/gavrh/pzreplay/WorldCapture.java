@@ -8,12 +8,10 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import zombie.ZomboidFileSystem;
 import zombie.characters.IsoPlayer;
 import zombie.iso.IsoWorld;
@@ -21,11 +19,10 @@ import zombie.iso.IsoWorld;
 final class WorldCapture {
     private static final long FINISH_WAIT_MILLIS = 30_000L;
     private static final long DISK_MARGIN_BYTES = 64L * 1024L * 1024L;
-    private static final long SAMPLE_INTERVAL_MILLIS =
-        1_000L / WorldPackage.DEFAULT_SAMPLE_RATE_HZ;
+    private static final long SAMPLE_INTERVAL_MILLIS = 1_000L / WorldPackage.DEFAULT_SAMPLE_RATE_HZ;
 
-    private record Build(Path base, long baseBytes, long sourceBytes, long copyMillis,
-        long packMillis, String failure) {
+    private record Build(
+            Path base, long baseBytes, long sourceBytes, long copyMillis, long packMillis, String failure) {
         static Build failed(String message) {
             return new Build(null, 0L, 0L, 0L, 0L, message);
         }
@@ -102,8 +99,7 @@ final class WorldCapture {
             poll(recordingMillis);
             return;
         }
-        if (samplingStopped || logBuilder.isTruncated()
-            || recordingMillis < nextSampleMillis) {
+        if (samplingStopped || logBuilder.isTruncated() || recordingMillis < nextSampleMillis) {
             return;
         }
         sample();
@@ -117,8 +113,7 @@ final class WorldCapture {
             return packageData;
         }
         long deadline = System.currentTimeMillis() + FINISH_WAIT_MILLIS;
-        while (!t0Complete && failure.isEmpty()
-            && System.currentTimeMillis() < deadline) {
+        while (!t0Complete && failure.isEmpty() && System.currentTimeMillis() < deadline) {
             poll(lastRecordingMillis);
             if (!t0Complete && failure.isEmpty()) {
                 try {
@@ -235,20 +230,24 @@ final class WorldCapture {
             scan = scanner.scan(player, paddingTiles);
         } catch (RuntimeException exception) {
             if (measure) {
-                MeasurementLogStore.event(MeasurementLog.EVENT_T0_SCAN_END, captureName,
-                    "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos), "failed=true");
+                MeasurementLogStore.event(
+                        MeasurementLog.EVENT_T0_SCAN_END,
+                        captureName,
+                        "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos),
+                        "failed=true");
             }
             fail("T0 sample failed: " + message(exception));
             return;
         }
         if (measure) {
-            MeasurementLogStore.event(MeasurementLog.EVENT_T0_SCAN_END, captureName,
-                "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos));
+            MeasurementLogStore.event(
+                    MeasurementLog.EVENT_T0_SCAN_END,
+                    captureName,
+                    "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos));
         }
         List<WorldStateRecord> t0Records = new ArrayList<>();
         for (WorldStateRecord record : scan.records()) {
-            if (record.classId() >= WorldLogCodec.CLASS_DOOR
-                && record.classId() <= WorldLogCodec.CLASS_VEHICLE) {
+            if (record.classId() >= WorldLogCodec.CLASS_DOOR && record.classId() <= WorldLogCodec.CLASS_VEHICLE) {
                 t0Records.add(record);
             }
         }
@@ -267,14 +266,15 @@ final class WorldCapture {
         nextSampleMillis = nextInterval(recordingMillis);
         t0Complete = true;
         summary = formatSummary();
-        System.out.println("[pz-replay] world capture ready " + summary
-            + " t0_ms=" + scan.durationMillis());
-        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_READY, captureName,
-            "objects=" + coverageObjects,
-            "squares=" + coveredSquares.size(),
-            "changes=" + logBuilder.changes(),
-            "status=" + coverageStatus,
-            "t0_ms=" + scan.durationMillis());
+        System.out.println("[pz-replay] world capture ready " + summary + " t0_ms=" + scan.durationMillis());
+        MeasurementLogStore.event(
+                MeasurementLog.EVENT_CAPTURE_READY,
+                captureName,
+                "objects=" + coverageObjects,
+                "squares=" + coveredSquares.size(),
+                "changes=" + logBuilder.changes(),
+                "status=" + coverageStatus,
+                "t0_ms=" + scan.durationMillis());
     }
 
     private void sample() {
@@ -297,18 +297,20 @@ final class WorldCapture {
         Set<Long> newlyCovered = new HashSet<>(scan.observableSquares());
         newlyCovered.removeAll(coveredSquares);
         coveredSquares.addAll(scan.observableSquares());
-        List<WorldLogEntry> entries = sampler.diff(new WorldDiffSample(scan.records(),
-            scan.observableSquares(), newlyCovered, scan.presentVehicleIdentities(),
-            scan.duplicateIdentities()));
+        List<WorldLogEntry> entries = sampler.diff(new WorldDiffSample(
+                scan.records(),
+                scan.observableSquares(),
+                newlyCovered,
+                scan.presentVehicleIdentities(),
+                scan.duplicateIdentities()));
         try {
             if (!logBuilder.append(entries, sampleTime)) {
                 samplingStopped = true;
                 coverageStatus = "truncated";
-                System.out.println("[pz-replay] world log truncated time_ms=" + sampleTime
-                    + " changes=" + logBuilder.changes() + " bytes=" + logBuilder.bytes());
-            } else if ("partial".equals(scan.coverageStatus())
-                && !"truncated".equals(coverageStatus)) {
-                coverageStatus = "partial";
+                System.out.println("[pz-replay] world log truncated time_ms=" + sampleTime + " changes="
+                        + logBuilder.changes() + " bytes=" + logBuilder.bytes());
+            } else {
+                coverageStatus = WorldCoverageStatus.combine(coverageStatus, scan.coverageStatus());
             }
         } catch (ReplayFormatException exception) {
             truncate("world sample could not be encoded: " + exception.getMessage());
@@ -327,10 +329,18 @@ final class WorldCapture {
         if (readyBuild == null || logBuilder == null) {
             return null;
         }
-        return new WorldPackageStaged(readyBuild.base(), logPath, readyBuild.baseBytes(),
-            logBuilder.bytes(), paddingTiles, WorldPackage.DEFAULT_SAMPLE_RATE_HZ,
-            coverageStatus, coveredSquares.size(), coverageObjects, logBuilder.changes(),
-            worldVersion());
+        return new WorldPackageStaged(
+                readyBuild.base(),
+                logPath,
+                readyBuild.baseBytes(),
+                logBuilder.bytes(),
+                paddingTiles,
+                WorldPackage.DEFAULT_SAMPLE_RATE_HZ,
+                coverageStatus,
+                coveredSquares.size(),
+                coverageObjects,
+                logBuilder.changes(),
+                worldVersion());
     }
 
     private String formatSummary() {
@@ -338,16 +348,26 @@ final class WorldCapture {
             return "world=off";
         }
         StringBuilder builder = new StringBuilder("world=padded")
-            .append(" base_bytes=").append(readyBuild.baseBytes())
-            .append(" base_copy_ms=").append(readyBuild.copyMillis())
-            .append(" base_pack_ms=").append(readyBuild.packMillis())
-            .append(" t0_objects=").append(coverageObjects)
-            .append(" coverage_squares=").append(coveredSquares.size())
-            .append(" samples=").append(sampleCount)
-            .append(" changes=").append(logBuilder.changes())
-            .append(" log_bytes=").append(logBuilder.bytes())
-            .append(" duplicates=").append(sampler.getDuplicateIdentities())
-            .append(" status=").append(coverageStatus);
+                .append(" base_bytes=")
+                .append(readyBuild.baseBytes())
+                .append(" base_copy_ms=")
+                .append(readyBuild.copyMillis())
+                .append(" base_pack_ms=")
+                .append(readyBuild.packMillis())
+                .append(" t0_objects=")
+                .append(coverageObjects)
+                .append(" coverage_squares=")
+                .append(coveredSquares.size())
+                .append(" samples=")
+                .append(sampleCount)
+                .append(" changes=")
+                .append(logBuilder.changes())
+                .append(" log_bytes=")
+                .append(logBuilder.bytes())
+                .append(" duplicates=")
+                .append(sampler.getDuplicateIdentities())
+                .append(" status=")
+                .append(coverageStatus);
         if (logBuilder.isTruncated() || "truncated".equals(coverageStatus)) {
             builder.append(" truncated=true");
         }
@@ -365,9 +385,12 @@ final class WorldCapture {
         long p50 = sorted.get(percentileIndex(sorted.size(), 0.50));
         long p95 = sorted.get(percentileIndex(sorted.size(), 0.95));
         long max = sorted.get(sorted.size() - 1);
-        builder.append(" scan_ms_p50=").append(p50)
-            .append(" scan_ms_p95=").append(p95)
-            .append(" scan_ms_max=").append(max);
+        builder.append(" scan_ms_p50=")
+                .append(p50)
+                .append(" scan_ms_p95=")
+                .append(p95)
+                .append(" scan_ms_max=")
+                .append(max);
     }
 
     private static int percentileIndex(int size, double percentile) {
@@ -392,17 +415,14 @@ final class WorldCapture {
             long copyStart = System.nanoTime();
             WorldBaseArchive.copyFiltered(source, copyRoot);
             long copyMillis = (System.nanoTime() - copyStart) / 1_000_000L;
-            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_COPY_END, captureId,
-                "ms=" + copyMillis);
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_COPY_END, captureId, "ms=" + copyMillis);
             MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_START, captureId);
             long packStart = System.nanoTime();
             WorldBaseArchive.writeFromDirectory(copyRoot, archive);
             long packMillis = (System.nanoTime() - packStart) / 1_000_000L;
-            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_END, captureId,
-                "ms=" + packMillis);
+            MeasurementLogStore.event(MeasurementLog.EVENT_BASE_PACK_END, captureId, "ms=" + packMillis);
             deleteRecursively(copyRoot);
-            return new Build(archive, Files.size(archive), inventory.totalBytes(), copyMillis,
-                packMillis, "");
+            return new Build(archive, Files.size(archive), inventory.totalBytes(), copyMillis, packMillis, "");
         } catch (IOException | ReplayFormatException | RuntimeException exception) {
             return Build.failed("base capture failed: " + message(exception));
         }
@@ -412,8 +432,8 @@ final class WorldCapture {
         samplingStopped = true;
         coverageStatus = "truncated";
         if (logBuilder != null) {
-            System.out.println("[pz-replay] world log truncated reason=" + reason
-                + " changes=" + logBuilder.changes() + " bytes=" + logBuilder.bytes());
+            System.out.println("[pz-replay] world log truncated reason=" + reason + " changes=" + logBuilder.changes()
+                    + " bytes=" + logBuilder.bytes());
         }
     }
 
@@ -421,8 +441,7 @@ final class WorldCapture {
         failure = message;
         summary = "world=failed reason=" + message;
         System.out.println("[pz-replay] world capture unavailable: " + message);
-        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_FAILED, captureName,
-            "reason=" + message);
+        MeasurementLogStore.event(MeasurementLog.EVENT_CAPTURE_FAILED, captureName, "reason=" + message);
         future = null;
         if (logBuilder != null) {
             try {
@@ -459,8 +478,7 @@ final class WorldCapture {
 
     private static String message(Exception exception) {
         String value = exception.getMessage();
-        return value == null || value.isBlank()
-            ? exception.getClass().getSimpleName() : value;
+        return value == null || value.isBlank() ? exception.getClass().getSimpleName() : value;
     }
 
     private static void deleteRecursively(Path path) {
