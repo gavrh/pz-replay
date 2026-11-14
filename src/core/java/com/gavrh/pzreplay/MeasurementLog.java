@@ -21,6 +21,9 @@ public final class MeasurementLog {
     public static final String EVENT_BASE_PACK_END = "base_pack_end";
     public static final String EVENT_T0_SCAN_START = "t0_scan_start";
     public static final String EVENT_T0_SCAN_END = "t0_scan_end";
+    public static final String EVENT_COVERAGE_SCAN = "coverage_scan";
+    public static final String EVENT_COVERAGE_WORST = "coverage_worst";
+    public static final String EVENT_COVERAGE_SUMMARY = "coverage_summary";
     public static final String EVENT_RECORDING_SAVED = "recording_saved";
     public static final String EVENT_CONTEXT_PREPARE_START = "context_prepare_start";
     public static final String EVENT_CONTEXT_PREPARE_END = "context_prepare_end";
