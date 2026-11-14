@@ -28,6 +28,9 @@ final class WorldScanner {
             Set<Long> observableSquares,
             Set<String> presentVehicleIdentities,
             Set<String> duplicateIdentities,
+            int expectedSquares,
+            int missingInterior,
+            int missingBoundary,
             String coverageStatus,
             long durationMillis) {
         Result {
@@ -111,7 +114,15 @@ final class WorldScanner {
         int expectedSquares = (maxX - minX + 1) * (maxY - minY + 1);
         String coverageStatus = WorldCoverageStatus.classify(expectedSquares, missingInterior, missingBoundary);
         return new Result(
-                records, observableSquares, presentVehicleIdentities, duplicates, coverageStatus, durationMillis);
+                records,
+                observableSquares,
+                presentVehicleIdentities,
+                duplicates,
+                expectedSquares,
+                missingInterior,
+                missingBoundary,
+                coverageStatus,
+                durationMillis);
     }
 
     private void captureDoor(IsoDoor door, List<WorldStateRecord> records, Set<String> seen, Set<String> duplicates) {
