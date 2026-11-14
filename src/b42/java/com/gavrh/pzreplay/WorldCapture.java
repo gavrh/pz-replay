@@ -49,6 +49,7 @@ final class WorldCapture {
     private WorldPackageStaged packageData;
     private Build readyBuild;
     private WorldLogBuilder logBuilder;
+    private WorldCoverageLog coverageLog;
     private long coverageObjects;
     private long nextSampleMillis;
     private long lastRecordingMillis;
@@ -134,6 +135,9 @@ final class WorldCapture {
             packageData = buildPackage();
             summary = formatSummary();
             System.out.println("[pz-replay] world capture finished " + summary);
+            if (coverageLog != null) {
+                coverageLog.summary("finished", coverageStatus);
+            }
         }
         return packageData;
     }
@@ -183,6 +187,7 @@ final class WorldCapture {
         packageData = null;
         readyBuild = null;
         logBuilder = null;
+        coverageLog = null;
         logPath = null;
         captureName = "";
         coverageObjects = 0L;
@@ -245,6 +250,8 @@ final class WorldCapture {
                     captureName,
                     "ms=" + MeasurementLogStore.elapsedMillis(scanStartNanos));
         }
+        coverageLog = new WorldCoverageLog(MeasurementLogStore.get(), captureName);
+        coverageLog.scan(scan.expectedSquares(), scan.missingInterior(), scan.missingBoundary());
         List<WorldStateRecord> t0Records = new ArrayList<>();
         for (WorldStateRecord record : scan.records()) {
             if (record.classId() >= WorldLogCodec.CLASS_DOOR && record.classId() <= WorldLogCodec.CLASS_VEHICLE) {
@@ -275,6 +282,7 @@ final class WorldCapture {
                 "changes=" + logBuilder.changes(),
                 "status=" + coverageStatus,
                 "t0_ms=" + scan.durationMillis());
+        coverageLog.summary("ready", coverageStatus);
     }
 
     private void sample() {
@@ -293,6 +301,9 @@ final class WorldCapture {
         } catch (RuntimeException exception) {
             truncate("world sample failed: " + message(exception));
             return;
+        }
+        if (coverageLog != null) {
+            coverageLog.scan(scan.expectedSquares(), scan.missingInterior(), scan.missingBoundary());
         }
         Set<Long> newlyCovered = new HashSet<>(scan.observableSquares());
         newlyCovered.removeAll(coveredSquares);
