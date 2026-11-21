@@ -9,6 +9,7 @@ import org.joml.Quaternionf;
 import zombie.characters.IsoPlayer;
 import zombie.core.physics.Transform;
 import zombie.iso.IsoCell;
+import zombie.iso.IsoChunk;
 import zombie.iso.IsoDirections;
 import zombie.iso.IsoGridSquare;
 import zombie.iso.IsoMovingObject;
@@ -60,22 +61,22 @@ final class WorldScanner {
         Set<String> seen = new HashSet<>();
         Set<String> duplicates = new HashSet<>();
         Set<Long> observableSquares = new HashSet<>();
-        int missingInterior = 0;
-        int missingBoundary = 0;
+        WorldCoverageWindow coverage = new WorldCoverageWindow();
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
+                boolean boundary = x == minX || x == maxX || y == minY || y == maxY;
                 for (int z = minZ; z <= maxZ; z++) {
                     IsoGridSquare square = cell.getGridSquare(x, y, z);
                     if (square == null) {
-                        if (z == centerZ) {
-                            if (x == minX || x == maxX || y == minY || y == maxY) {
-                                missingBoundary++;
-                            } else {
-                                missingInterior++;
-                            }
+                        IsoChunk chunk = cell.getChunkForGridSquare(x, y, z);
+                        if (chunk == null || !chunk.loaded) {
+                            coverage.missing(boundary);
+                        } else {
+                            coverage.empty();
                         }
                         continue;
                     }
+                    coverage.loaded();
                     observableSquares.add(WorldDiffSampler.squareKey(x, y, z));
                     for (int index = 0; index < square.getObjects().size(); index++) {
                         IsoObject object = square.getObjects().get(index);
@@ -111,8 +112,10 @@ final class WorldScanner {
             captureVehicle(vehicle, records, seen, duplicates);
         }
         long durationMillis = (System.nanoTime() - startedNanos) / 1_000_000L;
-        int expectedSquares = (maxX - minX + 1) * (maxY - minY + 1);
-        String coverageStatus = WorldCoverageStatus.classify(expectedSquares, missingInterior, missingBoundary);
+        int expectedSquares = coverage.expectedSquares();
+        int missingInterior = coverage.missingInterior();
+        int missingBoundary = coverage.missingBoundary();
+        String coverageStatus = coverage.status();
         return new Result(
                 records,
                 observableSquares,
